@@ -1,0 +1,37 @@
+# Decisions
+
+Calls made without asking, and why. Newest last.
+
+1. **Run as an app first, boot launcher by opt-in.** The release zip only adds
+   `App/slot-mini/`. The boot switch is a setting inside the app. (Brief.)
+2. **Never run under a process name starting with `MainUI`.** Onion's keymon
+   treats such a process as MainUI and steals MENU, SELECT, Y and L1 (see
+   `PLATFORM.md`, Input). The boot shim re-executes itself through `/bin/sh`
+   before starting slot-mini.
+3. **Fresh start uses Onion's `/tmp/reset_game` flag** rather than a private
+   `--appendconfig` file. It is the same mechanism as Game List Options'
+   "Reset game", already handles injection and cleanup in the launch script,
+   and keeps slot-mini out of RetroArch's config.
+4. **In app mode a game returns to MainUI, not slot-mini.** Onion has no hook
+   to bring an app back after a game. slot-mini remembers the cart and opens on
+   it next time. As the boot launcher it returns straight to the cart.
+5. **Recents are written by slot-mini** in the stock record format, to the file
+   Onion's readers use (`recentlist-hidden.json` if it exists, else
+   `recentlist.json`), newest first, deduplicated by ROM, at most 50 lines.
+6. **Sound is off by default.** A static binary cannot use `libpadsp.so`;
+   the only route found is spawning Onion's `ffplay`. It is unproven on
+   hardware, so it is opt-in until `DEVICE-TESTING.md` confirms it.
+7. **No charging bolt.** On the Mini Plus charging state needs a process spawn
+   (`axp_test`); not worth it on the launcher's hot path.
+8. **`theme.txt` uses slot's `key = value` config format.** slot itself has no
+   `theme.txt`; its theme is the Dark/Light appearance setting. slot-mini reads
+   `appearance` and a few colour overrides from `theme.txt` with slot's own
+   `ini.rs` parser.
+9. **Reference images come from slot's site media**, not slot's render tests,
+   because slot's headless GL surface is macOS-only and the brief forbids
+   building slot.
+10. **Keep slot's `Draw` list as the drawing seam.** slot-ui already emits
+    display lists over CPU-built textures, so copied layout code runs
+    unchanged against a software rasteriser. slot's layout `Canvas` (a size)
+    is imported as `Stage` so that the pixel buffer can be called `Canvas`,
+    as the brief asks.
