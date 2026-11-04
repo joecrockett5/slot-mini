@@ -1,0 +1,35 @@
+slot-mini
+=========
+
+slot-mini recreates the look and feel of slot, a cartridge frontend for the
+Anbernic RG SP, as a launcher for the Miyoo Mini Plus on Onion OS. Most of
+what you see is slot's code and art, copied and drawn in software.
+
+slot
+    https://github.com/BrandonKowalski/slot
+    by Brandon Kowalski. GPL-3.0-or-later (licenses/slot-GPL-3.0.txt).
+    Shelf, cartridge faces, shells, slot chrome, footer, cart studio,
+    label service client, ROM scanning, the cart_shell.txt and label formats,
+    insert and eject sounds.
+
+slot's skeuomorphic art
+    Markus (https://github.com/MarkusMaribu), as credited by slot.
+
+Fonts
+    Open Sans (slot's label.ttf), SIL Open Font License 1.1
+    (licenses/OpenSans-OFL-1.1.txt).
+    Symbols Nerd Font Mono, MIT (licenses/NerdFontsSymbols-LICENSE.txt).
+
+Onion OS
+    https://github.com/OnionUI/Onion. slot-mini follows its runtime loop,
+    launch command, key map and Recents format; no Onion code is included.
+
+Open MainUI
+    https://github.com/robcodedev/onionos-mainui-opensource. Its install
+    guide and launch code were the map for replacing MainUI safely; no code
+    is included.
+
+Rust crates
+    See licenses/THIRD-PARTY.txt.
+
+slot-mini is not affiliated with slot, Onion or Miyoo.

@@ -1,0 +1,12 @@
+# slot-mini writes its settings to data/settings.txt. These are the keys.
+
+# Insert and eject sounds, through Onion's ffplay. Also in MENU -> Sounds.
+sounds = off
+
+# Fetch labels for carts without one from slot's art service. Off until the
+# service's author approves third-party use; turn on at your own discretion.
+label_service = off
+# art_host = https://art.slot-cfw.fyi
+
+# Clock: 24h or 12h
+clock = 24h

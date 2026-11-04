@@ -83,3 +83,18 @@ Calls made without asking, and why. Newest last.
 23. **MENU opens About** with three rows: Sounds, Boot launcher and Exit to
     Onion. Exit to Onion returns to MainUI as an app, and asks the boot shim
     for Onion's MainUI (exit code 10) as the boot launcher.
+24. **The shim falls back on L2 held**, not MENU: Onion already uses MENU
+    held at boot to skip auto-resume, and MENU is pressed in games to leave
+    them, so it could still be down when the launcher restarts. L2 is
+    otherwise unused on the shelf. A `DISABLED` file next to the backups also
+    works, as in Open MainUI's wrapper.
+25. **Backups live in `.tmp_update/slot-mini/stock/`**, not in the app
+    folder, so deleting the app never deletes them. Each is stored as a file
+    named `MainUI` so keymon still recognises Onion's menu when it runs.
+26. **Installing refreshes a backup from a genuine binary** (one without the
+    shim's marker). After an Onion update restores its own MainUI, the next
+    install backs up the new one; a restore never replaces a binary that is
+    not the shim.
+27. **With no original left, the shim runs slot-mini once more and then
+    gives up** (exit 1), and Onion's loop tries again, rather than looping on
+    `exec` inside one run.

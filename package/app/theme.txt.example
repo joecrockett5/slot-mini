@@ -1,0 +1,15 @@
+# Copy to theme.txt in this folder to change slot-mini's look.
+# Same key = value format as slot's config files. Lines it cannot read are
+# skipped.
+
+# dark (default) or light
+appearance = dark
+
+# Text in the footer: battery and clock. Six hex digits.
+# footer_ink = ffffff
+
+# The favourite heart.
+# heart_ink = e83a3f
+
+# Darken the wallpaper, 0-100 percent.
+# wallpaper_tint = 0

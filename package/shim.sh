@@ -18,6 +18,7 @@
 # running any of it: slot-mini may replace this file while it runs.
 {
 sd=${SLOT_MINI_SD:-/mnt/SDCARD}
+tmp=${SLOT_MINI_TMP:-/tmp}
 sysdir=$sd/.tmp_update
 app=$sd/App/slot-mini
 stock_dir=$sysdir/slot-mini/stock
@@ -60,7 +61,7 @@ onion() {
     fi
     echo "slot-mini shim: no original MainUI backed up" >&2
     if [ "$1" != "slot-mini failed" ] && [ -x "$app/slot-mini" ]; then
-        exec "$app/slot-mini" --mode launcher
+        exec "$app/slot-mini" --mode launcher --sd "$sd" --tmp "$tmp"
     fi
     exit 1
 }
@@ -82,11 +83,11 @@ if held; then
     onion "L2 held"
 fi
 
-"$app/slot-mini" --mode launcher
+"$app/slot-mini" --mode launcher --sd "$sd" --tmp "$tmp"
 rc=$?
 
 # Shutting down (keymon asked, or Onion's off order): leave quietly.
-if [ -f /tmp/.offOrder ] || [ -f /tmp/shutting_down ]; then
+if [ -f "$tmp/.offOrder" ] || [ -f "$tmp/shutting_down" ]; then
     exit 0
 fi
 case $rc in

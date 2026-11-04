@@ -1,0 +1,6 @@
+{
+"label":"slot-mini",
+"icon":"icon.png",
+"launch":"launch.sh",
+"description":"slot's cartridge shelf for GBA, GB and GBC"
+}

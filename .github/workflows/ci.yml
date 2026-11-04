@@ -22,6 +22,11 @@ jobs:
         run: cargo clippy --workspace --all-targets --features slot-mini/desktop -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Boot shim tests
+        run: |
+          sudo apt-get install -y busybox
+          cargo build -p slot-mini
+          SLOT_MINI_BIN=target/debug/slot-mini sh package/tests/test-shim.sh
       - name: Upload failed golden images
         if: failure()
         uses: actions/upload-artifact@v4
@@ -51,7 +56,13 @@ jobs:
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER: qemu-arm-static
         run: cargo test --release --target armv7-unknown-linux-musleabihf --workspace
+      - name: Release zip
+        run: scripts/package.sh
+      - name: Check the release zip
+        run: |
+          cargo build -p slot-mini
+          SLOT_MINI_BIN=target/debug/slot-mini sh package/tests/test-zip.sh dist/slot-mini-*.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: slot-mini-armv7
-          path: target/armv7-unknown-linux-musleabihf/release/slot-mini
+          name: slot-mini-release
+          path: dist/slot-mini-*.zip

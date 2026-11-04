@@ -126,6 +126,26 @@ covers but not by a lot.
   scrolling 207 carts: 42 MB before, 33 MB after (textures 10.6 MB).
   `SLOT_MINI_REPORT_RSS=1` prints it on exit.
 
+## Phase 7: Packaging and the switch
+
+- `scripts/package.sh` builds `dist/slot-mini-<version>.zip`: only
+  `App/slot-mini/` (binary, `launch.sh`, `config.json`, icon, examples,
+  licences, credits, a readable copy of the shim). CI builds it and uploads it.
+- `package/shim.sh`: the boot shim, embedded in the binary. Re-executes as
+  `sh` so keymon leaves MENU/SELECT/Y/L1 alone, falls back to Onion's MainUI
+  (run as a file named `MainUI`) when slot-mini is missing, fails, is asked to
+  (exit 10), L2 is held, or `.tmp_update/slot-mini/DISABLED` exists.
+- `switch.rs`: install backs each original up to
+  `.tmp_update/slot-mini/stock/<name>/MainUI` and verifies it before swapping
+  in the shim (atomic rename); restore copies originals back over shims only.
+  `--install-launcher` and `--restore-launcher` on the command line too.
+- Tests: `package/tests/test-shim.sh` (23 cases: crash fallback, missing
+  binary, L2 held, DISABLED, Expert mode, other models, double install,
+  restore, Onion updated in between, half-finished install, no original, not
+  an Onion card, keymon's process name, POSIX/busybox parse) and
+  `package/tests/test-zip.sh` (zip layout, manifest, and the packaged
+  `launch.sh` queueing a game against a fake card).
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
