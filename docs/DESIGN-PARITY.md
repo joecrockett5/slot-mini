@@ -42,8 +42,8 @@ slot-mini renders.
 
 | Element | slot | slot-mini |
 | --- | --- | --- |
-| Cart faces | `cart_face`: shell bitmap tinted with the shell colour (overlay blend), label pasted into the window, silhouette clip, console stamp. | Same code, run once per cart and cached as a composited sprite on the SD card (`App/slot-mini/cache/`). |
-| Finishes | Solid; clear (shell at alpha 204 with the board and back shell drawn behind); glitter (a deterministic fleck pattern baked into the face). | All three kept. Clear carts are flattened with their board and back shell into one sprite at cache time, so the shelf blends one image per cart instead of three. |
+| Cart faces | `cart_face`: shell bitmap tinted with the shell colour (overlay blend), label pasted into the window, silhouette clip, console stamp. | Same code, run in two worker threads for the carts near the selection, each face composited once into one sprite. Scaled labels are cached on the SD card (`App/slot-mini/cache/labels/`, slot's label cache), so a face rebuilds in a few milliseconds. |
+| Finishes | Solid; clear (shell at alpha 204 with the board and back shell drawn behind); glitter (a deterministic fleck pattern baked into the face). | All three kept. On the shelf a clear cart is three layers, as in slot (back shell, board, face), each with a copy pre-scaled to the side size; the studio flattens them into one tilted sprite. |
 | Text labels | `generated_label`: name in up to three lines on a colour picked from the title hash. | Same code with slot's Open Sans Bold. |
 | Side carts | Scaled by 0.78, full alpha, centre cart at 1.0, scale eased with distance. | Same maths. Each cart sprite is kept at 1.0 and 0.78; in-between scales use a nearest-neighbour scaled blit from the 1.0 sprite only while a cart is moving. |
 | Scrolling | Critically damped spring, `OMEGA = 16`, key repeat after 400 ms then 110/85/65/50 ms. | Same code. |
