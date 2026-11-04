@@ -1,6 +1,6 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/bitmaps.rs
-// Changes: imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
+// Changes: link-cable and sticker art removed (out of scope); imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::sync::OnceLock;
@@ -30,14 +30,6 @@ pub const GB_CHIP_W: u32 = 59;
 pub const GB_CHIP_H: u32 = 92;
 pub const SLOT_W: u32 = OUT_W;
 pub const SLOT_H: u32 = 58;
-pub const PORT_W: u32 = OUT_W;
-pub const PORT_H: u32 = SLOT_H;
-pub const PLUG_W: u32 = 92;
-pub const PLUG_H: u32 = 244;
-pub const ADAPTER_W: u32 = 290;
-pub const ADAPTER_H: u32 = 180;
-pub const STICKER_W: u32 = 660;
-pub const STICKER_H: u32 = 228;
 
 const GBA_CART_PNG: &[u8] = include_bytes!("../../../assets/gba_cart.png");
 const GB_CART_PNG: &[u8] = include_bytes!("../../../assets/gb_cart.png");
@@ -59,12 +51,6 @@ const SLOT_FRONT_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_da
 const SLOT_FRONT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_light.png");
 const SLOT_PLUGGED_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_plugged_dark.png");
 const SLOT_PLUGGED_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_plugged_light.png");
-const PORT_DARK_PNG: &[u8] = include_bytes!("../../../assets/link_port_dark.png");
-const PORT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/link_port_light.png");
-const PLUG_HOST_PNG: &[u8] = include_bytes!("../../../assets/link_plug_host.png");
-const PLUG_JOIN_PNG: &[u8] = include_bytes!("../../../assets/link_plug_join.png");
-const ADAPTER_PNG: &[u8] = include_bytes!("../../../assets/link_adapter.png");
-const STICKER_PNG: &[u8] = include_bytes!("../../../assets/sticker.png");
 
 fn load(bytes: &'static [u8], w: u32, h: u32, slot: &'static OnceLock<Vec<u8>>) -> &'static [u8] {
     slot.get_or_init(|| {
@@ -234,36 +220,6 @@ pub fn slot_plugged() -> &'static [u8] {
 pub fn slot_plugged_light() -> &'static [u8] {
     static P: OnceLock<Vec<u8>> = OnceLock::new();
     load(SLOT_PLUGGED_LIGHT_PNG, SLOT_W, SLOT_H, &P)
-}
-
-pub fn link_port() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(PORT_DARK_PNG, PORT_W, PORT_H, &P)
-}
-
-pub fn link_port_light() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(PORT_LIGHT_PNG, PORT_W, PORT_H, &P)
-}
-
-pub fn link_plug_host() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(PLUG_HOST_PNG, PLUG_W, PLUG_H, &P)
-}
-
-pub fn link_plug_join() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(PLUG_JOIN_PNG, PLUG_W, PLUG_H, &P)
-}
-
-pub fn link_adapter() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(ADAPTER_PNG, ADAPTER_W, ADAPTER_H, &P)
-}
-
-pub fn sticker() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(STICKER_PNG, STICKER_W, STICKER_H, &P)
 }
 
 // Shells are hand drawn. There is no Game Boy clear file yet, so a clear Game Boy pak uses

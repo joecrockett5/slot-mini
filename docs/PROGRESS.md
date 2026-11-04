@@ -146,10 +146,47 @@ covers but not by a lot.
   `package/tests/test-zip.sh` (zip layout, manifest, and the packaged
   `launch.sh` queueing a game against a fake card).
 
+## Phase 8: Docs
+
+- `README.md`: install, uninstall, controls, labels and Cart Studio (with the
+  `Games/` workaround), the boot switch, files written, building, testing,
+  roadmap, credits, licence and AI disclosure.
+- `docs/DEVICE-TESTING.md`: the hardware checklist, app mode first, the boot
+  switch last, with the manual recovery steps.
+- Unused copied assets (bezels, link-cable art, the sticker) were removed.
+
+## Done means (from the brief)
+
+- [x] CI builds and tests the desktop build and the armv7 release on every push
+- [x] The release zip installs as an Onion app with no other changes to the
+      card (`package/tests/test-zip.sh`)
+- [x] Every in-scope feature works on the desktop build against a fake Onion SD tree
+- [x] The boot switch, its fallback and the restore pass their tests
+- [x] `PLATFORM.md`, `DESIGN-PARITY.md`, `PROGRESS.md`, `DEVICE-TESTING.md`
+      and the README are complete
+- [x] Licences and credits for slot, fonts and every Rust crate ship in the zip
+
+Nothing has run on a real Mini Plus. `DEVICE-TESTING.md` is the next step.
+
+## Next
+
+- Run `docs/DEVICE-TESTING.md` on hardware; fix what it finds (most likely
+  areas: framebuffer orientation and pixel order, the pan ioctl, keymon
+  interplay, the ffplay sound path, first-start time with many labels).
+- Roadmap items in the README.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
   promptly and release the device before RetroArch starts? (Device test.)
 - Cart Studio looks for a `Games/` folder beside `Labels/`; Onion has `Roms/`.
+  The README documents two workarounds; Cart Studio's source is not in the
+  slot repo (its `web/` folder is the Gamebit companion), so this could not
+  be checked.
+- Does Onion's `mount_main_ui` pick up the shim immediately after an install
+  from app mode (the replaced file shows as deleted in mountinfo), or only at
+  the next boot? Either is safe; DEVICE-TESTING.md asks.
+- slot's `house_label.rs` GB label size (1024x901) disagrees with its label
+  well (1024x914); one of slot's own tests fails upstream at e66715d.
 - slot's art service (`art.slot-cfw.fyi`) has not approved third-party use;
   the client ships disabled.
