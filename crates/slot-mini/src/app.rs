@@ -41,7 +41,7 @@ const STATUS_POLL_MS: Millis = 10_000;
 /// Shown when no GBA, GB or GBC games were found.
 const EMPTY_TEXT: &str = "No games in Roms/GBA, GBC or GB";
 /// Faces kept decoded either side of the selected cart.
-const NEAR: i32 = 5;
+const NEAR: i32 = 4;
 
 /// Why the app stopped.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -98,6 +98,10 @@ impl Default for Options {
 
 struct Faces {
     heart: Option<(TexId, u32, u32)>,
+    /// Shadows (GBA, notched, rounded) and see-through backings, shared by
+    /// every shelf.
+    shadows: [TexId; 3],
+    backings: [TexId; 3],
     empty: (TexId, u32, u32),
     slot: [(TexId, TexId); 2],
     ground: Option<(TexId, u32)>,
@@ -923,6 +927,16 @@ impl Faces {
                 slot_mini_ui::slot_front_light(),
             ),
         ];
+        let shadows = [
+            upload_pinned(gfx, cart_shadow()),
+            upload_pinned(gfx, gb_cart_shadow(GbShell::Notched)),
+            upload_pinned(gfx, gb_cart_shadow(GbShell::Rounded)),
+        ];
+        let backings = [
+            upload_pinned(gfx, cart_backing(None)),
+            upload_pinned(gfx, cart_backing(Some(GbShell::Notched))),
+            upload_pinned(gfx, cart_backing(Some(GbShell::Rounded))),
+        ];
         let empty = title_line_face(EMPTY_TEXT);
         let empty = (upload(gfx, &empty), empty.w, empty.h);
         let wifi = slot_mini_ui::wifi_face(3, theme.footer_ink);
@@ -933,6 +947,8 @@ impl Faces {
         });
         Faces {
             heart,
+            shadows,
+            backings,
             empty,
             slot,
             ground,
@@ -941,18 +957,29 @@ impl Faces {
     }
 
     /// The textures every shelf shares: heart, shadows and see-through backings.
-    fn dress(&self, shelf: &mut Shelf, gfx: &mut Renderer, _theme: &Theme) {
+    fn dress(&self, shelf: &mut Shelf, _gfx: &mut Renderer, _theme: &Theme) {
         if let Some((t, w, h)) = self.heart {
             shelf.set_heart(t, w, h);
         }
-        let mut up = |f: slot_mini_ui::CartFace| gfx.upload_rgba(f.w, f.h, &f.rgba);
-        shelf.set_shadow(up(cart_shadow()));
-        shelf.set_gb_shadow(GbShell::Notched, up(gb_cart_shadow(GbShell::Notched)));
-        shelf.set_gb_shadow(GbShell::Rounded, up(gb_cart_shadow(GbShell::Rounded)));
-        shelf.set_backing(up(cart_backing(None)));
-        shelf.set_gb_backing(GbShell::Notched, up(cart_backing(Some(GbShell::Notched))));
-        shelf.set_gb_backing(GbShell::Rounded, up(cart_backing(Some(GbShell::Rounded))));
+        shelf.set_shadow(self.shadows[0]);
+        shelf.set_gb_shadow(GbShell::Notched, self.shadows[1]);
+        shelf.set_gb_shadow(GbShell::Rounded, self.shadows[2]);
+        shelf.set_backing(self.backings[0]);
+        shelf.set_gb_backing(GbShell::Notched, self.backings[1]);
+        shelf.set_gb_backing(GbShell::Rounded, self.backings[2]);
     }
+}
+
+/// Upload a face with a copy pre-scaled to slot's side scale.
+fn upload_pinned(gfx: &mut Renderer, f: slot_mini_ui::CartFace) -> TexId {
+    let full = Sprite::from_rgba(f.w, f.h, &f.rgba);
+    let side = full.resized(
+        (f.w as f32 * slot_mini_ui::SIDE_SCALE).round() as u32,
+        (f.h as f32 * slot_mini_ui::SIDE_SCALE).round() as u32,
+    );
+    let t = gfx.upload(full);
+    gfx.pin_scaled(t, side);
+    t
 }
 
 /// The wallpaper: a random PNG from `Wallpapers/` on the SD root, else
@@ -963,8 +990,8 @@ fn ground(paths: &Paths, stage: Stage, seed: u64) -> Option<Sprite> {
     let rgba = crate::wallpaper::pick(&paths.sd, seed)
         .and_then(|p| slot_mini_ui::wallpaper_face(&p, w, h))
         .or_else(|| {
-            let full = slot_mini_ui::default_background()?;
-            Some(crop_centre(full, slot_mini_gfx::OUT_W, OUT_H, w))
+            let full = slot_mini_ui::default_background_owned()?;
+            Some(crop_centre(&full, slot_mini_gfx::OUT_W, OUT_H, w))
         })?;
     Some(Sprite::from_rgba(w, h, &rgba))
 }

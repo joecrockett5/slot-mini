@@ -5,6 +5,10 @@
 pub mod backend;
 pub mod canvas;
 pub mod draw;
+#[cfg(target_os = "linux")]
+pub mod evdev;
+#[cfg(target_os = "linux")]
+pub mod fbdev;
 pub mod text;
 
 pub use backend::{png_bytes, save_png, Backend, Button, Event, Headless};

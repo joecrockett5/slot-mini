@@ -156,6 +156,20 @@ fn backend(name: &str) -> Box<dyn Backend> {
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        "device" => {
+            let fb = std::env::var("SLOT_MINI_FB").unwrap_or_else(|_| "/dev/fb0".into());
+            let ev =
+                std::env::var("SLOT_MINI_INPUT").unwrap_or_else(|_| "/dev/input/event0".into());
+            match slot_mini_gfx::backend::Device::open(fb.as_ref(), ev.as_ref()) {
+                Ok(d) => Box::new(d),
+                Err(e) => {
+                    // The boot shim falls back to Onion's MainUI on this.
+                    eprintln!("slot-mini: {fb}: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         _ => Box::new(Headless::new(SCREEN_W, SCREEN_H)),
     }
 }
@@ -234,11 +248,10 @@ fn main() {
         if app.exit.is_some() || a.frames.is_some_and(|f| n >= f) {
             break;
         }
-        if !a.sim {
+        // The desktop window paces itself; everything else sleeps to 60 fps.
+        if !a.sim && a.backend != "desktop" {
             if let Some(left) = frame_time.checked_sub(t.elapsed()) {
-                if a.backend == "headless" {
-                    std::thread::sleep(left);
-                }
+                std::thread::sleep(left);
             }
         }
     }
@@ -246,6 +259,16 @@ fn main() {
         if let Err(e) = slot_mini_gfx::save_png(&frame, p) {
             eprintln!("slot-mini: {}: {e}", p.display());
         }
+    }
+    if std::env::var_os("SLOT_MINI_REPORT_RSS").is_some() {
+        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+        for line in status
+            .lines()
+            .filter(|l| l.starts_with("VmHWM") || l.starts_with("VmRSS"))
+        {
+            eprintln!("slot-mini: {line}");
+        }
+        eprintln!("slot-mini: textures {:.1} MB", app.gfx.bytes() as f64 / 1e6);
     }
     let code = match app.exit.take() {
         Some(Exit::Launch { cart, fresh }) => {

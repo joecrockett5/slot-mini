@@ -107,6 +107,25 @@ covers but not by a lot.
 - The boot switch logic (`switch.rs`, `package/shim.sh`) is written; its
   shell tests and packaging are phase 7.
 
+## Phase 6: Device backends
+
+- `slot-mini-gfx/src/fbdev.rs`: `/dev/fb0` mapped, frames written rotated
+  180° into the hidden page and flipped with `FBIOPAN_DISPLAY` (falling back
+  to `FBIOPUT_VSCREENINFO`, then to single-buffered drawing); a larger panel
+  gets the frame centred. Tested into a file sized like the framebuffer.
+- `slot-mini-gfx/src/evdev.rs`: `/dev/input/event0`, non-blocking, Onion's
+  key codes; tested from recorded 32-bit event bytes.
+- `backend::Device` combines them; `--backend device` is the default on
+  armv7. `SLOT_MINI_FB` and `SLOT_MINI_INPUT` override the paths (a regular
+  file as the framebuffer is mapped with the Mini Plus geometry), which
+  `tests/device_backend.rs` uses to run the real binary, also under qemu.
+- Audio, battery and Wi-Fi were done in phase 5 (`sound.rs`, `status.rs`).
+- Memory: every shelf used to upload its own shadow and backing textures,
+  and each restock leaked a set. Now shared, the prefetch radius is 4 and
+  slot's cached default ground is not kept. Peak RSS on the x86 build,
+  scrolling 207 carts: 42 MB before, 33 MB after (textures 10.6 MB).
+  `SLOT_MINI_REPORT_RSS=1` prints it on exit.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

@@ -106,6 +106,54 @@ impl Backend for Headless {
     }
 }
 
+/// The device: the framebuffer and the button device.
+#[cfg(target_os = "linux")]
+pub struct Device {
+    fb: crate::fbdev::Fbdev,
+    input: Option<crate::evdev::Evdev>,
+}
+
+#[cfg(target_os = "linux")]
+impl Device {
+    /// A regular file in place of the framebuffer is mapped with the Mini
+    /// Plus's geometry (for testing the device path off the device).
+    pub fn open(fb: &Path, input: &Path) -> std::io::Result<Device> {
+        let fb = match std::fs::metadata(fb).map(|m| m.is_file()).unwrap_or(false) {
+            true => crate::fbdev::Fbdev::from_file(fb, crate::fbdev::Geometry::MINI)?,
+            false => crate::fbdev::Fbdev::open(fb)?,
+        };
+        let input = match crate::evdev::Evdev::open(input) {
+            Ok(i) => Some(i),
+            Err(e) => {
+                let _ = writeln_err(&format!("slot-mini: {}: {e}", input.display()));
+                None
+            }
+        };
+        Ok(Device { fb, input })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn writeln_err(s: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    writeln!(std::io::stderr(), "{s}")
+}
+
+#[cfg(target_os = "linux")]
+impl Backend for Device {
+    fn size(&self) -> (u32, u32) {
+        (self.fb.geometry.width, self.fb.geometry.height)
+    }
+
+    fn present(&mut self, frame: &Canvas) {
+        self.fb.present(frame);
+    }
+
+    fn poll(&mut self) -> Vec<Event> {
+        self.input.as_mut().map(|i| i.poll()).unwrap_or_default()
+    }
+}
+
 #[cfg(feature = "desktop")]
 pub mod desktop {
     //! A window for development. Keys: arrows, Z = A, X = B, A = Y, S = X,

@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/backdrop.rs
-// Changes: game bezels removed (out of scope); imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
+// Changes: game bezels removed (out of scope); default_background_owned
+//   added; imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::path::Path;
@@ -23,6 +24,12 @@ pub fn default_background() -> Option<&'static [u8]> {
     static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
     P.get_or_init(|| art::cover_bytes(DEFAULT_PNG, OUT_W, OUT_H))
         .as_deref()
+}
+
+/// The default ground, decoded each time and not kept (slot-mini addition:
+/// the launcher crops its own copy, so the cached one would be dead weight).
+pub fn default_background_owned() -> Option<Vec<u8>> {
+    art::cover_bytes(DEFAULT_PNG, OUT_W, OUT_H)
 }
 
 /// The blurred carousel ground, scaled to cover the whole screen the same way as the default.

@@ -31,7 +31,8 @@ pub use wifi::wifi_face;
 
 pub use art::decode as decode_png;
 pub use backdrop::{
-    blur_background, default_background, draw_backdrop, draw_ground, wallpaper_face,
+    blur_background, default_background, default_background_owned, draw_backdrop, draw_ground,
+    wallpaper_face,
 };
 pub use battery::{draw_gauge, BOLT_PX, GAUGE_H, GAUGE_W, WALL};
 pub use bitmaps::{
