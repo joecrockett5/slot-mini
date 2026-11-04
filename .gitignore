@@ -1,0 +1,5 @@
+/target
+/target-*
+/dist
+/sdcard
+.DS_Store
