@@ -91,6 +91,23 @@ bolt; slot-mini never does (see `PLATFORM.md`).
 slot-mini: `shelf_gba.png`. slot's generated label: the name in up to three
 lines on a colour picked from the title.
 
+### Insert
+
+![Insert](parity/insert.png)
+
+slot-mini: `insert.png`, 200 ms after tapping A. slot's timing (0.45 s to
+seat, 0.28 s hold) and travel curve (`SlotChrome`, copied). Like slot, the
+footer is hidden while a cart moves. slot then powers the screen on into the
+game; slot-mini exits and Onion's RetroArch takes over.
+
+### Eject
+
+![Eject](parity/eject.png)
+
+slot-mini: `eject.png`, 200 ms after starting again as the boot launcher
+following a game. slot ejects out of the running game picture; slot-mini
+starts with the cart seated and lifts it back onto the shelf.
+
 ### Other shelf goldens
 
 All in `crates/slot-mini/tests/golden/`:
@@ -104,3 +121,5 @@ All in `crates/slot-mini/tests/golden/`:
 | `shelf_gb_named.png`, `shelf_gb_glitter.png` | Game Boy paks, a glitter finish from `cart_shell.txt` |
 | `shelf_light_wallpaper.png` | Light appearance, a custom wallpaper with tint, Wi-Fi icon, low battery |
 | `empty.png` | No games on the card |
+| `relaunch_same_cart.png` | The launcher started again by the fake runtime loop after a game, on the same cart |
+| `refused_name.png` | A file name Onion cannot launch (`:` in it), refused with a message |

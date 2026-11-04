@@ -73,6 +73,20 @@ first launch with a large label set (labels decode in two worker threads
 while placeholders show), and texture memory (~16 MB), which the 40 MB budget
 covers but not by a lot.
 
+## Phase 4: Launching
+
+- `launch.rs`: the command line MainUI writes, path checks (Open MainUI's
+  rules), Recents in the stock record format, Onion's `/tmp/reset_game` for
+  Hold A, and the two hand-offs: `/tmp/cmd_to_run.sh` as the boot launcher,
+  `.tmp_update/cmd_to_run.sh` plus `/tmp/quick_switch` as an app.
+- `main.rs`: `--mode app|launcher`, scripted input (`--input`) and a
+  simulated clock (`--sim`) for tests; exit code 10 asks the boot shim for
+  Onion's MainUI.
+- `tests/fake-runtime.sh`: a stand-in for Onion's runtime loop.
+  `tests/launch_cycle.rs` launches through it in both modes, checks the
+  command, Recents and the fresh-start flag, and relaunches onto the same
+  cart (golden `relaunch_same_cart.png`); plus insert and eject goldens.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

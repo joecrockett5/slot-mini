@@ -567,6 +567,7 @@ dependencies = [
  "libc",
  "lz4_flex",
  "png",
+ "serde_json",
  "slot-mini-gfx",
  "slot-mini-store",
  "slot-mini-ui",

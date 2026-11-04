@@ -54,3 +54,12 @@ Calls made without asking, and why. Newest last.
     rustfmt; renaming `slot_store` to `slot_mini_store` makes a few lines
     too long, and rustfmt re-wraps them. Nothing else in copied code is
     reformatted.
+16. **Unsafe file names are refused, not escaped.** Onion's runtime parses
+    the command with `awk` and `:`-splitting; a name with `"`, `` ` ``, `\`,
+    `:` or control characters cannot round-trip. slot-mini shows "Rename this
+    file to launch it" instead of writing a command Onion would mangle.
+17. **Recents lines slot-mini cannot parse are kept as they are**, so a
+    damaged line is never lost by a launch from slot-mini.
+18. **Exit code 10 means "start Onion's MainUI"** for the boot shim (MENU →
+    exit to Onion). Any other non-zero exit is treated as a failure by the
+    shim, which also falls back to MainUI.

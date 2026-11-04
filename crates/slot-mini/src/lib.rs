@@ -11,6 +11,7 @@ pub mod app;
 pub mod faces;
 pub mod fixture;
 pub mod label_cache;
+pub mod launch;
 pub mod library;
 pub mod paths;
 pub mod settings;

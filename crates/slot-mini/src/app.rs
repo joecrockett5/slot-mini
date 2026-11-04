@@ -119,6 +119,9 @@ pub struct App {
     clock: Printing,
     percent: Printing,
     shelf_named: Option<Millis>,
+    /// A message shown where the platform name goes, e.g. why a cart
+    /// cannot be launched.
+    notice: Option<String>,
     pub phase: Phase,
     a_held: Option<Millis>,
     status: Box<dyn Status>,
@@ -162,6 +165,7 @@ impl App {
             clock: Printing::default(),
             percent: Printing::default(),
             shelf_named: None,
+            notice: None,
             phase: Phase::Shelf,
             a_held: None,
             status,
@@ -285,6 +289,18 @@ impl App {
         Some((*kind, shelf.carts.get(shelf.index)?))
     }
 
+    /// The key of the shelf on screen, for `state.txt`.
+    pub fn shelf_key(&self) -> String {
+        self.shelves
+            .get(self.at)
+            .map(|(k, _)| k.key())
+            .unwrap_or_default()
+    }
+
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
+    }
+
     pub fn shelf_kinds(&self) -> Vec<ShelfKind> {
         self.shelves.iter().map(|(k, _)| *k).collect()
     }
@@ -299,6 +315,7 @@ impl App {
         }
         self.at = (self.at as i32 + by).rem_euclid(n) as usize;
         self.shelf_named = Some(self.now);
+        self.notice = None;
     }
 
     fn toggle_favourite(&mut self) {
@@ -380,6 +397,18 @@ impl App {
         let Some((_, cart)) = self.current() else {
             return;
         };
+        // Refuse before the cart goes in if Onion could not run it.
+        let checked =
+            crate::launch::record(&self.paths, cart).and_then(|r| crate::launch::command(&r));
+        if let Err(e) = checked {
+            eprintln!("slot-mini: {e}");
+            self.notice = Some(match e {
+                crate::launch::LaunchError::UnsafePath(_) => "Rename this file to launch it".into(),
+                _ => "This game cannot be launched".into(),
+            });
+            self.shelf_named = Some(self.now);
+            return;
+        }
         let stem = cart.stem.clone();
         if let Some(s) = self.shelf_mut() {
             s.release_hold();
@@ -518,12 +547,14 @@ impl App {
 
     /// Re-print text faces whose words changed.
     fn sync_text(&mut self) {
-        let title = self
-            .shelves
-            .get(self.at)
-            .map(|(k, _)| k.title().to_string())
-            .filter(|_| self.shelves.len() > 1 || self.shelf_named.is_some())
-            .unwrap_or_default();
+        let title = match &self.notice {
+            Some(n) => n.clone(),
+            None => self
+                .shelves
+                .get(self.at)
+                .map(|(k, _)| k.title().to_string())
+                .unwrap_or_default(),
+        };
         reprint(&mut self.gfx, &mut self.title, &title, |t| {
             title_line_face(t)
         });
@@ -604,9 +635,10 @@ impl App {
                 shelf.draw(stage, 0.0, self.slot_faces(), out);
                 draw_slot_title(stage, self.title.printed, self.title_alpha(), out);
             }
+            // slot draws no footer while a cart goes in or comes out.
             Phase::Inserting { stem, .. } | Phase::Ejecting { stem, .. } => {
                 shelf.draw_row(stage, Some(stem), 0.0, self.seat(), 1.0, out);
-                self.chrome(shelf, stem, out);
+                return self.chrome(shelf, stem, out);
             }
         }
         self.draw_footer(out);
