@@ -87,6 +87,26 @@ covers but not by a lot.
   command, Recents and the fresh-start flag, and relaunches onto the same
   cart (golden `relaunch_same_cart.png`); plus insert and eject goldens.
 
+## Phase 5: Extras
+
+- Favourites (Y): slot's list format in `App/slot-mini/data/favorites.txt`,
+  slot's Favorites shelf first. Tests: `tests/extras.rs`.
+- Cart studio (SELECT): slot's `studio.rs` and `studio_view.rs`, drawn by
+  `studio_ui.rs`. Shell colour, finish and shape go to `Labels/cart_shell.txt`
+  with slot's own writer; printed and recoloured labels go to
+  `Labels/<sys>/<stem>.png`. Tests: `tests/studio.rs`.
+- Label service: slot's art client (`art/`), behind `label_service = on`
+  (off by default) and an `art_host` setting. Background fetch for carts
+  without a label (never replaces a file) and the studio's printer. Tests run
+  against a local HTTP server: `tests/label_service.rs`.
+- Sounds: slot's insert/eject clips played through Onion's ffplay, off by
+  default (`sound.rs`).
+- About (MENU): Sounds, Boot launcher (install/restore, `switch.rs`) and
+  Exit to Onion.
+- Battery and clock: `status.rs`, with tests.
+- The boot switch logic (`switch.rs`, `package/shim.sh`) is written; its
+  shell tests and packaging are phase 7.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

@@ -38,6 +38,7 @@ impl Rig {
 
     pub fn app_with(&self, status: FixedStatus) -> Driver {
         let opts = Options {
+            sound: None,
             face_wait: None,
             seed: 7,
         };

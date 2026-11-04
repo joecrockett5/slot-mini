@@ -130,6 +130,85 @@ impl Sprite {
         out
     }
 
+    /// Draw `src` over this sprite at (x, y), both premultiplied, keeping
+    /// transparency (for flattening a cart's layers into one image).
+    pub fn draw_over(&mut self, src: &Sprite, x: i32, y: i32) {
+        for sy in 0..src.h as i32 {
+            let dy = y + sy;
+            if dy < 0 || dy >= self.h as i32 {
+                continue;
+            }
+            for sx in 0..src.w as i32 {
+                let dx = x + sx;
+                if dx < 0 || dx >= self.w as i32 {
+                    continue;
+                }
+                let s = src.px[(sy as u32 * src.w + sx as u32) as usize];
+                let a = s >> 24;
+                if a == 0 {
+                    continue;
+                }
+                let d = &mut self.px[(dy as u32 * self.w + dx as u32) as usize];
+                *d = match a {
+                    255 => s,
+                    _ => s.wrapping_add(scale_px(*d, 255 - a)),
+                };
+            }
+        }
+    }
+
+    /// Rotated by `deg` degrees (clockwise on screen) about its centre,
+    /// bilinear, on a canvas grown to fit. Done once when a screen opens,
+    /// standing in for slot's GL `Draw::Turned`/`Draw::Quad`.
+    pub fn rotated(&self, deg: f32) -> Sprite {
+        let (sin, cos) = deg.to_radians().sin_cos();
+        let (w, h) = (self.w as f32, self.h as f32);
+        let nw = (w * cos.abs() + h * sin.abs()).ceil() as u32 + 2;
+        let nh = (w * sin.abs() + h * cos.abs()).ceil() as u32 + 2;
+        let mut out = Sprite::new(nw, nh);
+        let (cx, cy) = (w / 2.0, h / 2.0);
+        let (ncx, ncy) = (nw as f32 / 2.0, nh as f32 / 2.0);
+        let at = |x: i32, y: i32| -> [f32; 4] {
+            if x < 0 || y < 0 || x >= self.w as i32 || y >= self.h as i32 {
+                return [0.0; 4];
+            }
+            let p = self.px[(y as u32 * self.w + x as u32) as usize];
+            [
+                (p >> 24) as f32,
+                (p >> 16 & 0xFF) as f32,
+                (p >> 8 & 0xFF) as f32,
+                (p & 0xFF) as f32,
+            ]
+        };
+        for y in 0..nh {
+            for x in 0..nw {
+                // Inverse map the destination pixel centre into the source.
+                let (dx, dy) = (x as f32 + 0.5 - ncx, y as f32 + 0.5 - ncy);
+                let sx = dx * cos + dy * sin + cx - 0.5;
+                let sy = -dx * sin + dy * cos + cy - 0.5;
+                let (x0, y0) = (sx.floor(), sy.floor());
+                let (fx, fy) = (sx - x0, sy - y0);
+                let (x0, y0) = (x0 as i32, y0 as i32);
+                let mut c = [0f32; 4];
+                for (px, py, k) in [
+                    (x0, y0, (1.0 - fx) * (1.0 - fy)),
+                    (x0 + 1, y0, fx * (1.0 - fy)),
+                    (x0, y0 + 1, (1.0 - fx) * fy),
+                    (x0 + 1, y0 + 1, fx * fy),
+                ] {
+                    let v = at(px, py);
+                    for i in 0..4 {
+                        c[i] += v[i] * k;
+                    }
+                }
+                let a = c[0].round().clamp(0.0, 255.0) as u32;
+                let ch = |v: f32| (v.round().clamp(0.0, 255.0) as u32).min(a);
+                out.px[(y * nw + x) as usize] = a << 24 | ch(c[1]) << 16 | ch(c[2]) << 8 | ch(c[3]);
+            }
+        }
+        out
+    }
+
     /// Whether every pixel is fully opaque.
     pub fn is_opaque(&self) -> bool {
         self.px.iter().all(|p| p >> 24 == 255)
@@ -449,6 +528,23 @@ mod tests {
         c.blit_scaled(&s, [0.0, 0.0, 2.0, 2.0], Rect::new(2, 2, 4, 4), 255);
         let white = c.px.iter().filter(|&&p| p == 0xFFFF_FFFF).count();
         assert_eq!(white, 16);
+    }
+
+    #[test]
+    fn rotation_keeps_the_middle_and_grows() {
+        let s = Sprite::from_rgba(10, 4, &[255; 160]);
+        let r = s.rotated(90.0);
+        assert!(r.w >= 4 && r.h >= 10);
+        assert_eq!(r.px[((r.h / 2) * r.w + r.w / 2) as usize], 0xFFFF_FFFF);
+        assert_eq!(r.px[0], 0, "corners are transparent");
+    }
+
+    #[test]
+    fn draw_over_keeps_transparency() {
+        let mut base = Sprite::new(2, 1);
+        let red = Sprite::from_rgba(1, 1, &[255, 0, 0, 255]);
+        base.draw_over(&red, 1, 0);
+        assert_eq!(base.px, vec![0, 0xFFFF_0000]);
     }
 
     #[test]

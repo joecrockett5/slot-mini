@@ -16,6 +16,11 @@ slot-mini-ui = { path = "../slot-mini-ui" }
 lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
 libc = { workspace = true }
 serde_json = { workspace = true }
+ureq = { workspace = true }
+crc32fast = { workspace = true }
+image-webp = { workspace = true }
+jpeg-decoder = { version = "0.3", default-features = false }
+png = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

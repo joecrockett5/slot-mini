@@ -83,6 +83,7 @@ fn main() {
             clock: (12, 0),
         };
         let opts = Options {
+            sound: None,
             face_wait: Some(Duration::from_millis(250)),
             seed: 1,
         };

@@ -108,6 +108,31 @@ slot-mini: `eject.png`, 200 ms after starting again as the boot launcher
 following a game. slot ejects out of the running game picture; slot-mini
 starts with the cart seated and lifts it back onto the shelf.
 
+### Cart studio
+
+![Studio](parity/studio.png)
+
+slot-mini: `studio_list.png`. slot's studio state machine and layout code
+(`studio.rs`, `studio_view.rs`) run unchanged; the cutting-mat ground is
+slot's. The tilted cart is rotated once in software. Other studio goldens:
+`studio_chips.png` (shell colour chips), `studio_finish.png`, `studio_gb.png`
+(the Shape row), `studio_printer_off.png` (service off),
+`studio_printer_no_wifi.png`.
+
+![Label printer](parity/studio-printer.png)
+
+slot-mini: `studio_printer.png`, against a local test server. slot prints
+slips from a printer with paper, tear and apply animations; slot-mini shows
+the two slips flat and applies the chosen one directly.
+
+### About (MENU)
+
+![About](parity/about.png)
+
+slot's MENU opens its settings; slot-mini's opens About on slot's menu ground
+(wallpaper under slot's scrim) with Sounds, Boot launcher and Exit to Onion.
+Golden: `about.png`.
+
 ### Other shelf goldens
 
 All in `crates/slot-mini/tests/golden/`:
@@ -122,4 +147,7 @@ All in `crates/slot-mini/tests/golden/`:
 | `shelf_light_wallpaper.png` | Light appearance, a custom wallpaper with tint, Wi-Fi icon, low battery |
 | `empty.png` | No games on the card |
 | `relaunch_same_cart.png` | The launcher started again by the fake runtime loop after a game, on the same cart |
+| `shelf_hearted.png`, `shelf_favorites.png` | A hearted cart, and the Favorites shelf mixing GBA and GB carts |
+| `shelf_after_studio.png` | The shelf after a clear finish was picked in the studio |
+| `shelf_fetched_label.png` | A label fetched from the (local test) label service |
 | `refused_name.png` | A file name Onion cannot launch (`:` in it), refused with a message |

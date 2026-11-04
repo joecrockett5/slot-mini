@@ -66,7 +66,8 @@ fn parse_input(s: &str) -> Vec<(u64, Event)> {
 const USAGE: &str = "usage: slot-mini [--sd DIR] [--tmp DIR] [--mode app|launcher]
                  [--backend headless|desktop|device] [--frames N] [--shot out.png]
                  [--sim] [--input 'MS:press|release:BUTTON,...']
-       slot-mini --make-fake-sd DIR";
+       slot-mini --make-fake-sd DIR
+       slot-mini [--sd DIR] --install-launcher | --restore-launcher";
 
 fn args() -> Args {
     let mut a = Args {
@@ -102,6 +103,20 @@ fn args() -> Args {
                     Ok(()) => std::process::exit(0),
                     Err(e) => {
                         eprintln!("slot-mini: {}: {e}", dir.display());
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "--install-launcher" | "--restore-launcher" => {
+                let paths = Paths::new(a.sd.clone(), a.tmp.clone());
+                let done = match k.as_str() {
+                    "--install-launcher" => slot_mini::switch::install(&paths),
+                    _ => slot_mini::switch::restore(&paths),
+                };
+                match done {
+                    Ok(()) => std::process::exit(0),
+                    Err(e) => {
+                        eprintln!("slot-mini: {e}");
                         std::process::exit(1);
                     }
                 }
@@ -175,6 +190,7 @@ fn main() {
             .map_or(0, |d| d.as_nanos() as u64),
     };
     let opts = Options {
+        sound: None,
         seed,
         face_wait: match a.sim {
             true => None,

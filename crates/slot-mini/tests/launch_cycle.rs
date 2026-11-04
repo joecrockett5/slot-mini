@@ -153,7 +153,12 @@ fn hold_a_starts_fresh_for_one_run() {
 fn menu_in_launcher_mode_hands_back_to_onion() {
     let rig = Rig::new();
     let mainui = launcher(&rig, "launcher");
-    input(&rig, 1, "300:press:MENU,340:release:MENU");
+    // MENU opens About; "Exit to Onion" is the third row.
+    input(
+        &rig,
+        1,
+        "300:press:MENU,340:release:MENU,500:press:DOWN,540:release:DOWN,700:press:DOWN,740:release:DOWN,900:press:A,940:release:A",
+    );
     run(&rig, 1, &["sh", mainui.to_str().unwrap()]);
     let log = read(rig.paths.tmp.join("runtime.log"));
     assert!(log.contains("turn 1: MainUI exit 10"), "{log}");

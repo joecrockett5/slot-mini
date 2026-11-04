@@ -1,0 +1,184 @@
+//! MENU: about slot-mini, its few settings, and the way back to Onion.
+//! Drawn on slot's menu ground: the wallpaper under slot's scrim, rows in
+//! slot's title type, selected row bright and the rest dimmed as in slot's
+//! quick menu.
+
+use slot_mini_gfx::{Button, Draw, Renderer, Stage, TexId};
+use slot_mini_ui::{draw_backdrop, hint_face, title_line_face, word_ink, FOOTER_Y};
+
+use crate::paths::Paths;
+use crate::settings::Settings;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Row {
+    Sounds,
+    BootLauncher,
+    ExitToOnion,
+}
+
+pub enum Outcome {
+    Stay,
+    Close,
+    ExitToOnion,
+}
+
+pub struct About {
+    pub row: usize,
+    rows: Vec<Row>,
+    /// Whether slot-mini is installed as the boot launcher, and a message
+    /// from the last attempt to change that.
+    pub launcher: bool,
+    pub note: Option<String>,
+    faces: Vec<(String, TexId, u32, u32)>,
+}
+
+const INFO: [&str; 4] = [
+    concat!("slot-mini ", env!("CARGO_PKG_VERSION")),
+    "Based on slot by Brandon Kowalski",
+    "Licensed GPL-3.0-or-later",
+    "Not affiliated with slot, Onion or Miyoo",
+];
+
+impl About {
+    pub fn new(paths: &Paths) -> About {
+        About {
+            row: 0,
+            rows: vec![Row::Sounds, Row::BootLauncher, Row::ExitToOnion],
+            launcher: crate::switch::installed(paths),
+            note: None,
+            faces: Vec::new(),
+        }
+    }
+
+    pub fn rows(&self) -> &[Row] {
+        &self.rows
+    }
+
+    pub fn press(&mut self, b: Button, settings: &mut Settings, paths: &Paths) -> Outcome {
+        let n = self.rows.len();
+        match b {
+            Button::Up => self.row = (self.row + n - 1) % n,
+            Button::Down => self.row = (self.row + 1) % n,
+            Button::B | Button::Menu => return Outcome::Close,
+            Button::A | Button::Left | Button::Right => match self.rows[self.row] {
+                Row::Sounds => {
+                    settings.sounds = !settings.sounds;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
+                }
+                Row::BootLauncher => {
+                    let result = match self.launcher {
+                        false => crate::switch::install(paths),
+                        true => crate::switch::restore(paths),
+                    };
+                    self.note = Some(match result {
+                        Ok(()) if !self.launcher => {
+                            "Installed. Takes effect after this app closes.".into()
+                        }
+                        Ok(()) => "Onion's launcher is back.".into(),
+                        Err(e) => format!("Not changed: {e}"),
+                    });
+                    self.launcher = crate::switch::installed(paths);
+                }
+                Row::ExitToOnion if b == Button::A => return Outcome::ExitToOnion,
+                Row::ExitToOnion => {}
+            },
+            _ => {}
+        }
+        Outcome::Stay
+    }
+
+    fn face(&mut self, gfx: &mut Renderer, text: &str, big: bool) -> (TexId, u32, u32) {
+        let key = format!("{}{text}", if big { "#" } else { "" });
+        if let Some((_, t, w, h)) = self.faces.iter().find(|f| f.0 == key) {
+            return (*t, *w, *h);
+        }
+        let f = match big {
+            true => title_line_face(text),
+            false => word_ink(text, [0xf6, 0xf4, 0xef]),
+        };
+        let t = gfx.upload_rgba(f.w, f.h, &f.rgba);
+        self.faces.push((key, t, f.w, f.h));
+        (t, f.w, f.h)
+    }
+
+    pub fn close(self, gfx: &mut Renderer) {
+        for (_, t, ..) in self.faces {
+            gfx.free(t);
+        }
+    }
+
+    fn label(&self, row: Row, settings: &Settings) -> String {
+        let on = |b: bool| if b { "On" } else { "Off" };
+        match row {
+            Row::Sounds => format!("Sounds: {}", on(settings.sounds)),
+            Row::BootLauncher => format!("Boot launcher: {}", on(self.launcher)),
+            Row::ExitToOnion => "Exit to Onion".into(),
+        }
+    }
+
+    pub fn draw(
+        &mut self,
+        stage: Stage,
+        ground: Option<(TexId, u32)>,
+        settings: &Settings,
+        gfx: &mut Renderer,
+        out: &mut Vec<Draw>,
+    ) {
+        draw_backdrop(stage, ground, out);
+        let put = |out: &mut Vec<Draw>, (tex, w, h): (TexId, u32, u32), y: f32, alpha: f32| {
+            out.push(Draw::Tex {
+                x: ((stage.w - w as f32) / 2.0).round(),
+                y,
+                w: w as f32,
+                h: h as f32,
+                tex,
+                alpha,
+            });
+        };
+        let mut y = 44.0;
+        for (i, line) in INFO.iter().enumerate() {
+            let f = self.face(gfx, line, i == 0);
+            put(out, f, y, if i == 0 { 1.0 } else { 0.8 });
+            y += if i == 0 { 44.0 } else { 28.0 };
+        }
+        y += 24.0;
+        for (i, row) in self.rows.clone().into_iter().enumerate() {
+            let text = self.label(row, settings);
+            let f = self.face(gfx, &text, true);
+            put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
+            y += 52.0;
+        }
+        if let Some(note) = self.note.clone() {
+            let f = self.face(gfx, &note, false);
+            put(out, f, y + 8.0, 0.9);
+        }
+        slot_mini_ui::draw_empty_slot(stage, None, out);
+        for (i, (key, label)) in [("B", "BACK"), ("A", "SELECT")].into_iter().enumerate() {
+            let key_text = format!("{key}:{label}");
+            let (tex, w, h) = match self.faces.iter().find(|f| f.0 == key_text) {
+                Some((_, t, w, h)) => (*t, *w, *h),
+                None => {
+                    let f = hint_face(key, label);
+                    let t = gfx.upload_rgba(f.w, f.h, &f.rgba);
+                    self.faces.push((key_text, t, f.w, f.h));
+                    (t, f.w, f.h)
+                }
+            };
+            let x = if i == 0 {
+                24.0
+            } else {
+                stage.w - 24.0 - w as f32
+            };
+            out.push(Draw::Tex {
+                x,
+                y: FOOTER_Y,
+                w: w as f32,
+                h: h as f32,
+                tex,
+                alpha: 1.0,
+            });
+        }
+    }
+}

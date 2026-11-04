@@ -68,9 +68,16 @@ pub enum Phase {
         at: Millis,
         stem: String,
     },
+    /// SELECT: the cart studio for the selected cart.
+    Studio,
+    /// MENU: about slot-mini, its settings, and the way back to Onion.
+    About,
 }
 
 pub struct Options {
+    /// Where the insert and eject clips go. `None` picks Onion's player when
+    /// `sounds = on`, silence otherwise.
+    pub sound: Option<Box<dyn crate::sound::Sound>>,
     /// How long a frame may wait for on-screen cart faces. `None` waits for
     /// all of them (tests); the device waits a short while, then draws the
     /// label colour in their place until they land.
@@ -82,6 +89,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
+            sound: None,
             face_wait: Some(Duration::from_millis(250)),
             seed: 0,
         }
@@ -130,6 +138,15 @@ pub struct App {
     polled: Option<Millis>,
     now: Millis,
     draws: Vec<Draw>,
+    pub studio: Option<crate::studio_ui::StudioUi>,
+    pub about: Option<crate::about::About>,
+    sound: Box<dyn crate::sound::Sound>,
+    /// A sound sink handed in (tests) plays whatever the setting says.
+    sound_given: bool,
+    /// Labels arriving from slot's art service, when it is switched on.
+    fetched: Option<std::sync::mpsc::Receiver<(Cart, std::path::PathBuf)>>,
+    fetch_started: bool,
+    restock_pending: bool,
     pub exit: Option<Exit>,
 }
 
@@ -148,6 +165,14 @@ impl App {
         let statics = Faces::new(&mut gfx, &paths, &theme, stage, opts.seed);
         let faces = CartFaces::spawn(paths.sd.clone());
         let carts = library::scan(&paths);
+        let sound_given = opts.sound.is_some();
+        let sound: Box<dyn crate::sound::Sound> = match opts.sound {
+            Some(s) => s,
+            None => Box::new(crate::sound::Player::onion(
+                &paths.sd,
+                paths.cache().join("sounds"),
+            )),
+        };
         let mut app = App {
             paths,
             settings,
@@ -174,6 +199,13 @@ impl App {
             polled: None,
             now,
             draws: Vec::new(),
+            studio: None,
+            about: None,
+            sound,
+            sound_given,
+            fetched: None,
+            fetch_started: false,
+            restock_pending: false,
             exit: None,
         };
         app.restock();
@@ -248,6 +280,7 @@ impl App {
             let found = kind.is_some_and(|k| self.select(k, *platform, stem))
                 || self.select(ShelfKind::System(*platform), *platform, stem);
             if found && state.launched {
+                self.play(crate::sound::Clip::Eject);
                 self.phase = Phase::Ejecting {
                     at: self.now,
                     stem: stem.clone(),
@@ -363,6 +396,12 @@ impl App {
     }
 
     fn press(&mut self, b: Button) {
+        if self.phase == Phase::Studio {
+            return self.studio_press(b);
+        }
+        if self.phase == Phase::About {
+            return self.about_press(b);
+        }
         if self.phase != Phase::Shelf {
             return;
         }
@@ -376,7 +415,8 @@ impl App {
             Button::R1 => self.switch_shelf(1),
             Button::Y => self.toggle_favourite(),
             Button::A => self.a_held = Some(now),
-            Button::Menu => self.exit = Some(Exit::ToOnion),
+            Button::Select => self.open_studio(),
+            Button::Menu => self.open_about(),
             _ => {}
         }
     }
@@ -389,6 +429,88 @@ impl App {
                 self.insert(false);
             }
             _ => {}
+        }
+    }
+
+    fn open_studio(&mut self) {
+        let Some((_, shelf)) = self.shelves.get(self.at) else {
+            return;
+        };
+        let Some(cart) = shelf.carts.get(shelf.index).cloned() else {
+            return;
+        };
+        let (at, index) = (self.at, shelf.index);
+        if let Some(s) = self.shelf_mut() {
+            s.release_hold();
+        }
+        self.a_held = None;
+        self.studio = Some(crate::studio_ui::StudioUi::open(cart, at, index));
+        self.phase = Phase::Studio;
+    }
+
+    fn open_about(&mut self) {
+        if let Some(s) = self.shelf_mut() {
+            s.release_hold();
+        }
+        self.a_held = None;
+        self.about = Some(crate::about::About::new(&self.paths));
+        self.phase = Phase::About;
+    }
+
+    fn about_press(&mut self, b: Button) {
+        let Some(about) = self.about.as_mut() else {
+            self.phase = Phase::Shelf;
+            return;
+        };
+        match about.press(b, &mut self.settings, &self.paths) {
+            crate::about::Outcome::Stay => {}
+            crate::about::Outcome::Close => {
+                if let Some(a) = self.about.take() {
+                    a.close(&mut self.gfx);
+                }
+                self.phase = Phase::Shelf;
+            }
+            crate::about::Outcome::ExitToOnion => self.exit = Some(Exit::ToOnion),
+        }
+    }
+
+    fn studio_press(&mut self, b: Button) {
+        let Some(ui) = self.studio.as_mut() else {
+            self.phase = Phase::Shelf;
+            return;
+        };
+        let service = (self.settings.label_service, self.settings.art_host.as_str());
+        if !ui.press(b, &self.paths, service, self.wifi, &mut self.gfx) {
+            return;
+        }
+        // Closing: keep what changed, in slot's files.
+        let mut ui = self.studio.take().unwrap();
+        ui.save(&self.paths);
+        let cart = ui.dressed();
+        let before = self.carts.iter().find(|c| c.rom == cart.rom).cloned();
+        let shell_changed = before.as_ref().is_some_and(|b| b.shell != cart.shell);
+        if shell_changed {
+            if let Err(e) = slot_mini_store::cart_shell::write_choice(
+                &self.paths.sd,
+                &cart.stem,
+                cart.shell.as_ref(),
+            ) {
+                eprintln!("slot-mini: cart_shell.txt: {e}");
+            }
+        }
+        let changed = shell_changed || ui.relabelled;
+        ui.close(&mut self.gfx);
+        self.phase = Phase::Shelf;
+        if changed {
+            for c in self
+                .carts
+                .iter_mut()
+                .filter(|c| c.platform == cart.platform && c.stem == cart.stem)
+            {
+                c.shell = cart.shell;
+                c.label = cart.label.clone();
+            }
+            self.restock();
         }
     }
 
@@ -413,6 +535,7 @@ impl App {
         if let Some(s) = self.shelf_mut() {
             s.release_hold();
         }
+        self.play(crate::sound::Clip::Insert);
         self.phase = Phase::Inserting {
             at: self.now,
             stem,
@@ -433,6 +556,10 @@ impl App {
             s.tick(now);
             s.update(dt.min(0.1));
         }
+        if let Some(ui) = self.studio.as_mut() {
+            ui.poll(&mut self.gfx);
+        }
+        self.sync_fetched();
         match &self.phase {
             Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => {
                 if let Some((_, cart)) = self.current() {
@@ -457,6 +584,63 @@ impl App {
         }
     }
 
+    /// slot's label service, when switched on and online: fetch labels for
+    /// carts without one in the background. Local files always win.
+    fn sync_fetched(&mut self) {
+        if !self.fetch_started && self.settings.label_service && self.wifi {
+            self.fetch_started = true;
+            let (tx, rx) = std::sync::mpsc::channel();
+            let root = self.paths.sd.clone();
+            let base = crate::art::jobs::base_url(&self.settings.art_host);
+            let carts: Vec<Cart> = self
+                .carts
+                .iter()
+                .filter(|c| c.label.is_none())
+                .cloned()
+                .collect();
+            let spawned = std::thread::Builder::new()
+                .name("slot-mini-labels".into())
+                .spawn(move || {
+                    if let Err(e) = crate::art::jobs::fetch_missing(&root, &base, carts, &tx) {
+                        eprintln!("slot-mini: label service: {e:?}");
+                    }
+                });
+            if spawned.is_ok() {
+                self.fetched = Some(rx);
+            }
+        }
+        let Some(rx) = &self.fetched else {
+            return;
+        };
+        let mut landed = Vec::new();
+        while let Ok(got) = rx.try_recv() {
+            landed.push(got);
+        }
+        let any = !landed.is_empty();
+        for (cart, path) in landed {
+            self.label_landed(&cart, path);
+        }
+        self.restock_pending |= any;
+        // Rebuild faces only on the shelf, so an insert, eject or the studio
+        // is never interrupted.
+        if self.restock_pending && self.phase == Phase::Shelf {
+            self.restock_pending = false;
+            self.restock();
+        }
+    }
+
+    fn label_landed(&mut self, cart: &Cart, path: std::path::PathBuf) {
+        for c in self.carts.iter_mut().filter(|c| c.rom == cart.rom) {
+            c.label = Some(path.clone());
+        }
+    }
+
+    fn play(&mut self, clip: crate::sound::Clip) {
+        if self.settings.sounds || self.sound_given {
+            self.sound.play(clip);
+        }
+    }
+
     fn secs_since(&self, at: Millis) -> f32 {
         self.now.saturating_sub(at) as f32 / 1000.0
     }
@@ -467,6 +651,7 @@ impl App {
             Phase::Shelf => 0.0,
             Phase::Inserting { at, .. } => (self.secs_since(*at) / SEATED_AT).clamp(0.0, 1.0),
             Phase::Ejecting { at, .. } => 1.0 - (self.secs_since(*at) / EJECT_S).clamp(0.0, 1.0),
+            Phase::Studio | Phase::About => 0.0,
         }
     }
 
@@ -590,7 +775,19 @@ impl App {
         self.sync_text();
         let mut out = std::mem::take(&mut self.draws);
         out.clear();
-        self.draw(&mut out);
+        match (self.studio.as_mut(), self.about.as_mut()) {
+            (Some(ui), _) if self.phase == Phase::Studio => {
+                ui.draw(&self.paths, self.stage, &mut self.gfx, &mut out)
+            }
+            (_, Some(about)) if self.phase == Phase::About => about.draw(
+                self.stage,
+                self.statics.ground,
+                &self.settings,
+                &mut self.gfx,
+                &mut out,
+            ),
+            _ => self.draw(&mut out),
+        }
         canvas.clear(0);
         self.gfx.render(&out, canvas);
         self.draws = out;
@@ -636,6 +833,7 @@ impl App {
                 draw_slot_title(stage, self.title.printed, self.title_alpha(), out);
             }
             // slot draws no footer while a cart goes in or comes out.
+            Phase::Studio | Phase::About => {}
             Phase::Inserting { stem, .. } | Phase::Ejecting { stem, .. } => {
                 shelf.draw_row(stage, Some(stem), 0.0, self.seat(), 1.0, out);
                 return self.chrome(shelf, stem, out);

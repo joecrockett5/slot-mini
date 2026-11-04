@@ -63,3 +63,23 @@ Calls made without asking, and why. Newest last.
 18. **Exit code 10 means "start Onion's MainUI"** for the boot shim (MENU →
     exit to Onion). Any other non-zero exit is treated as a failure by the
     shim, which also falls back to MainUI.
+19. **slot's GB house-label size is kept as slot has it (1024x901)**, though
+    slot's own test expects the 223x199 label well's shape (Cart Studio's
+    1024x914); the test fails in slot at e66715d and is ignored here with
+    that note. Labels are scaled to cover and centre-cropped, so either size
+    shows correctly.
+20. **The on-device studio is flat.** slot's state machine and layout
+    (`studio.rs`, `studio_view.rs`) are copied unchanged; the cart is tilted
+    once in software, chips are drawn as discs, and printed labels appear as
+    plain slips without the print, tear and apply animations.
+21. **The label printer row is always shown.** With the service off it says
+    labels can be made in Cart Studio on a computer; without Wi-Fi it says
+    the printer needs Wi-Fi (slot hides the row without Wi-Fi).
+22. **A recoloured text label is saved as a label file** on closing the
+    studio, as slot does, so Cart Studio sees the same label. Recolouring a
+    logo label needs the logo image, which only exists while the studio has
+    fetched it; outside that the Label Color row is slot's but has no effect
+    once closed.
+23. **MENU opens About** with three rows: Sounds, Boot launcher and Exit to
+    Onion. Exit to Onion returns to MainUI as an app, and asks the boot shim
+    for Onion's MainUI (exit code 10) as the boot launcher.
