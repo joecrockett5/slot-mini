@@ -1,0 +1,16 @@
+[package]
+name = "slot-mini"
+description = "A slot-style cartridge launcher for the Miyoo Mini Plus on Onion OS."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+desktop = ["slot-mini-gfx/desktop"]
+
+[dependencies]
+slot-mini-gfx = { path = "../slot-mini-gfx" }
+
+[lints]
+workspace = true

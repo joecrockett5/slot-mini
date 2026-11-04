@@ -1,0 +1,13 @@
+# Device build: static 32-bit ARMv7 (Cortex-A7, NEON) linked with rust-lld.
+# C code pulled in by dependencies (ring) is built with clang, set in [env].
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
+# The target spec says -neon; target-cpu alone does not turn NEON back on
+# (checked: no vadd.i8 in the asm without +neon). rustc warns that +neon
+# and +vfp4 are unstable feature names; the warning is expected.
+rustflags = ["-C", "target-cpu=cortex-a7", "-C", "target-feature=+neon,+vfp4,+crt-static"]
+
+[env]
+CC_armv7_unknown_linux_musleabihf = "clang"
+AR_armv7_unknown_linux_musleabihf = "llvm-ar"
+CFLAGS_armv7_unknown_linux_musleabihf = "--target=armv7-unknown-linux-musleabihf -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard"

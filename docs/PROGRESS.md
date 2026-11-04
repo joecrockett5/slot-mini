@@ -5,8 +5,8 @@
 | Phase | State |
 | --- | --- |
 | 1. Research | done |
-| 2. Skeleton and toolchain | next |
-| 3. Carousel | |
+| 2. Skeleton and toolchain | done (pending CI run) |
+| 3. Carousel | next |
 | 4. Launching | |
 | 5. Extras | |
 | 6. Device backends | |
@@ -22,6 +22,20 @@
 - `docs/DESIGN-PARITY.md`: screens and effects, and what slot-mini does.
 - Reference images: `docs/reference/slot-*.png`, extracted from slot's site
   media with ffmpeg.
+
+## Phase 2: Skeleton and toolchain
+
+- Workspace with `slot-mini-gfx` (software `Canvas`, sprites, an executor for
+  slot's `Draw` list, fontdue text with a glyph cache, headless and desktop
+  backends) and the `slot-mini` binary.
+- Device build: `cargo build --release --target armv7-unknown-linux-musleabihf -p slot-mini`.
+  `.cargo/config.toml` links with `rust-lld`, builds C with clang, and turns
+  on NEON (`+neon` is needed: the target spec disables it even with
+  `target-cpu=cortex-a7`). `scripts/check-device-binary.sh` checks `file`.
+- Tests also run on armv7 under `qemu-arm-static`
+  (`CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER=qemu-arm-static`).
+- CI: `.github/workflows/ci.yml`, desktop (fmt, clippy, tests) and device
+  (build, `file` check, tests under qemu).
 
 ## Open questions
 
