@@ -1,0 +1,17 @@
+[package]
+name = "slot-mini-store"
+description = "ROM scanning, cart shells and small file formats, copied from slot's slot-store."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+unicode-normalization = "0.1"
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

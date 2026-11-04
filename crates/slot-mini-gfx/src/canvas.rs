@@ -80,51 +80,51 @@ impl Sprite {
         out
     }
 
-    /// Area-averaged resize, used when a sprite will be drawn at one size
-    /// for a while (a cart at rest). Quality over speed.
+    /// Area-averaged resize, for sprites that will be drawn at one size for
+    /// a while (a cart at slot's side scale). Separable box filter in fixed
+    /// point; enlarging falls back to nearest.
     pub fn resized(&self, w: u32, h: u32) -> Sprite {
         let (w, h) = (w.max(1), h.max(1));
-        if (w, h) == (self.w, self.h) {
-            return self.clone();
-        }
-        let mut out = Sprite::new(w, h);
-        if self.w == 0 || self.h == 0 {
+        if (w, h) == (self.w, self.h) || self.w == 0 || self.h == 0 {
+            let mut out = self.clone();
+            if self.w == 0 || self.h == 0 {
+                out = Sprite::new(w, h);
+            }
             return out;
         }
-        // Box filter over the source footprint of each destination pixel, in
-        // 8.8 fixed point, falling back to bilinear when enlarging.
-        let sx = self.w as f32 / w as f32;
-        let sy = self.h as f32 / h as f32;
-        for y in 0..h {
-            let y0 = y as f32 * sy;
-            let y1 = ((y + 1) as f32 * sy).max(y0 + 1.0).min(self.h as f32);
-            for x in 0..w {
-                let x0 = x as f32 * sx;
-                let x1 = ((x + 1) as f32 * sx).max(x0 + 1.0).min(self.w as f32);
-                let mut acc = [0f32; 4];
-                let mut area = 0f32;
-                let mut yy = y0.floor() as u32;
-                while (yy as f32) < y1 && yy < self.h {
-                    let wy = (y1.min(yy as f32 + 1.0) - y0.max(yy as f32)).max(0.0);
-                    let mut xx = x0.floor() as u32;
-                    while (xx as f32) < x1 && xx < self.w {
-                        let wx = (x1.min(xx as f32 + 1.0) - x0.max(xx as f32)).max(0.0);
-                        let k = wx * wy;
-                        let p = self.px[(yy * self.w + xx) as usize];
-                        acc[0] += k * (p >> 24) as f32;
-                        acc[1] += k * (p >> 16 & 0xFF) as f32;
-                        acc[2] += k * (p >> 8 & 0xFF) as f32;
-                        acc[3] += k * (p & 0xFF) as f32;
-                        area += k;
-                        xx += 1;
-                    }
-                    yy += 1;
+        // Horizontal pass into 4 channels of u32 sums, scaled by 256; the
+        // vertical pass scales by 256 again, hence the shift by 16.
+        let xw = weights(self.w, w);
+        let yw = weights(self.h, h);
+        let mut mid = vec![[0u32; 4]; (w * self.h) as usize];
+        for y in 0..self.h as usize {
+            let row = &self.px[y * self.w as usize..][..self.w as usize];
+            for (x, taps) in xw.iter().enumerate() {
+                let mut acc = [0u32; 4];
+                for &(i, k) in taps {
+                    let p = row[i as usize];
+                    acc[0] += (p >> 24) * k;
+                    acc[1] += (p >> 16 & 0xFF) * k;
+                    acc[2] += (p >> 8 & 0xFF) * k;
+                    acc[3] += (p & 0xFF) * k;
                 }
-                let c = |v: f32| ((v / area).round() as u32).min(255);
-                let a = c(acc[0]);
-                // Premultiplied channels cannot exceed alpha.
-                out.px[(y * w + x) as usize] =
-                    a << 24 | c(acc[1]).min(a) << 16 | c(acc[2]).min(a) << 8 | c(acc[3]).min(a);
+                mid[y * w as usize + x] = acc;
+            }
+        }
+        let mut out = Sprite::new(w, h);
+        for (y, taps) in yw.iter().enumerate() {
+            for x in 0..w as usize {
+                let mut acc = [0u32; 4];
+                for &(i, k) in taps {
+                    let m = mid[i as usize * w as usize + x];
+                    for c in 0..4 {
+                        acc[c] += m[c] * k;
+                    }
+                }
+                let v = acc.map(|v| ((v + 32768) >> 16).min(255));
+                let a = v[0];
+                out.px[y * w as usize + x] =
+                    a << 24 | v[1].min(a) << 16 | v[2].min(a) << 8 | v[3].min(a);
             }
         }
         out
@@ -134,6 +134,34 @@ impl Sprite {
     pub fn is_opaque(&self) -> bool {
         self.px.iter().all(|p| p >> 24 == 255)
     }
+}
+
+/// For each output position, the source taps and their weights (summing to
+/// 256), covering the output pixel's footprint in the source.
+fn weights(src: u32, dst: u32) -> Vec<Vec<(u32, u32)>> {
+    let scale = src as f64 / dst as f64;
+    (0..dst)
+        .map(|o| {
+            if scale <= 1.0 {
+                let i = (((o as f64 + 0.5) * scale) as u32).min(src - 1);
+                return vec![(i, 256)];
+            }
+            let (a, b) = (o as f64 * scale, (o + 1) as f64 * scale);
+            let mut taps = Vec::new();
+            let mut i = a.floor() as u32;
+            while (i as f64) < b && i < src {
+                let cover = (b.min(i as f64 + 1.0) - a.max(i as f64)) / scale;
+                taps.push((i, (cover * 256.0).round() as u32));
+                i += 1;
+            }
+            // Make the weights sum to exactly 256.
+            let sum: u32 = taps.iter().map(|t| t.1).sum();
+            if let Some(last) = taps.iter_mut().max_by_key(|t| t.1) {
+                last.1 = (last.1 + 256).saturating_sub(sum);
+            }
+            taps
+        })
+        .collect()
 }
 
 /// An opaque frame being drawn.
@@ -235,6 +263,41 @@ impl Canvas {
         for row in 0..c.h as usize {
             let src = &s.px[(sy + row) * s.w as usize + sx..][..c.w as usize];
             let dst = &mut self.px[(c.y as usize + row) * w + c.x as usize..][..c.w as usize];
+            if alpha >= 255 {
+                for (d, &p) in dst.iter_mut().zip(src) {
+                    *d = over(*d, p);
+                }
+            } else {
+                for (d, &p) in dst.iter_mut().zip(src) {
+                    if p != 0 {
+                        *d = over(*d, scale_px(p, alpha));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Draw the region of a sprite starting at (sx, sy), the size of `dst`,
+    /// unscaled.
+    pub fn blit_region(&mut self, s: &Sprite, sx: i32, sy: i32, dst: Rect, alpha: u32) {
+        let c = dst.intersect(&self.bounds());
+        if c.is_empty() || alpha == 0 {
+            return;
+        }
+        // Clip against the sprite too.
+        let x0 = (sx + c.x - dst.x).max(0);
+        let y0 = (sy + c.y - dst.y).max(0);
+        let x1 = (sx + c.x - dst.x + c.w).min(s.w as i32);
+        let y1 = (sy + c.y - dst.y + c.h).min(s.h as i32);
+        if x1 <= x0 || y1 <= y0 {
+            return;
+        }
+        let (dx, dy) = (c.x + x0 - (sx + c.x - dst.x), c.y + y0 - (sy + c.y - dst.y));
+        let w = self.w as usize;
+        let n = (x1 - x0) as usize;
+        for row in 0..(y1 - y0) as usize {
+            let src = &s.px[(y0 as usize + row) * s.w as usize + x0 as usize..][..n];
+            let dst = &mut self.px[(dy as usize + row) * w + dx as usize..][..n];
             if alpha >= 255 {
                 for (d, &p) in dst.iter_mut().zip(src) {
                     *d = over(*d, p);

@@ -5,8 +5,9 @@
 | Phase | State |
 | --- | --- |
 | 1. Research | done |
-| 2. Skeleton and toolchain | done (pending CI run) |
-| 3. Carousel | next |
+| 2. Skeleton and toolchain | done |
+| 3. Carousel | done |
+| 4. Launching | next |
 | 4. Launching | |
 | 5. Extras | |
 | 6. Device backends | |
@@ -36,6 +37,41 @@
   (`CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER=qemu-arm-static`).
 - CI: `.github/workflows/ci.yml`, desktop (fmt, clippy, tests) and device
   (build, `file` check, tests under qemu).
+
+## Phase 3: Carousel
+
+- `slot-mini-store`: slot-store's scanner, cart_shell.txt parser, header
+  readers and ini parser, with slot's own tests (Roms/ instead of Games/).
+- `slot-mini-ui`: slot-ui's shelf, cart faces, shells, slot chrome, footer,
+  icons and legends, unchanged apart from imports and removed GL-only parts.
+- `slot-mini`: the app (`app.rs`), background face workers (`faces.rs`,
+  adapted from slot's `cart_faces.rs`), slot's label cache, wallpaper picker,
+  `theme.txt`, settings and favourites files, a fake SD card (`fixture.rs`).
+- Golden tests: `crates/slot-mini/tests/shelf.rs`, images in
+  `crates/slot-mini/tests/golden/`. Regenerate with `UPDATE_GOLDEN=1`.
+- Side-by-side with slot in `docs/DESIGN-PARITY.md`.
+
+### Performance (host-side, `cargo run --release --example perf -p slot-mini -- 200`)
+
+Fake card with 207 GBA carts (every 4th with a 1280x661 label), scrolling the
+whole shelf with Right held (slot's key repeat), 16 ms simulated frames.
+
+| | x86-64 host | armv7 under qemu-arm-static |
+| --- | --- | --- |
+| First frame, cold caches | 194 ms | 221 ms |
+| First frame, warm caches | 15 ms | 62 ms |
+| Scroll frame, average | 0.6 ms | 2.4 ms |
+| Scroll frame, worst | 12 ms | 4.0 ms |
+| Texture memory | 15.8 MB | 15.8 MB |
+| Label decode (cold, 1280x661 PNG, worker thread) | | 60 ms |
+| Cart face with a text label (worker thread) | | 8.5 ms |
+
+qemu-user on a fast x86 host is not a Cortex-A7, so treat these as relative.
+Assuming the A7 is 3-5x slower than qemu here, scroll frames stay well inside
+16.7 ms and the warm first frame inside 1 s. Watch on the device: a cold
+first launch with a large label set (labels decode in two worker threads
+while placeholders show), and texture memory (~16 MB), which the 40 MB budget
+covers but not by a lot.
 
 ## Open questions
 

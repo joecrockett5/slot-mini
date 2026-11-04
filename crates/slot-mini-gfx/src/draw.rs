@@ -136,26 +136,18 @@ impl Stage {
     }
 }
 
-/// How many frames a scaled copy must be asked for in a row before it is
-/// worth building a filtered one. Moving carts change size every frame and
-/// are drawn nearest-neighbour; a cart that comes to rest gets a smooth copy.
-const SETTLE_FRAMES: u64 = 2;
-/// Scaled copies unused for this many frames are dropped.
-const SCALED_TTL: u64 = 90;
-
-struct Scaled {
-    sprite: Option<Sprite>,
-    last: u64,
-    streak: u64,
-}
+/// Two sizes count as the same pinned variant when both edges are within
+/// this many pixels (slot's layout rounds each edge separately).
+const PIN_SLACK: i32 = 1;
 
 /// Textures by id, and a software executor for slot's `Draw` lists.
 #[derive(Default)]
 pub struct Renderer {
     textures: Vec<Option<Sprite>>,
     free: Vec<usize>,
-    scaled: HashMap<(usize, i32, i32), Scaled>,
-    frame: u64,
+    /// Pre-scaled copies of a texture, drawn when a draw asks for about
+    /// their size. Built off the main thread by whoever made the texture.
+    pinned: HashMap<usize, Vec<Sprite>>,
 }
 
 impl Renderer {
@@ -180,12 +172,19 @@ impl Renderer {
         self.upload(Sprite::from_rgba(w, h, rgba))
     }
 
-    /// Replace a texture's pixels, keeping its id.
+    /// Replace a texture's pixels, keeping its id. Pinned copies are dropped.
     pub fn replace(&mut self, id: TexId, sprite: Sprite) {
         if let Some(slot) = self.textures.get_mut(id.0) {
             *slot = Some(sprite);
         }
-        self.scaled.retain(|k, _| k.0 != id.0);
+        self.pinned.remove(&id.0);
+    }
+
+    /// Attach a pre-scaled copy of `id`, used for draws of about its size.
+    pub fn pin_scaled(&mut self, id: TexId, sprite: Sprite) {
+        if self.get(id).is_some() {
+            self.pinned.entry(id.0).or_default().push(sprite);
+        }
     }
 
     pub fn free(&mut self, id: TexId) {
@@ -194,23 +193,18 @@ impl Renderer {
                 self.free.push(id.0);
             }
         }
-        self.scaled.retain(|k, _| k.0 != id.0);
+        self.pinned.remove(&id.0);
     }
 
     pub fn get(&self, id: TexId) -> Option<&Sprite> {
         self.textures.get(id.0).and_then(Option::as_ref)
     }
 
-    /// Bytes held by textures and scaled copies.
+    /// Bytes held by textures and their pinned copies.
     pub fn bytes(&self) -> usize {
         let t: usize = self.textures.iter().flatten().map(|s| s.px.len() * 4).sum();
-        let s: usize = self
-            .scaled
-            .values()
-            .filter_map(|s| s.sprite.as_ref())
-            .map(|s| s.px.len() * 4)
-            .sum();
-        t + s
+        let p: usize = self.pinned.values().flatten().map(|s| s.px.len() * 4).sum();
+        t + p
     }
 
     pub fn live_textures(&self) -> usize {
@@ -221,8 +215,7 @@ impl Renderer {
     /// and GL-only effects (`Game`, `Shot`, `Capture`, `Paper`, `Quad`,
     /// `Turned`) are skipped; screens that need them pre-render instead (see
     /// docs/DESIGN-PARITY.md).
-    pub fn render(&mut self, draws: &[Draw], canvas: &mut Canvas) {
-        self.frame += 1;
+    pub fn render(&self, draws: &[Draw], canvas: &mut Canvas) {
         for d in draws {
             match *d {
                 Draw::Rect { x, y, w, h, colour } => canvas.fill_f(Rect::snap(x, y, w, h), colour),
@@ -246,23 +239,14 @@ impl Renderer {
                 _ => {}
             }
         }
-        let frame = self.frame;
-        self.scaled.retain(|_, s| frame - s.last <= SCALED_TTL);
     }
 
-    fn tex(
-        &mut self,
-        canvas: &mut Canvas,
-        tex: TexId,
-        uv: Option<[f32; 4]>,
-        dst: Rect,
-        alpha: f32,
-    ) {
+    fn tex(&self, canvas: &mut Canvas, tex: TexId, uv: Option<[f32; 4]>, dst: Rect, alpha: f32) {
         let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u32;
         if a == 0 || dst.is_empty() || dst.intersect(&canvas.bounds()).is_empty() {
             return;
         }
-        let Some(sprite) = self.textures.get(tex.0).and_then(Option::as_ref) else {
+        let Some(sprite) = self.get(tex) else {
             return;
         };
         let whole = uv.is_none_or(|uv| uv == [0.0, 0.0, 1.0, 1.0]);
@@ -278,29 +262,21 @@ impl Renderer {
             ],
             None => [0.0, 0.0, sprite.w as f32, sprite.h as f32],
         };
-        if !whole {
-            return canvas.blit_scaled(sprite, src, dst, a);
+        // A 1:1 window onto the sprite (slot's 720-wide art on a 640 screen):
+        // copy that region straight.
+        if (src[2] - dst.w as f32).abs() < 0.5 && (src[3] - dst.h as f32).abs() < 0.5 {
+            let (sx, sy) = (src[0].round() as i32, src[1].round() as i32);
+            return canvas.blit_region(sprite, sx, sy, dst, a);
         }
-        // Whole sprite at another size: smooth copy once it settles.
-        let key = (tex.0, dst.w, dst.h);
-        let frame = self.frame;
-        let entry = self.scaled.entry(key).or_insert(Scaled {
-            sprite: None,
-            last: frame,
-            streak: 0,
-        });
-        entry.streak = match frame - entry.last {
-            0 | 1 => entry.streak + 1,
-            _ => 1,
-        };
-        entry.last = frame;
-        if entry.sprite.is_none() && entry.streak >= SETTLE_FRAMES {
-            entry.sprite = Some(sprite.resized(dst.w as u32, dst.h as u32));
+        if whole {
+            let near = |s: &&Sprite| {
+                (s.w as i32 - dst.w).abs() <= PIN_SLACK && (s.h as i32 - dst.h).abs() <= PIN_SLACK
+            };
+            if let Some(s) = self.pinned.get(&tex.0).and_then(|v| v.iter().find(near)) {
+                return canvas.blit(s, dst.x, dst.y, a);
+            }
         }
-        match &entry.sprite {
-            Some(s) => canvas.blit(s, dst.x, dst.y, a),
-            None => canvas.blit_scaled(sprite, src, dst, a),
-        }
+        canvas.blit_scaled(sprite, src, dst, a)
     }
 }
 
@@ -324,21 +300,50 @@ mod tests {
     }
 
     #[test]
-    fn resting_scaled_draws_get_a_smooth_copy() {
+    fn pinned_copies_are_used_near_their_size() {
         let mut r = Renderer::new();
         let t = r.upload(Sprite::from_rgba(4, 4, &[255; 64]));
-        let mut c = Canvas::new(16, 16);
-        let d = [Draw::Tex {
+        r.pin_scaled(t, Sprite::from_rgba(3, 3, &[0, 0, 0, 255].repeat(9)));
+        let mut c = Canvas::new(8, 8);
+        let d = |w: f32| Draw::Tex {
             x: 0.0,
             y: 0.0,
-            w: 3.0,
-            h: 3.0,
+            w,
+            h: w,
             tex: t,
             alpha: 1.0,
-        }];
-        r.render(&d, &mut c);
-        assert!(r.scaled.values().all(|s| s.sprite.is_none()));
-        r.render(&d, &mut c);
-        assert!(r.scaled.values().any(|s| s.sprite.is_some()));
+        };
+        c.clear(0xFFFFFF);
+        r.render(&[d(3.0)], &mut c);
+        assert_eq!(
+            c.px[0],
+            crate::BLACK,
+            "3x3 comes from the black pinned copy"
+        );
+        c.clear(0xFFFFFF);
+        r.render(&[d(6.0)], &mut c);
+        assert_eq!(c.px[0], 0xFFFF_FFFF, "6x6 is scaled from the white texture");
+    }
+
+    #[test]
+    fn a_one_to_one_window_is_copied_straight() {
+        let mut r = Renderer::new();
+        let mut rgba = vec![0u8; 4 * 2 * 4];
+        rgba[4..8].copy_from_slice(&[255, 0, 0, 255]); // (1, 0) is red
+        let t = r.upload_rgba(4, 2, &rgba);
+        let mut c = Canvas::new(2, 2);
+        r.render(
+            &[Draw::Part {
+                x: 0.0,
+                y: 0.0,
+                w: 2.0,
+                h: 2.0,
+                tex: t,
+                alpha: 1.0,
+                uv: [0.25, 0.0, 0.5, 1.0],
+            }],
+            &mut c,
+        );
+        assert_eq!(c.px[0], 0xFFFF_0000);
     }
 }

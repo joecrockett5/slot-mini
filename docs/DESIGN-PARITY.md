@@ -70,4 +70,37 @@ slot-mini renders.
 
 ## Side by side
 
-Phase 3 adds slot's reference and slot-mini's render of each screen here.
+slot's reference frames are 720x480 (the RG SP); slot-mini renders at 640x480,
+which crops the shelf the way slot's own 4:3 layout does. Cart content differs
+because the fixtures differ: slot-mini's golden tests use a fake card whose
+labels are slot's own example art (`assets/fetch_example_*.png`). Regenerate
+with `scripts/parity.py <name> <slot png> <golden png>`.
+
+### Shelf with label art
+
+![Shelf, label art](parity/shelf.png)
+
+slot-mini: `crates/slot-mini/tests/golden/shelf_real_label.png`. Same cart
+sizes and positions, slot chrome, footer and wallpaper. slot shows a charging
+bolt; slot-mini never does (see `PLATFORM.md`).
+
+### Shelf with a text label
+
+![Shelf, text label](parity/shelf-text-label.png)
+
+slot-mini: `shelf_gba.png`. slot's generated label: the name in up to three
+lines on a colour picked from the title.
+
+### Other shelf goldens
+
+All in `crates/slot-mini/tests/golden/`:
+
+| Golden | Shows |
+| --- | --- |
+| `shelf_gba_named.png` | The platform name above the slot, as after a switch |
+| `shelf_mid_scroll.png` | A frame mid-scroll: side carts scaling between 0.78 and 1.0 |
+| `shelf_logo_label.png` | A logo label on a solid shell |
+| `shelf_gbc.png` | A Game Boy Color shelf, clear shell with the board showing |
+| `shelf_gb_named.png`, `shelf_gb_glitter.png` | Game Boy paks, a glitter finish from `cart_shell.txt` |
+| `shelf_light_wallpaper.png` | Light appearance, a custom wallpaper with tint, Wi-Fi icon, low battery |
+| `empty.png` | No games on the card |

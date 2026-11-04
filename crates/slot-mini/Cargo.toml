@@ -11,6 +11,14 @@ desktop = ["slot-mini-gfx/desktop"]
 
 [dependencies]
 slot-mini-gfx = { path = "../slot-mini-gfx" }
+slot-mini-store = { path = "../slot-mini-store" }
+slot-mini-ui = { path = "../slot-mini-ui" }
+lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+png = { workspace = true }
 
 [lints]
 workspace = true

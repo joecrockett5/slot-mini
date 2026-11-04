@@ -35,3 +35,22 @@ Calls made without asking, and why. Newest last.
     unchanged against a software rasteriser. slot's layout `Canvas` (a size)
     is imported as `Stage` so that the pixel buffer can be called `Canvas`,
     as the brief asks.
+11. **ROM extensions follow Onion, not slot.** slot only lists `.gba`, `.gb`
+    and `.gbc`; slot-mini lists what Onion's `Emu/<sys>/config.json` accepts
+    (`bin`, `zip`, `7z`, `dmg` too), so nobody has to unpack or rename games.
+    Header-based shell colours only work for unpacked ROMs; zipped ones get the
+    platform's default shell.
+12. **One level of subfolders is scanned** under `Roms/<sys>/`, skipping
+    Onion's `Imgs/`. Labels still match by file name, as in slot.
+13. **Faces are pre-scaled in the worker threads.** Every cart face is built
+    at full size and at slot's side scale (0.78) off the main thread; the
+    renderer draws whichever matches, and only moving carts use
+    nearest-neighbour scaling. A smooth resize on the main thread cost ~94 ms
+    per cart under qemu-armv7.
+14. **Only the first frame waits for cart faces** (up to 250 ms). After that,
+    a cart whose face is not ready shows slot's label-colour placeholder for a
+    frame or two instead of stalling the scroll.
+15. **Copied slot code is kept rustfmt-clean.** slot formats with default
+    rustfmt; renaming `slot_store` to `slot_mini_store` makes a few lines
+    too long, and rustfmt re-wraps them. Nothing else in copied code is
+    reformatted.
