@@ -246,3 +246,43 @@ fn the_sound_test_shows_how_the_player_ended() {
     );
     common::golden("about_sound_test", &frame);
 }
+
+/// MENU's bottom line shows the CPU's governor, clock and slot-mini's own
+/// CPU use when it has nothing else to say.
+#[test]
+fn menu_shows_the_cpu_state() {
+    struct WithCpu;
+    impl slot_mini::status::Status for WithCpu {
+        fn battery(&mut self) -> Option<u8> {
+            Some(80)
+        }
+        fn wifi(&mut self) -> bool {
+            false
+        }
+        fn clock(&mut self) -> (u32, u32) {
+            (12, 0)
+        }
+        fn cpu(&mut self) -> Option<String> {
+            Some("CPU ondemand 408 MHz, slot-mini 0.2%".into())
+        }
+    }
+    let rig = Rig::new();
+    let opts = Options {
+        sound: Some(Box::new(Recorder::default())),
+        face_wait: None,
+        seed: 7,
+    };
+    let mut app = App::new(rig.paths.clone(), Box::new(WithCpu), opts, 0);
+    let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
+    app.tick(16);
+    app.render(&mut frame);
+    app.handle(slot_mini_gfx::Event::Press(Button::Menu));
+    app.handle(slot_mini_gfx::Event::Release(Button::Menu));
+    app.tick(32);
+    app.render(&mut frame);
+    assert_eq!(
+        app.about.as_ref().and_then(|a| a.diag.as_deref()),
+        Some("CPU ondemand 408 MHz, slot-mini 0.2%")
+    );
+    golden("about_cpu", &frame);
+}

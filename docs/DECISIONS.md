@@ -177,3 +177,13 @@ Calls made without asking, and why. Newest last.
     no button held, the loop blocks on the button device for up to 100 ms
     instead of running at 60 fps. Measured with the release build on the
     device backend: 0.65 s of CPU per 10 s idle before, 0.01 s after.
+45. **Put the governor back to `ondemand` at start, and show the CPU in
+    MENU** (0.4.6, after the device still ran warm while idle). It is what
+    Onion's runtime does after every game, only when the governor is one
+    that pins the clock (`performance`, `userspace`), and only if the kernel
+    offers `ondemand`. The CPU line lets the next report say whether the
+    heat is slot-mini or the system.
+46. **Idle wake-ups once a second after 5 s** (0.4.6). The clock moves by
+    the minute and the battery is read every 2 s; a press still wakes the
+    loop at once. Held buttons come from the kernel's key state, so a lost
+    release can never keep the loop at 60 fps.

@@ -47,6 +47,11 @@ pub trait Backend {
         std::thread::sleep(std::time::Duration::from_millis(ms as u64));
         self.poll()
     }
+    /// Whether a button is held now, if the backend can tell from the
+    /// device itself (the caller otherwise counts presses and releases).
+    fn held(&mut self) -> Option<bool> {
+        None
+    }
     /// Called once before the process exits, with the last frame shown.
     fn close(&mut self, _last: &Canvas) {}
 }
@@ -157,6 +162,10 @@ impl Backend for Device {
 
     fn poll(&mut self) -> Vec<Event> {
         self.input.as_mut().map(|i| i.poll()).unwrap_or_default()
+    }
+
+    fn held(&mut self) -> Option<bool> {
+        self.input.as_ref()?.any_down()
     }
 
     fn wait(&mut self, ms: u32) -> Vec<Event> {

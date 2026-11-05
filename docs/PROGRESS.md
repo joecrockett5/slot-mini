@@ -375,6 +375,23 @@ Save and Load State worked on the device. Fixed:
   runtime exports for apps and games.
 - Test: `onions_player_gets_onions_library_path`.
 
+## 0.4.6: idle power, again
+
+- Reported: still warm and draining while idle, and with the screen off.
+  With the screen off keymon stops every process (slot-mini included) and
+  sets `powersave`, so that drain is the hardware left on (Wi-Fi above all;
+  PLATFORM.md, Power).
+- At start on the device, a governor left at `performance` or `userspace`
+  goes back to `ondemand`, as Onion's runtime does after games
+  (`cpufreq.rs`).
+- Idle loop: after 5 s still it wakes once a second (was 10 times); held
+  buttons are read with `EVIOCGKEY` (`Evdev::any_down`, `Backend::held`).
+  Device backend, 10 s idle: 100 context switches before, 12 after.
+- MENU's bottom line shows the CPU's governor and clock and slot-mini's own
+  CPU use when it has nothing else to say (`Status::cpu`).
+- Tests: `cpufreq.rs` (settle, leave alone, describe, own use), the key
+  bitmap (`evdev.rs`), `menu_shows_the_cpu_state` (golden `about_cpu`).
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

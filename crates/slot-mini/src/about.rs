@@ -32,6 +32,8 @@ pub struct About {
     /// from the last attempt to change that.
     pub launcher: bool,
     pub note: Option<String>,
+    /// Shown on the note line when there is no note: the CPU's state.
+    pub diag: Option<String>,
     faces: Vec<(String, TexId, u32, u32)>,
 }
 
@@ -69,6 +71,7 @@ impl About {
             ],
             launcher: crate::switch::installed(paths),
             note: None,
+            diag: None,
             faces: Vec::new(),
         }
     }
@@ -223,7 +226,7 @@ impl About {
             Status::Failed(e) => Some(e.to_string()),
             _ => None,
         };
-        if let Some(note) = self.note.clone().or(update_note) {
+        if let Some(note) = self.note.clone().or(update_note).or(self.diag.clone()) {
             let f = self.face(gfx, &note, Style::Note);
             put(out, f, y + 4.0, 0.9);
         }
