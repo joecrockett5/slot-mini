@@ -90,6 +90,19 @@ impl Evdev {
         })
     }
 
+    /// Wait up to `timeout_ms` for input (negative waits forever), then
+    /// return what arrived. Lets a background process sleep between presses.
+    pub fn wait(&mut self, timeout_ms: i32) -> Vec<Event> {
+        let mut fds = libc::pollfd {
+            fd: self.file.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: one valid pollfd.
+        unsafe { libc::poll(&mut fds, 1, timeout_ms) };
+        self.poll()
+    }
+
     /// Everything pressed or released since the last call. Never blocks.
     pub fn poll(&mut self) -> Vec<Event> {
         let mut chunk = [0u8; EVENT_SIZE * 32];

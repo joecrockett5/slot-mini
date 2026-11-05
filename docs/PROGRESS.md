@@ -205,6 +205,27 @@ That menu is Onion's Game Switcher, which pauses RetroArch and takes a
 screenshot first; it is not slot-mini's code. Worth comparing with Onion's
 own MainUI on the same game.
 
+## 0.2.0: slot's in-game MENU
+
+Requested after device testing: replace the in-game MENU for games launched
+from slot-mini with something like slot's, and make it open faster.
+
+- `ingame.rs`: the helper (`slot-mini --ingame`), started detached beside
+  each game slot-mini launches on the device. Tap MENU: slot's in-game menu
+  over the frozen game (Resume, Save State, Load State, Settings, Game
+  Switcher, Exit Game). Hold MENU (700 ms): eject. MENU combinations with
+  other buttons are ignored.
+- `slot-mini-ui/src/quick.rs`: slot's quick-menu type, pointer and layout.
+- Framebuffer: read and draw a given page without flipping
+  (`Fbdev::capture`, `draw_on`, `displayed_page`).
+- About: "In-game menu: On/Off" (`ingame_menu` in settings.txt).
+- Tests: `tests/ingame.rs` (gestures, every row's effect, eject, the menu
+  golden, RetroArch control against a fake RetroArch with a UDP listener,
+  and the real helper process end to end: flag, freeze, draw, clean-up).
+- Needs the device: does RetroArch on the Mini Plus answer `GET_STATUS` and
+  `PAUSE_TOGGLE`, does the frozen game leave the screen alone, and how fast
+  does the menu open. See DEVICE-TESTING.md, section 10.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

@@ -164,6 +164,30 @@ computer and copy each `.tmp_update/slot-mini/stock/<name>/MainUI` back over
 missing, re-copy `.tmp_update/bin/MainUI-*` from Onion's release zip. Then
 report exactly what happened before it, with `.tmp_update/logs/`.
 
+## 10. slot's in-game MENU (0.2.0)
+
+Start a game from slot-mini (app mode is fine).
+
+- [ ] Tap MENU: the game freezes and slot's menu appears over it almost
+      immediately. Note roughly how long it takes compared with Onion's menu.
+- [ ] The game's sound stops while the menu is up (no buzz or loop).
+- [ ] The menu stays put: the game does not flicker through it.
+- [ ] B (or MENU again) resumes exactly where you were.
+- [ ] Save State, then later Load State: RetroArch shows its own "saved" or
+      "loaded" message, and the load returns to the saved moment.
+- [ ] Settings opens RetroArch's menu; leaving it resumes the game.
+- [ ] Game Switcher opens Onion's Game Switcher.
+- [ ] Exit Game, and separately holding MENU for about a second: the game
+      saves and you are back on the shelf (straight away in boot-launcher
+      mode; via Onion's menu in app mode). Tap A resumes from that point.
+- [ ] MENU + another button (Onion's shortcuts, such as brightness) still
+      does Onion's shortcut and does not open the menu.
+- [ ] After leaving the game, MENU in Onion's own menu works as before
+      (opens Onion's Game Switcher).
+- [ ] A game started from Onion's own menu still has Onion's MENU.
+- [ ] MENU -> In-game menu: Off in slot-mini gives MENU back to Onion in
+      games launched from slot-mini.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

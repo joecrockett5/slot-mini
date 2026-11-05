@@ -21,6 +21,7 @@ mod icon;
 pub mod palette;
 mod plate;
 pub mod power;
+pub mod quick;
 mod shelf;
 mod shell;
 mod silhouette;

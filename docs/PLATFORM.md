@@ -277,6 +277,34 @@ and "resume last game" see the launch.
 The GB, GBC and GBA emulators are Onion packages and may not be installed. A
 platform whose `Emu/<sys>/launch.sh` is missing gets no shelf.
 
+## MENU in a game
+
+**Checked against Onion 4.3.1-1 (`v4.3.1-1`) and its development branch.**
+
+- **What Onion does.** keymon handles MENU while RetroArch runs
+  (`src/keymon/menuButtonAction.h`). On released Onion every in-game MENU
+  action (Game Switcher, exit to menu, quick switch) saves a screenshot,
+  then ends RetroArch with `SIGTERM`; RetroArch writes its auto state on the
+  way out. The Game Switcher then starts as a separate program and resuming
+  relaunches RetroArch, which is the delay players see. The development
+  branch pauses RetroArch with `PAUSE`/`UNPAUSE` network commands its own
+  RetroArch build adds, and draws the Game Switcher as an overlay.
+- **Taking MENU over.** keymon skips its MENU handling while
+  `/tmp/disable_menu_button` exists (`keymon.c`). Its MENU combinations are
+  tracked before that check, so they keep working.
+- **RetroArch's network commands** are on in Onion's default config
+  (`network_cmd_enable = "true"`, UDP port 55355). Standard RetroArch
+  commands are used: `GET_STATUS`, `PAUSE_TOGGLE`, `SAVE_STATE`,
+  `LOAD_STATE`, `MENU_TOGGLE`. Quitting uses `SIGTERM`, as keymon does.
+- **Drawing over the game.** Onion freezes RetroArch with `SIGSTOP` to read
+  the framebuffer for its screenshots (`screenshot.h`). slot-mini pauses with
+  `PAUSE_TOGGLE` (RetroArch stops its audio), then `SIGSTOP`s it so it
+  cannot redraw, and draws on the page `FBIOGET_VSCREENINFO` says is shown.
+- **Not reproduced:** Onion's Game Switcher screenshot (`romScreens/<hash>.png`).
+  Its name is a hash that can read past the end of the path string, so it
+  cannot be computed exactly. Games left through slot-mini's menu may show an
+  older picture in the Game Switcher.
+
 ## Resume and fresh start
 
 **Corrected twice; the second time on a device.** Onion's launch scripts load

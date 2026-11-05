@@ -12,6 +12,7 @@ use crate::settings::Settings;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Row {
     Sounds,
+    IngameMenu,
     BootLauncher,
     ExitToOnion,
 }
@@ -43,7 +44,12 @@ impl About {
     pub fn new(paths: &Paths) -> About {
         About {
             row: 0,
-            rows: vec![Row::Sounds, Row::BootLauncher, Row::ExitToOnion],
+            rows: vec![
+                Row::Sounds,
+                Row::IngameMenu,
+                Row::BootLauncher,
+                Row::ExitToOnion,
+            ],
             launcher: crate::switch::installed(paths),
             note: None,
             faces: Vec::new(),
@@ -63,6 +69,12 @@ impl About {
             Button::A | Button::Left | Button::Right => match self.rows[self.row] {
                 Row::Sounds => {
                     settings.sounds = !settings.sounds;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
+                }
+                Row::IngameMenu => {
+                    settings.ingame_menu = !settings.ingame_menu;
                     if let Err(e) = settings.write(paths) {
                         eprintln!("slot-mini: settings: {e}");
                     }
@@ -113,6 +125,7 @@ impl About {
         let on = |b: bool| if b { "On" } else { "Off" };
         match row {
             Row::Sounds => format!("Sounds: {}", on(settings.sounds)),
+            Row::IngameMenu => format!("In-game menu: {}", on(settings.ingame_menu)),
             Row::BootLauncher => format!("Boot launcher: {}", on(self.launcher)),
             Row::ExitToOnion => "Exit to Onion".into(),
         }
@@ -148,7 +161,7 @@ impl About {
             let text = self.label(row, settings);
             let f = self.face(gfx, &text, true);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
-            y += 52.0;
+            y += 46.0;
         }
         if let Some(note) = self.note.clone() {
             let f = self.face(gfx, &note, false);

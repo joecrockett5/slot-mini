@@ -12,6 +12,7 @@ pub mod app;
 pub mod art;
 pub mod faces;
 pub mod fixture;
+pub mod ingame;
 pub mod label_cache;
 pub mod launch;
 pub mod library;

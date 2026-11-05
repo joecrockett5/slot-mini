@@ -66,10 +66,19 @@ when slot-mini is missing). To remove the shim by hand, with the card in a compu
 | Hold A | Insert the cart and start fresh, without loading the state |
 | Y | Heart or un-heart the cart (hearted carts get a Favorites shelf) |
 | SELECT | Cart studio for this cart |
-| MENU | About: sounds, boot launcher, exit to Onion |
+| MENU | About: sounds, in-game menu, boot launcher, exit to Onion |
 
-Hold A starts the game the way Onion's own "Reset game" (Game List Options) does, for that one run. As with Onion's Reset game, RetroArch still
-writes its auto state when you quit the game.
+Hold A starts the game the way Onion's own "Reset game" (Game List Options) does, for that one run. As with
+Onion's Reset game, RetroArch still writes its auto state when you quit the game.
+
+**In a game** started from slot-mini, MENU is slot's:
+
+| Input | Action |
+| --- | --- |
+| Tap MENU | The game freezes behind slot's in-game menu: Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game |
+| Hold MENU | Eject: RetroArch saves its auto state and quits, back to the shelf |
+
+It opens straight away: a small helper is already waiting beside the game, instead of Onion starting its Game Switcher. MENU combinations with other buttons are still Onion's. Games started from Onion's own menu keep Onion's MENU. To give MENU back to Onion in slot-mini's games too, turn **MENU -> In-game menu** off.
 
 In the cart studio: Up / Down pick a row, A opens it, Left / Right change a finish or shape, B goes back and
 saves.
