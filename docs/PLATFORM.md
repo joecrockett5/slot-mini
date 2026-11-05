@@ -355,6 +355,34 @@ platform whose `Emu/<sys>/launch.sh` is missing gets no shelf.
   cannot be computed exactly. Games left through slot-mini's menu may show an
   older picture in the Game Switcher.
 
+## Cores
+
+**Checked against Onion 4.3.1-1 (tag `v4.3.1-1`; development branch noted).**
+
+- **What is installed.** `RetroArch/.retroarch/cores/` ships both
+  `mgba_libretro.so` and `gpsp_libretro.so`.
+- **The default.** 4.3.1-1's GBA package is "Nintendo - GBA (mGBA)": its
+  `Emu/GBA/launch.sh` runs `mgba_libretro.so` (and once offered to import gpSP
+  saves). The development branch's package is "Nintendo - GBA (gpSP)", with
+  `default_core=gpsp` in `launch.sh`. Game List Options reads the default
+  from a `default_core=` line, else from the `.retroarch/cores/<name>.so` in
+  the script (`get_core_info`); slot-mini does the same.
+- **A per-game core** is `<rom folder>/.game_config/<rom name>.cfg` with
+  `core = "gpsp_libretro"`. `<rom name>` is `basename "$rompath" ".$romext"`
+  with the extension lower-cased (so a `.GBA` file keeps it). Game List
+  Options' "Game core" writes it (dropping any other `core ` line); picking
+  the default, or "Restore default core", deletes the file and, if empty, the
+  folder (`rm -d`).
+- **When it applies.** The runtime's `launch_game` runs `override_game_core`
+  for every game whose `.cfg` exists: unless the command already names a core
+  (Game Switcher resumes), it is replaced by RetroArch run directly with that
+  core. slot-mini's commands go through `launch.sh`, so the override applies
+  to them; Hold A names the core itself (`core_for`).
+- **Saves are per core.** RetroArch sorts saves and states into folders by
+  core (`Saves/CurrentProfile/saves/mGBA/`, `.../gpSP/`), so switching a
+  game's core switches which save it sees. slot-mini says so when the core
+  changes ("gpSP keeps its own saves") and moves nothing.
+
 ## Resume and fresh start
 
 **Corrected twice; the second time on a device.** Onion's launch scripts load

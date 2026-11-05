@@ -154,14 +154,14 @@ fn hold_a_starts_fresh_for_one_run() {
     run(&rig, 1, &["sh", mainui.to_str().unwrap()]);
     let log = read(rig.paths.tmp.join("runtime.log"));
     assert!(
-        log.contains("turn 1: run LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so ./retroarch -v --appendconfig \"/mnt/SDCARD/.tmp_update/reset.cfg\" -L \"/mnt/SDCARD/RetroArch/.retroarch/cores/gpsp_libretro.so\" \"/mnt/SDCARD/Roms/GBA/2 Games in 1 (Europe).gba\""),
+        log.contains("turn 1: run LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so ./retroarch -v --appendconfig \"/mnt/SDCARD/.tmp_update/reset.cfg\" -L \"/mnt/SDCARD/RetroArch/.retroarch/cores/mgba_libretro.so\" \"/mnt/SDCARD/Roms/GBA/2 Games in 1 (Europe).gba\""),
         "{log}"
     );
     let ran = read(rig.paths.tmp.join("retroarch.log"));
     let sd = rig.paths.sd.display();
     assert_eq!(
         ran.trim(),
-        format!("-v --appendconfig {sd}/.tmp_update/reset.cfg -L {sd}/RetroArch/.retroarch/cores/gpsp_libretro.so {sd}/Roms/GBA/2 Games in 1 (Europe).gba")
+        format!("-v --appendconfig {sd}/.tmp_update/reset.cfg -L {sd}/RetroArch/.retroarch/cores/mgba_libretro.so {sd}/Roms/GBA/2 Games in 1 (Europe).gba")
     );
     assert_eq!(
         read(rig.paths.sysdir().join("reset.cfg")),

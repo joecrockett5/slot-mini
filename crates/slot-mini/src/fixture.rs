@@ -138,7 +138,7 @@ pub fn launch_script(core: &str) -> String {
 /// two GBA games and a cart_shell.txt line.
 pub fn build(sd: &Path, labels: bool) -> std::io::Result<()> {
     for (p, core) in [
-        (Platform::Gba, "gpsp"),
+        (Platform::Gba, "mgba"),
         (Platform::Gb, "gambatte"),
         (Platform::Gbc, "gambatte"),
     ] {
@@ -163,7 +163,7 @@ pub fn build(sd: &Path, labels: bool) -> std::io::Result<()> {
     // uses, as Onion's Game List Options does.
     let cores = sd.join("RetroArch/.retroarch/cores");
     std::fs::create_dir_all(&cores)?;
-    for core in ["gpsp_libretro", "gambatte_libretro"] {
+    for core in ["mgba_libretro", "gpsp_libretro", "gambatte_libretro"] {
         std::fs::write(cores.join(format!("{core}.so")), b"not a real core")?;
     }
     std::fs::create_dir_all(sd.join(".tmp_update/config"))?;

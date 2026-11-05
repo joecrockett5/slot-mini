@@ -215,6 +215,19 @@ none, install the previous release's zip by hand first.
 - [ ] If the device clock is far off (e.g. year 2000), the check says the
       clock is wrong instead of failing silently.
 
+## 12. Core picker (0.4.0)
+
+- [ ] START on a GBA game: the other carts dim, the cart opens and the chip
+      sits on mGBA (or on the core Onion's Game List Options shows). Smooth?
+- [ ] Right, then A: the chip hops to gpSP, the cart closes, "gpSP keeps its
+      own saves" shows. Onion's Game List Options for that game says gpSP.
+- [ ] Tap A on that game: it runs on gpSP (RetroArch's menu, Information,
+      Core Information), and has no mGBA save, as expected.
+- [ ] START, Left, A: back to mGBA; `Roms/GBA/.game_config/<game>.cfg` is gone
+      and the game has its mGBA save again.
+- [ ] START, Right, B: nothing changes.
+- [ ] START on a GB or GBC game does nothing.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

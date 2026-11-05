@@ -37,7 +37,8 @@ slot-mini renders.
 | About (MENU) | yes | slot's sticker on the menu ground, plus slot-mini's own rows: boot launcher switch, sounds, exit to Onion. |
 | Settings (quick menu) | partly | Folded into the About screen: only settings slot-mini needs. |
 | In-game menu (tap MENU) and eject (hold MENU) | yes, for games slot-mini launches (0.2.0) | slot's quick-menu type, pointer and layout over the frozen game; rows Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game. See below. |
-| Core picker, save-state switcher (double-tap MENU), link, RomM, Wi-Fi setup, clock setting, brightness, update | no | Out of scope (RetroArch and Onion own these). |
+| Core picker (START) | yes, GBA carts (0.4.0) | slot's scene: the other carts recede and dim, the cart's lid lifts and turns off its board, the chip hops between the mGBA and gpSP sockets, slot's Cancel, Swap and Choose legends. Game Boy carts (slot: mGBA or Gambatte) are not offered. See below. |
+| Save-state switcher (double-tap MENU), link, RomM, Wi-Fi setup, clock setting, brightness | no | Out of scope (RetroArch and Onion own these). |
 
 ## Shelf details
 
@@ -64,7 +65,7 @@ slot-mini renders.
 | Colour grading (saturation, contrast, blue light, dim) | In-game and the whole frame | Dropped (out of scope). |
 | Background blur | Menu ground behind the quick menu (`background_default_blur.png`) | Baked: slot ships the blurred default as a PNG; slot-mini uses it. Custom wallpapers are box-blurred once on the CPU when a menu first opens. |
 | Sticker paper curl (`Draw::Paper`) | About sticker peel, print slips | Baked flat: the sticker is drawn without the curl. |
-| Rotated carts (`Draw::Turned`) | Studio cart tilt, link screen | The studio cart is rotated once in software when the studio opens and then blitted as a flat sprite. |
+| Rotated carts (`Draw::Turned`) | Studio cart tilt, core picker lid and chip, link screen | The studio cart is rotated once in software when the studio opens. The core picker's lid and chip are drawn turned every frame by a bilinear software blit (`Canvas::blit_turned`). |
 | Free quads (`Draw::Quad`) | Unwrap and apply-label animations | Dropped. A new label simply appears on the cart. |
 | Bilinear scaling | Everywhere | Pre-scaled sprites; nearest-neighbour only during motion. |
 | Alpha blending | Everywhere | Software `src-over` with 8-bit alpha, skipping fully transparent and fully opaque runs. |
@@ -145,6 +146,16 @@ slot's Screen settings). slot's rows are Resume, States, Screenshots,
 Settings and Exit Game; slot-mini's are Resume, Save State, Load State,
 Settings (RetroArch's menu), Game Switcher (Onion's) and Exit Game. slot's
 polaroid save-state switcher (double-tap MENU) is the next step.
+
+### Core picker (START)
+
+slot-mini: `core_picker.png` (open, chip on mGBA) and `core_picker_hop.png`
+(the chip mid-hop, lifted and tipped, with its shadow). The scene is slot's
+`draw_core_picker`, `draw_board_chip` and `draw_lid_shadow`, with slot's
+timings (`core_picker.rs`: 160 ms slide, 260 ms lift, 180 ms hop, 320 ms
+close) and recede and dim. The legends sit in the footer row, spread as slot
+spreads them. slot keeps the choice in its own `Config/selected_core.txt`;
+slot-mini writes Onion's per-game core file instead (PLATFORM.md, Cores).
 
 ### Other shelf goldens
 

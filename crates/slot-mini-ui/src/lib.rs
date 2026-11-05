@@ -22,6 +22,7 @@ pub mod palette;
 mod plate;
 pub mod power;
 pub mod quick;
+mod refusal;
 mod shelf;
 mod shell;
 mod silhouette;
@@ -40,7 +41,11 @@ pub use bitmaps::{
     slot_back, slot_back_light, slot_front, slot_front_light, slot_plugged, slot_plugged_light,
     Mould, SLOT_H, SLOT_W,
 };
-pub use board::{board_in, Placed};
+pub use board::{
+    board_face, board_from_shaped, board_in, chip_face, chip_shadow_face, grown, lid_at,
+    lid_from_shaped, lift_of, padded, seats, shelf_cart_shaped, socket_face, Placed, Seats,
+    CHIP_TIP, GBA_SEATS, HOP_LIFT, SHADOW_H, SHADOW_W, TURN_PAD,
+};
 pub use cart::{
     bare_face, cart_backing, cart_box, cart_face, cart_face_with, cart_interior, cart_shadow,
     clean_label, gb_cart_shadow, gb_shell_of, is_clear, label_colour, label_rect, label_size,
@@ -55,6 +60,7 @@ pub use plate::{
     arrows_hint_face, hint_face, hint_row, hint_width, title_face, title_line_face, word_face,
     word_ink, Hint, UndoFace, HINT_H,
 };
+pub use refusal::Refusal;
 pub use shelf::{
     box_size, foot_y, repeat_gap, rest_y, Shelf, HEART_INK, HEART_SCALE, REPEAT_DELAY_MS,
     SIDE_SCALE,

@@ -152,3 +152,15 @@ Calls made without asking, and why. Newest last.
     shim tests); the slow cross build, qemu tests and zip run where a release
     is published. An armv7-only failure therefore shows up after merging, and
     stops that release; **Run workflow** runs the armv7 job on a branch first.
+40. **The core choice is Onion's per-game file, not slot's** (0.4.0). Onion
+    applies `.game_config/<rom>.cfg` to every launch through `launch.sh` and
+    shows it in Game List Options, so the two can never disagree. mGBA is
+    the default, as the maintainer asked and as 4.3.1-1 ships; choosing it
+    removes the file, like "Restore default core".
+41. **GBA only, START opens it** (0.4.0, the maintainer's request). slot
+    also offers mGBA or Gambatte for Game Boy carts; that is a small step
+    later. START was free on slot-mini's shelf and is slot's button for it.
+42. **Say that saves are per core, move nothing.** RetroArch keeps mGBA and
+    gpSP saves apart; copying or converting them is Onion's business (its
+    development branch has a transfer script), so slot-mini only tells the
+    player when the core changes.
