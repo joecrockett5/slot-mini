@@ -290,6 +290,23 @@ Save and Load State worked on the device. Fixed:
   `main` and manual runs; pull requests and other branches run the desktop
   job.
 
+## 0.4.0: core picker (GBA)
+
+- START on a GBA cart opens slot's core picker (`core_picker.rs`, copied;
+  `core_scene.rs`, adapted from slot's app): the cart's lid lifts off its
+  board, the chip hops between mGBA and gpSP, A keeps, B cancels.
+- `cores.rs`: Onion 4.3.1-1's per-game core file (read, write, default from
+  `launch.sh` as Game List Options does). Hold A's `core_for` uses it.
+- `slot-mini-store::Core` (slot's, with Onion's libretro names);
+  `slot-mini-ui`: slot's `Refusal`, the core chip faces restored in
+  `board.rs`, board and lid layout exported.
+- `Canvas::blit_turned`: `Draw::Turned` drawn in software.
+- The test card's GBA system runs mGBA, as 4.3.1-1 does, with mGBA, gpSP and
+  Gambatte cores present.
+- Tests: `cores.rs` unit tests (file format, defaults, other settings kept),
+  `tests/cores.rs` (the whole flow, cancel, Game Boy and missing cores, two
+  goldens), the turned blit.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

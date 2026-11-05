@@ -1,10 +1,10 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/board.rs
-// Changes: emulator-core chip faces removed (no core picker); imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
+// Changes: the GB core chip faces are not used (only GBA carts offer a core choice); imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use slot_mini_gfx::Stage as Canvas;
-use slot_mini_store::Cart;
+use slot_mini_store::{Cart, Core};
 
 use crate::bitmaps::{self, GB_CHIP_H, GB_CHIP_W};
 use crate::cart::{
@@ -490,12 +490,23 @@ pub fn padded(face: &CartFace, pad: u32) -> CartFace {
     CartFace { rgba, w, h }
 }
 
+pub fn socket_face(core: Core) -> CartFace {
+    socket_face_text(core.text())
+}
+
 pub fn socket_face_text(name: &str) -> CartFace {
     let mut face = bitmap_face(bitmaps::socket(), SOCKET_W, SOCKET_H);
     if let Some(layout) = name_layout(name, (SOCKET_W - 12) as f32) {
         ink_band(&mut face, 4, 37, &layout, SOCKET_INK, 0.5);
     }
     face
+}
+
+pub fn chip_face(core: Option<Core>) -> CartFace {
+    match core {
+        Some(core) => chip_face_text(core.text()),
+        None => padded(&bitmap_face(bitmaps::chip(), CHIP_W, CHIP_H), TURN_PAD),
+    }
 }
 
 pub fn chip_face_text(name: &str) -> CartFace {

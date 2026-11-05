@@ -79,10 +79,17 @@ when slot-mini is missing). To remove the shim by hand, with the card in a compu
 | Hold A | Insert the cart and start fresh, without loading the state |
 | Y | Heart or un-heart the cart (hearted carts get a Favorites shelf) |
 | SELECT | Cart studio for this cart |
+| START | GBA carts: open the cart and choose its core, mGBA or gpSP |
 | MENU | About: sounds, in-game menu, boot launcher, check for updates, exit to Onion |
 
 Hold A starts the game the way Onion's own "Reset game" (Game List Options) does, for that one run. As with
 Onion's Reset game, RetroArch still writes its auto state when you quit the game.
+
+**Cores (GBA).** START opens the cart, as slot does: the chip sits in the socket of the core the game runs on.
+Left and right move it between **mGBA** and **gpSP**, A keeps it, B leaves it as it was. mGBA is the default
+(Onion 4.3.1-1's). The choice is Onion's own per-game setting (`Roms/GBA/.game_config/<game>.cfg`), so Onion's
+Game List Options ("Game core") shows the same core, and choosing mGBA again removes the file. RetroArch keeps
+saves and states per core, so a game moved to gpSP starts without its mGBA save until you move it back.
 
 **In a game** started from slot-mini, MENU is slot's:
 
@@ -247,7 +254,7 @@ Out of scope for now. The first few would be straightforward follow-ups:
 - **The label printer's print and tear animation**, and the studio cart's apply animation.
 - **The sticker curl** on the About screen.
 - **Per-shelf wallpapers** (`GB.png`, `GBA.png`, ... in slot).
-- Other Onion systems, the core picker, in-game features (save-state switcher, rewind and fast-forward
+- Other Onion systems, the core picker for Game Boy carts (slot offers Gambatte there), in-game features (save-state switcher, rewind and fast-forward
   bindings, shaders, bezels, colour grading), link play, the web companion and RomM belong to RetroArch or
   slot's own frontend and are not planned.
 

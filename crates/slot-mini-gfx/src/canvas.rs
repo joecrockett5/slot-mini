@@ -428,6 +428,91 @@ impl Canvas {
         }
     }
 
+    /// slot's `Draw::Turned`: the sprite stretched to `(x, y, w, h)` and
+    /// turned by `turn` radians about that rectangle's centre (clockwise on
+    /// screen for positive turns, as slot's vertex shader does). Bilinear, so
+    /// the slanted edges are smooth; samples outside the sprite are clear.
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_turned(
+        &mut self,
+        s: &Sprite,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        turn: f32,
+        alpha: u32,
+    ) {
+        if alpha == 0 || s.w == 0 || s.h == 0 || w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let (sin, cos) = turn.sin_cos();
+        let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+        // The turned rectangle's bounds on the canvas.
+        let ex = (w * cos.abs() + h * sin.abs()) / 2.0;
+        let ey = (w * sin.abs() + h * cos.abs()) / 2.0;
+        let box_ = Rect::new(
+            (cx - ex).floor() as i32 - 1,
+            (cy - ey).floor() as i32 - 1,
+            (2.0 * ex).ceil() as i32 + 3,
+            (2.0 * ey).ceil() as i32 + 3,
+        )
+        .intersect(&self.bounds());
+        if box_.is_empty() {
+            return;
+        }
+        let (kx, ky) = (s.w as f32 / w, s.h as f32 / h);
+        let sample = |sx: i32, sy: i32| -> u32 {
+            if sx < 0 || sy < 0 || sx >= s.w as i32 || sy >= s.h as i32 {
+                return 0;
+            }
+            s.px[(sy as u32 * s.w + sx as u32) as usize]
+        };
+        let width = self.w as usize;
+        for py in box_.y..box_.y + box_.h {
+            for px in box_.x..box_.x + box_.w {
+                let (dx, dy) = (px as f32 + 0.5 - cx, py as f32 + 0.5 - cy);
+                // Undo the turn, then into sprite pixels.
+                let lx = cos * dx + sin * dy + w / 2.0;
+                let ly = -sin * dx + cos * dy + h / 2.0;
+                let (u, v) = (lx * kx - 0.5, ly * ky - 0.5);
+                if u < -1.0 || v < -1.0 || u > s.w as f32 || v > s.h as f32 {
+                    continue;
+                }
+                let (u0, v0) = (u.floor(), v.floor());
+                let (fx, fy) = (u - u0, v - v0);
+                let (u0, v0) = (u0 as i32, v0 as i32);
+                let mut acc = [0f32; 4];
+                for (sx, sy, k) in [
+                    (u0, v0, (1.0 - fx) * (1.0 - fy)),
+                    (u0 + 1, v0, fx * (1.0 - fy)),
+                    (u0, v0 + 1, (1.0 - fx) * fy),
+                    (u0 + 1, v0 + 1, fx * fy),
+                ] {
+                    let p = sample(sx, sy);
+                    if p == 0 {
+                        continue;
+                    }
+                    acc[0] += (p >> 24) as f32 * k;
+                    acc[1] += (p >> 16 & 0xFF) as f32 * k;
+                    acc[2] += (p >> 8 & 0xFF) as f32 * k;
+                    acc[3] += (p & 0xFF) as f32 * k;
+                }
+                let a = acc[0].round() as u32;
+                if a == 0 {
+                    continue;
+                }
+                let ch = |c: f32| (c.round() as u32).min(a);
+                let mut p = a.min(255) << 24 | ch(acc[1]) << 16 | ch(acc[2]) << 8 | ch(acc[3]);
+                if alpha < 255 {
+                    p = scale_px(p, alpha);
+                }
+                let d = &mut self.px[py as usize * width + px as usize];
+                *d = over(*d, p);
+            }
+        }
+    }
+
     /// Blend an 8-bit coverage mask (text) in one colour.
     pub fn blit_mask(
         &mut self,
@@ -483,6 +568,43 @@ impl Canvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_turned_blit_matches_a_plain_one_unturned_and_turns_clockwise() {
+        // A 20x10 white bar.
+        let s = Sprite {
+            w: 20,
+            h: 10,
+            px: vec![0xFFFF_FFFF; 200],
+        };
+        let mut flat = Canvas::new(40, 40);
+        flat.blit_turned(&s, 10.0, 15.0, 20.0, 10.0, 0.0, 255);
+        let mut plain = Canvas::new(40, 40);
+        plain.blit(&s, 10, 15, 255);
+        assert_eq!(flat.px, plain.px);
+        // A quarter turn stands the bar up: 10 wide, 20 tall, same centre.
+        let mut up = Canvas::new(40, 40);
+        up.blit_turned(&s, 10.0, 15.0, 20.0, 10.0, std::f32::consts::FRAC_PI_2, 255);
+        let lit = |c: &Canvas, x: i32, y: i32| c.px[(y * 40 + x) as usize] == 0xFFFF_FFFF;
+        assert!(lit(&up, 20, 12) && lit(&up, 20, 28));
+        assert!(!lit(&up, 12, 20) && !lit(&up, 28, 20));
+        // Clockwise: a mark at the bar's right end ends up at the bottom.
+        let mut marked = s.clone();
+        for y in 0..10 {
+            marked.px[y * 20 + 19] = 0xFF00_00FF;
+        }
+        let mut cw = Canvas::new(40, 40);
+        cw.blit_turned(
+            &marked,
+            10.0,
+            15.0,
+            20.0,
+            10.0,
+            std::f32::consts::FRAC_PI_2,
+            255,
+        );
+        assert_eq!(cw.px[(29 * 40 + 20) as usize], 0xFF00_00FF);
+    }
 
     #[test]
     fn scale_is_exact_at_the_ends() {

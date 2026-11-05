@@ -169,6 +169,10 @@ pub struct App {
     /// MENU -> "Check for updates". Lives here, not in About, so an
     /// install carries on if About is closed.
     pub updater: crate::update::Updater,
+    /// slot's core picker on the selected GBA cart (START), and the
+    /// textures every picker shares.
+    pub core: Option<crate::core_scene::CoreScene>,
+    core_statics: Option<crate::core_scene::Statics>,
     restart_at: Option<Millis>,
     pub exit: Option<Exit>,
 }
@@ -231,6 +235,8 @@ impl App {
             fetch_started: false,
             restock_pending: false,
             updater: crate::update::Updater::default(),
+            core: None,
+            core_statics: None,
             restart_at: None,
             exit: None,
         };
@@ -432,6 +438,9 @@ impl App {
         if self.phase != Phase::Shelf {
             return;
         }
+        if self.core.is_some() {
+            return self.core_press(b);
+        }
         let now = self.now;
         match b {
             Button::Left => self.shelf_mut().map_or((), |s| s.hold_left(now)),
@@ -444,6 +453,7 @@ impl App {
             Button::A => self.a_held = Some(now),
             Button::Select => self.open_studio(),
             Button::Menu => self.open_about(),
+            Button::Start => self.open_core_picker(),
             _ => {}
         }
     }
@@ -473,6 +483,65 @@ impl App {
         self.a_held = None;
         self.studio = Some(crate::studio_ui::StudioUi::open(cart, at, index));
         self.phase = Phase::Studio;
+    }
+
+    /// slot's `open_core_picker`: START on a GBA cart opens it to choose
+    /// mGBA or gpSP. Both cores must be on the card.
+    fn open_core_picker(&mut self) {
+        let Some((_, cart)) = self.current() else {
+            return;
+        };
+        if !crate::core_scene::offers(cart) {
+            return;
+        }
+        let cart = cart.clone();
+        let missing = slot_mini_store::Core::pair(cart.platform)
+            .into_iter()
+            .find(|c| !crate::cores::installed(&self.paths, c.libretro()));
+        if let Some(c) = missing {
+            self.notice = Some(format!("{} is not installed", c.text()));
+            self.shelf_named = Some(self.now);
+            return;
+        }
+        if let Some(s) = self.shelf_mut() {
+            s.release_hold();
+        }
+        self.a_held = None;
+        if self.core_statics.is_none() {
+            self.core_statics = Some(crate::core_scene::Statics::new(&mut self.gfx));
+        }
+        self.core = Some(crate::core_scene::CoreScene::open(
+            &self.paths,
+            &cart,
+            self.now,
+        ));
+    }
+
+    /// slot's `core_picker_input` and `write_core`: A keeps the seated core
+    /// in Onion's per-game core file.
+    fn core_press(&mut self, b: Button) {
+        let now = self.now;
+        let Some(scene) = self.core.as_mut() else {
+            return;
+        };
+        let Some(core) = scene.press(b, now) else {
+            return;
+        };
+        let cart = scene.cart().clone();
+        let before = crate::cores::chosen(&self.paths, &cart);
+        match crate::cores::choose(&self.paths, &cart, core) {
+            // Onion keeps saves and states per core: say so on a change.
+            Ok(()) if core != before => {
+                self.notice = Some(format!("{} keeps its own saves", core.text()));
+                self.shelf_named = Some(now);
+            }
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("slot-mini: core: {e}");
+                self.notice = Some("Could not save the core".into());
+                self.shelf_named = Some(now);
+            }
+        }
     }
 
     fn open_about(&mut self) {
@@ -585,6 +654,14 @@ impl App {
         }
         if let Some(ui) = self.studio.as_mut() {
             ui.poll(&mut self.gfx);
+        }
+        if let Some(scene) = self.core.as_mut() {
+            scene.tick(&mut self.gfx, now);
+            if scene.finished(now) {
+                if let Some(scene) = self.core.take() {
+                    scene.close(&mut self.gfx);
+                }
+            }
         }
         self.sync_fetched();
         // An installed update: let "Restarting" show, then start it.
@@ -879,6 +956,20 @@ impl App {
         };
         match &self.phase {
             Phase::Shelf => {
+                let scene = self.core.as_ref().filter(|s| s.shown());
+                if let (Some(scene), Some(statics)) = (scene, &self.core_statics) {
+                    // slot: the other carts recede and dim, the cart opens
+                    // over the plugged slot, and its legends replace the
+                    // footer.
+                    let open = scene.open_eased(self.now);
+                    let dim = 1.0 + (crate::core_scene::DIM - 1.0) * open;
+                    let recede = crate::core_scene::RECEDE * open;
+                    shelf.draw_row(stage, Some(&scene.stem), 0.0, recede, dim, out);
+                    slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+                    scene.draw_plugged(stage, statics, self.theme.light, self.now, out);
+                    scene.draw(stage, shelf, statics, self.now, out);
+                    return;
+                }
                 shelf.draw(stage, 0.0, self.slot_faces(), out);
                 draw_slot_title(stage, self.title.printed, self.title_alpha(), out);
             }

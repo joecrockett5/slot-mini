@@ -248,34 +248,15 @@ pub const RESET_CFG: &str = "savestate_auto_load = \"false\"\nconfig_save_on_exi
 /// The RetroArch core a cart runs on, the way Onion's Game List Options
 /// works it out (`get_core_info`): a per-game override in
 /// `<rom folder>/.game_config/<rom name>.cfg` (`core = "..."`), else the core
-/// named in the system's `launch.sh`. `None` when the script picks it at run
-/// time (`${default_core}`) or the core file is not on the card.
+/// the system's `launch.sh` runs (see `cores.rs`). `None` when neither names
+/// a core that is on the card.
 pub fn core_for(paths: &Paths, cart: &Cart) -> Option<String> {
-    let dir = cart.rom.parent()?;
-    let stem = cart.rom.file_stem()?.to_str()?;
-    let per_game = std::fs::read_to_string(dir.join(".game_config").join(format!("{stem}.cfg")))
-        .ok()
-        .and_then(|text| {
-            text.lines().find_map(|l| {
-                let (k, v) = l.split_once('=')?;
-                (k.trim() == "core").then(|| v.trim().trim_matches('"').to_string())
-            })
-        })
-        .filter(|c| !c.is_empty());
-    let core = per_game.or_else(|| {
-        let script = std::fs::read_to_string(paths.launch_script(cart.platform)).ok()?;
-        const AT: &str = ".retroarch/cores/";
-        let after = &script[script.find(AT)? + AT.len()..];
-        Some(after[..after.find(".so")?].to_string())
-    })?;
+    let core = crate::cores::per_game(cart)
+        .or_else(|| crate::cores::default_core(paths, cart.platform))?;
     let plain = core
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
-    let on_card = paths
-        .sd
-        .join("RetroArch/.retroarch/cores")
-        .join(format!("{core}.so"));
-    (plain && on_card.is_file()).then_some(core)
+    (plain && crate::cores::installed(paths, &core)).then_some(core)
 }
 
 /// Hold A on stable Onion: the command Game List Options' "Reset game"
