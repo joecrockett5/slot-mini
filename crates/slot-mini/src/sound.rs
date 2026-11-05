@@ -37,6 +37,11 @@ impl Clip {
 
 pub trait Sound {
     fn play(&mut self, clip: Clip);
+    /// How the last clip went, once known, in a few words for the screen
+    /// (MENU shows it after turning sounds on).
+    fn report(&self) -> Option<String> {
+        None
+    }
 }
 
 /// No sound.
@@ -87,6 +92,8 @@ pub struct Player {
     dir: PathBuf,
     /// One waiter per clip: it reaps the player and logs a failure.
     playing: Vec<std::thread::JoinHandle<()>>,
+    /// How the last clip went (see `report`).
+    last: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl Player {
@@ -102,6 +109,7 @@ impl Player {
             cwd: Some(sd.join(".tmp_update")),
             dir,
             playing: Vec::new(),
+            last: Default::default(),
         }
     }
 
@@ -113,6 +121,7 @@ impl Player {
             cwd: None,
             dir,
             playing: Vec::new(),
+            last: Default::default(),
         }
     }
 
@@ -128,26 +137,40 @@ impl Player {
 }
 
 impl Sound for Player {
+    fn report(&self) -> Option<String> {
+        self.last.lock().ok()?.clone()
+    }
+
     fn play(&mut self, clip: Clip) {
         self.playing.retain(|w| !w.is_finished());
+        let say = |s: String| {
+            eprintln!("slot-mini: sound: {s}");
+            if let Ok(mut l) = self.last.lock() {
+                *l = Some(s);
+            }
+        };
+        if let Ok(mut l) = self.last.lock() {
+            *l = None;
+        }
         if !self.program.is_file() {
             eprintln!("slot-mini: sound: no player at {}", self.program.display());
+            if let Ok(mut l) = self.last.lock() {
+                *l = Some("ffplay not found".into());
+            }
             return;
         }
         let file = match self.file(clip) {
             Ok(f) => f,
-            Err(e) => {
-                eprintln!("slot-mini: sound: {e}");
-                return;
-            }
+            Err(e) => return say(format!("could not write the clip: {e}")),
         };
         let mut cmd = Command::new(&self.program);
         cmd.args(&self.args)
             .arg(&file)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            // The player's errors land in slot-mini's log.
-            .stderr(Stdio::inherit());
+            // Read by the waiter: copied to slot-mini's log, and its first
+            // line reported on screen if the player fails.
+            .stderr(Stdio::piped());
         if let Some(p) = self.preload.as_ref().filter(|p| p.is_file()) {
             cmd.env("LD_PRELOAD", p);
         }
@@ -156,20 +179,51 @@ impl Sound for Player {
         }
         let name = clip.name();
         match cmd.spawn() {
-            Ok(child) => self
-                .playing
-                .push(std::thread::spawn(move || reap(child, name))),
-            Err(e) => eprintln!("slot-mini: sound: {}: {e}", self.program.display()),
+            Ok(child) => {
+                let last = self.last.clone();
+                self.playing
+                    .push(std::thread::spawn(move || reap(child, name, &last)));
+            }
+            Err(e) => say(format!("could not start the player: {e}")),
         }
     }
 }
 
-/// Wait for a player and log how it ended if it failed.
-fn reap(mut child: Child, name: &str) {
-    match child.wait() {
-        Ok(s) if s.success() => {}
-        Ok(s) => eprintln!("slot-mini: sound: the player failed on {name}: {s}"),
-        Err(e) => eprintln!("slot-mini: sound: {name}: {e}"),
+/// Wait for a player, copy what it printed to the log, and record how it
+/// ended: the exit status and its first line of output if it failed.
+fn reap(mut child: Child, name: &str, last: &std::sync::Mutex<Option<String>>) {
+    use std::io::Read;
+    let started = std::time::Instant::now();
+    let mut said = String::new();
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_string(&mut said);
+    }
+    for line in said.lines().filter(|l| !l.trim().is_empty()) {
+        eprintln!("slot-mini: sound: player: {line}");
+    }
+    let first = said
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("");
+    let secs = started.elapsed().as_secs_f32();
+    let report = match child.wait() {
+        Ok(s) if s.success() => format!("player finished ({secs:.1} s)"),
+        Ok(s) => {
+            let how = match s.code() {
+                Some(c) => format!("exit {c}"),
+                None => "killed".to_string(),
+            };
+            eprintln!("slot-mini: sound: the player failed on {name}: {s}");
+            match first.is_empty() {
+                true => format!("player failed, {how}"),
+                false => format!("{how}: {first}"),
+            }
+        }
+        Err(e) => format!("{name}: {e}"),
+    };
+    if let Ok(mut l) = last.lock() {
+        *l = Some(report);
     }
 }
 
@@ -220,13 +274,37 @@ mod tests {
             std::fs::read(d.path().join("clips/insert.wav")).unwrap(),
             wav(INSERT)
         );
+        assert!(p.report().unwrap().starts_with("player finished ("));
     }
 
     #[test]
-    fn a_missing_player_is_silent() {
+    fn a_missing_player_is_silent_and_says_so() {
         let d = tempfile::tempdir().unwrap();
         let mut p = Player::new(d.path().join("nope"), vec![], d.path().join("clips"));
         p.play(Clip::Insert);
         assert!(p.playing.is_empty());
+        assert_eq!(p.report().as_deref(), Some("ffplay not found"));
+    }
+
+    #[test]
+    fn a_failing_player_is_reported_with_its_first_line() {
+        let d = tempfile::tempdir().unwrap();
+        let script = d.path().join("player.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\necho 'SDL_OpenAudio: No available audio device' >&2\necho more >&2\nexit 1\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut p = Player::new(script, vec![], d.path().join("clips"));
+        p.play(Clip::Insert);
+        for w in p.playing.drain(..) {
+            w.join().unwrap();
+        }
+        assert_eq!(
+            p.report().as_deref(),
+            Some("exit 1: SDL_OpenAudio: No available audio device")
+        );
     }
 }

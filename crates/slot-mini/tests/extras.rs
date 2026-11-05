@@ -191,3 +191,58 @@ fn turning_sounds_on_plays_one() {
     assert!(!app.settings.sounds);
     assert_eq!(played.lock().unwrap().len(), 1);
 }
+
+/// The sound test reports on MENU's note line how the player ended, so a
+/// silent device says why on screen.
+#[test]
+fn the_sound_test_shows_how_the_player_ended() {
+    let rig = Rig::new();
+    let script = rig.dir.path().join("player.sh");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\necho 'SDL_OpenAudio: No available audio device' >&2\nexit 1\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let player = slot_mini::sound::Player::new(script, vec![], rig.dir.path().join("clips"));
+    let opts = Options {
+        sound: Some(Box::new(player)),
+        face_wait: None,
+        seed: 1,
+    };
+    let status = FixedStatus {
+        battery: None,
+        wifi: false,
+        clock: (0, 0),
+        charging: false,
+    };
+    let mut app = App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
+    let mut now = 0;
+    let mut step = |app: &mut App, b: Option<Button>| {
+        if let Some(b) = b {
+            app.handle(slot_mini_gfx::Event::Press(b));
+            app.handle(slot_mini_gfx::Event::Release(b));
+        }
+        now += 16;
+        app.tick(now);
+        app.render(&mut frame);
+    };
+    step(&mut app, Some(Button::Menu));
+    step(&mut app, Some(Button::A));
+    let note = |app: &App| app.about.as_ref().and_then(|a| a.note.clone());
+    assert_eq!(note(&app).as_deref(), Some("Sound test: playing..."));
+    for _ in 0..300 {
+        if note(&app).as_deref() != Some("Sound test: playing...") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        step(&mut app, None);
+    }
+    assert_eq!(
+        note(&app).as_deref(),
+        Some("Sound test: exit 1: SDL_OpenAudio: No available audio device")
+    );
+    common::golden("about_sound_test", &frame);
+}

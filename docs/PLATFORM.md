@@ -166,8 +166,12 @@ it starts with sound **off** (`sounds = off` in its settings) until someone
 confirms on a device that it plays promptly and does not hold the audio
 device when RetroArch starts. See `DEVICE-TESTING.md`.
 
-**Reported on a device (0.4.2): no sound with Sounds on.** Not yet
-explained. Since 0.4.3, turning Sounds on plays the insert clip at once, and
+**Reported on a device (0.4.2, again on 0.4.3): no sound with Sounds on,
+while games' sound works.** Not yet explained. 4.3.1-1's `ffplay` is an old
+ffmpeg build (libav*.so.56), dynamically linked against glibc and
+`libSDL-1.2.so.0`, so its sound goes through that SDL's audio driver; with
+`libpadsp.so` preloaded an OSS (`dsp`) driver would reach `audioserver`.
+Since 0.4.4 MENU shows the sound test's outcome on screen. Since 0.4.3, turning Sounds on plays the insert clip at once, and
 the player's errors (and a non-zero exit) are written to slot-mini's log, so
 the cause can be read off the device. Candidates: the preload or `ffplay`'s
 audio output not reaching `audioserver`; in app mode the insert clip racing

@@ -4,7 +4,7 @@
 //! quick menu.
 
 use slot_mini_gfx::{Button, Draw, Renderer, Stage, TexId};
-use slot_mini_ui::{draw_backdrop, hint_face, title_line_face, word_ink, FOOTER_Y};
+use slot_mini_ui::{draw_backdrop, hint_face, line_ink, title_line_face, word_ink, FOOTER_Y};
 
 use crate::paths::Paths;
 use crate::settings::Settings;
@@ -34,6 +34,20 @@ pub struct About {
     pub note: Option<String>,
     faces: Vec<(String, TexId, u32, u32)>,
 }
+
+/// How a line of the About screen is set.
+#[derive(Clone, Copy, Debug)]
+enum Style {
+    /// slot's title type: the version and the rows.
+    Title,
+    /// Small type in slot's word width: the credits.
+    Small,
+    /// Small type up to nearly the screen's width.
+    Note,
+}
+
+/// The widest MENU's note line may be.
+const NOTE_W: f32 = 600.0;
 
 const INFO: [&str; 4] = [
     concat!("slot-mini ", env!("CARGO_PKG_VERSION")),
@@ -119,14 +133,16 @@ impl About {
         Outcome::Stay
     }
 
-    fn face(&mut self, gfx: &mut Renderer, text: &str, big: bool) -> (TexId, u32, u32) {
-        let key = format!("{}{text}", if big { "#" } else { "" });
+    fn face(&mut self, gfx: &mut Renderer, text: &str, style: Style) -> (TexId, u32, u32) {
+        let key = format!("{style:?}:{text}");
         if let Some((_, t, w, h)) = self.faces.iter().find(|f| f.0 == key) {
             return (*t, *w, *h);
         }
-        let f = match big {
-            true => title_line_face(text),
-            false => word_ink(text, [0xf6, 0xf4, 0xef]),
+        let f = match style {
+            Style::Title => title_line_face(text),
+            Style::Small => word_ink(text, [0xf6, 0xf4, 0xef]),
+            // Notes can be a sentence: nearly the screen's width.
+            Style::Note => line_ink(text, [0xf6, 0xf4, 0xef], NOTE_W),
         };
         let t = gfx.upload_rgba(f.w, f.h, &f.rgba);
         self.faces.push((key, t, f.w, f.h));
@@ -180,14 +196,15 @@ impl About {
         };
         let mut y = 30.0;
         for (i, line) in INFO.iter().enumerate() {
-            let f = self.face(gfx, line, i == 0);
+            let style = if i == 0 { Style::Title } else { Style::Small };
+            let f = self.face(gfx, line, style);
             put(out, f, y, if i == 0 { 1.0 } else { 0.8 });
             y += if i == 0 { 42.0 } else { 26.0 };
         }
         y += 16.0;
         for (i, row) in self.rows.clone().into_iter().enumerate() {
             let text = self.label(row, settings, update);
-            let f = self.face(gfx, &text, true);
+            let f = self.face(gfx, &text, Style::Title);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
             y += 42.0;
         }
@@ -207,7 +224,7 @@ impl About {
             _ => None,
         };
         if let Some(note) = self.note.clone().or(update_note) {
-            let f = self.face(gfx, &note, false);
+            let f = self.face(gfx, &note, Style::Note);
             put(out, f, y + 4.0, 0.9);
         }
         slot_mini_ui::draw_empty_slot(stage, None, out);

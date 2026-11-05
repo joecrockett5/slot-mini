@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/plate.rs
-// Changes: imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
+// Changes: imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store);
+//   `line_ink` added (a small-type line with its own width limit).
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use crate::text;
@@ -113,6 +114,18 @@ pub fn word_face(text: &str) -> UndoFace {
 
 pub fn word_ink(text: &str, ink: [u8; 3]) -> UndoFace {
     let w = word_width(text);
+    let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
+    if let Some(font) = text::label_font() {
+        let layout = text::fit(font, text, w as f32, 1, LABEL_PX, LABEL_MIN_PX);
+        text::draw_centred(&mut rgba, w, HINT_H, &layout, ink);
+    }
+    UndoFace { rgba, w, h: HINT_H }
+}
+
+/// `word_ink` with its own width limit (slot-mini addition): a line of
+/// small type up to `max_w` wide, for messages longer than a word.
+pub fn line_ink(text: &str, ink: [u8; 3], max_w: f32) -> UndoFace {
+    let w = capped_width(text, max_w);
     let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
     if let Some(font) = text::label_font() {
         let layout = text::fit(font, text, w as f32, 1, LABEL_PX, LABEL_MIN_PX);
