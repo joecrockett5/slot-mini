@@ -121,3 +121,13 @@ Calls made without asking, and why. Newest last.
     and the main loop all thaw RetroArch before the helper exits, and
     slot-mini clears any helper or flag left behind each time it starts, so
     MENU can never stay taken from Onion.
+32. **The in-game menu is drawn on every framebuffer page** (0.2.1). The
+    page RetroArch shows next cannot be known for sure; covering all of
+    them (at most a few 640x480 pages) is cheap and always visible.
+33. **The input device is grabbed while the in-game menu is open, and rows
+    act on release** (0.2.1). Without the grab RetroArch reads the menu's
+    presses when it thaws. POWER resumes the game, since keymon cannot see
+    it while the device is grabbed.
+34. **The eject starts on the first frame shown** (0.2.1). Its clock and
+    sound used to start when slot-mini started, so the time spent loading the
+    shelf ate the animation and only the last frames, or none, were seen.

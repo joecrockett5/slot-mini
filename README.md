@@ -78,7 +78,7 @@ Onion's Reset game, RetroArch still writes its auto state when you quit the game
 | Tap MENU | The game freezes behind slot's in-game menu: Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game |
 | Hold MENU | Eject: RetroArch saves its auto state and quits, back to the shelf |
 
-It opens straight away: a small helper is already waiting beside the game, instead of Onion starting its Game Switcher. MENU combinations with other buttons are still Onion's. Games started from Onion's own menu keep Onion's MENU. To give MENU back to Onion in slot-mini's games too, turn **MENU -> In-game menu** off.
+It opens straight away: a small helper is already waiting beside the game, instead of Onion starting its Game Switcher. MENU combinations with other buttons are still Onion's. Games started from Onion's own menu keep Onion's MENU. To give MENU back to Onion in slot-mini's games too, turn **MENU -> In-game menu** off. While the menu is open the buttons are its own: nothing you press reaches the game, and POWER resumes it.
 
 In the cart studio: Up / Down pick a row, A opens it, Left / Right change a finish or shape, B goes back and
 saves.

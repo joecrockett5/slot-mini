@@ -41,12 +41,16 @@ impl Game for FakeGame {
     }
 }
 
-/// Two framebuffer pages; the game is showing page 1.
+/// Three framebuffer pages (RetroArch can use more than two); the driver
+/// says page 1 is shown.
 struct FakeScreen {
-    pages: [Canvas; 2],
+    pages: [Canvas; 3],
 }
 
 impl Screen for FakeScreen {
+    fn pages(&mut self) -> u32 {
+        3
+    }
     fn displayed(&mut self) -> u32 {
         1
     }
@@ -79,7 +83,7 @@ fn game_frame() -> Canvas {
 
 fn overlay(log: &Log, sysdir: &std::path::Path) -> Overlay<FakeGame, FakeScreen> {
     let screen = FakeScreen {
-        pages: [Canvas::new(640, 480), game_frame()],
+        pages: [Canvas::new(640, 480), game_frame(), Canvas::new(640, 480)],
     };
     Overlay::new(FakeGame(log.clone()), screen, sysdir.to_path_buf())
 }

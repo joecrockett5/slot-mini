@@ -321,3 +321,47 @@ fn insert_and_eject_frames() {
     assert_eq!(d.app.phase, slot_mini::Phase::Shelf);
     assert_eq!(d.selected(), "Golden Sun (USA, Europe)");
 }
+
+/// The eject starts with the first frame shown, however long starting up
+/// took (on the device it took longer than the whole animation).
+#[test]
+fn the_eject_starts_on_the_first_frame_shown() {
+    let rig = Rig::new();
+    let cart = slot_mini_store::scan_platform(&rig.paths.sd, slot_mini_store::Platform::Gba)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.stem == "Golden Sun (USA, Europe)")
+        .unwrap();
+    slot_mini::launch::hand_off(
+        &rig.paths,
+        slot_mini::launch::Mode::Launcher,
+        "GBA",
+        &cart,
+        false,
+    )
+    .unwrap();
+    let opts = slot_mini::Options {
+        sound: None,
+        face_wait: None,
+        seed: 1,
+    };
+    let status = slot_mini::status::FixedStatus {
+        battery: None,
+        wifi: false,
+        clock: (0, 0),
+    };
+    let mut app = slot_mini::App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    let mut frame = slot_mini_gfx::Canvas::new(640, 480);
+    // Two seconds pass before the first frame.
+    app.tick(2000);
+    app.render(&mut frame);
+    assert!(
+        matches!(app.phase, slot_mini::Phase::Ejecting { .. }),
+        "still ejecting on the first frame"
+    );
+    app.tick(2200);
+    app.render(&mut frame);
+    assert!(matches!(app.phase, slot_mini::Phase::Ejecting { .. }));
+    app.tick(2500);
+    assert_eq!(app.phase, slot_mini::Phase::Shelf);
+}

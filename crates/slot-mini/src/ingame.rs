@@ -173,6 +173,9 @@ pub trait Game {
 
 /// Where the menu is drawn.
 pub trait Screen {
+    /// How many screen-sized pages the framebuffer memory holds, read fresh
+    /// (RetroArch may use more than two and set them up after we start).
+    fn pages(&mut self) -> u32;
     /// The framebuffer page on screen now.
     fn displayed(&mut self) -> u32;
     fn capture(&mut self, page: u32) -> Canvas;
@@ -181,6 +184,10 @@ pub trait Screen {
 
 #[cfg(target_os = "linux")]
 impl Screen for slot_mini_gfx::fbdev::Fbdev {
+    fn pages(&mut self) -> u32 {
+        self.refresh();
+        self.mapped_pages()
+    }
     fn displayed(&mut self) -> u32 {
         self.displayed_page()
     }
@@ -311,11 +318,14 @@ impl Default for Faces {
     }
 }
 
-/// The menu on screen: which page it covers and what was there.
+/// The menu on screen: what every page held before, which one the game was
+/// showing, and a choice waiting for its button to be let go.
 struct Open {
     menu: Menu,
-    page: u32,
-    game: Canvas,
+    shown: usize,
+    saved: Vec<Canvas>,
+    held: Vec<Button>,
+    chosen: Option<Action>,
 }
 
 /// The helper's state: MENU gestures, the menu, and what they do to the game.
@@ -352,16 +362,44 @@ impl<G: Game, S: Screen> Overlay<G, S> {
         self.button.held()
     }
 
+    /// While the menu is up the buttons are the menu's alone (the helper
+    /// grabs the input device), so nothing pressed in it reaches the game.
+    pub fn wants_grab(&self) -> bool {
+        self.open.is_some()
+    }
+
     pub fn handle(&mut self, ev: Event, now: Millis) {
         if self.quitting {
             return;
         }
         if let Some(open) = self.open.as_mut() {
-            if let Event::Press(b) = ev {
-                match open.menu.press(b) {
-                    Some(action) => self.close(action),
-                    None => self.redraw(),
+            match ev {
+                Event::Press(b) => {
+                    open.held.push(b);
+                    if open.chosen.is_none() {
+                        // POWER cannot reach Onion while the buttons are
+                        // grabbed: give the game back and let it through.
+                        let action = match b {
+                            Button::Power => Some(Action::Resume),
+                            _ => open.menu.press(b),
+                        };
+                        match action {
+                            Some(a) => open.chosen = Some(a),
+                            None => self.redraw(),
+                        }
+                    }
                 }
+                Event::Release(b) => {
+                    open.held.retain(|h| *h != b);
+                    // Act once everything is let go, so the release of the
+                    // button that chose never lands in the game either.
+                    if open.held.is_empty() {
+                        if let Some(a) = open.chosen {
+                            self.close(a);
+                        }
+                    }
+                }
+                Event::Quit => {}
             }
             return;
         }
@@ -380,22 +418,30 @@ impl<G: Game, S: Screen> Overlay<G, S> {
 
     fn open_menu(&mut self) {
         self.game.pause();
-        let page = self.screen.displayed();
-        let game = self.screen.capture(page);
+        let pages = self.screen.pages().max(1);
+        let shown = (self.screen.displayed().min(pages - 1)) as usize;
+        let saved = (0..pages).map(|p| self.screen.capture(p)).collect();
         self.open = Some(Open {
             menu: Menu::default(),
-            page,
-            game,
+            shown,
+            saved,
+            held: Vec::new(),
+            chosen: None,
         });
         self.redraw();
     }
 
+    /// Draw the menu on every page, not only the one reported as shown: the
+    /// game may page-flip through more buffers than the driver's offset
+    /// suggests, and the menu must be on whichever one is on screen.
     fn redraw(&mut self) {
         let Some(open) = self.open.as_ref() else {
             return;
         };
-        let frame = self.faces.compose(&open.game, &open.menu);
-        self.screen.draw_on(open.page, &frame);
+        let frame = self.faces.compose(&open.saved[open.shown], &open.menu);
+        for page in 0..open.saved.len() {
+            self.screen.draw_on(page as u32, &frame);
+        }
     }
 
     /// Put the game's own picture back and do what was chosen.
@@ -403,7 +449,9 @@ impl<G: Game, S: Screen> Overlay<G, S> {
         let Some(open) = self.open.take() else {
             return;
         };
-        self.screen.draw_on(open.page, &open.game);
+        for (page, saved) in open.saved.iter().enumerate() {
+            self.screen.draw_on(page as u32, saved);
+        }
         match action {
             Action::Resume => self.game.resume(),
             Action::Save => {
@@ -681,7 +729,9 @@ pub fn run(paths: &Paths, fb: &Path, input: &Path) {
             overlay.handle(ev, clock.elapsed().as_millis() as Millis);
         }
         overlay.tick(clock.elapsed().as_millis() as Millis);
+        buttons.grab(overlay.wants_grab());
     }
+    buttons.grab(false);
     if overlay.is_open() {
         overlay.game.resume();
     }

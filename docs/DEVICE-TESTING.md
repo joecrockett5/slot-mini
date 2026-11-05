@@ -129,7 +129,9 @@ launcher, the fix is in section 9.
 - [ ] **MENU is still slot-mini's About screen** in boot-launcher mode (not
       Onion's Game Switcher). Same for SELECT and Y.
 - [ ] Tap A on a game, play, quit: you come straight back to slot-mini on the
-      same cart, with the cart rising out of the slot.
+      same cart, with the cart rising out of the slot and the eject sound
+      (the screen is black for a moment first while RetroArch saves and
+      slot-mini starts).
 - [ ] Onion's "resume last game at boot" still works: start a game, power off
       from inside it, power on.
 - [ ] Hold **L2** while slot-mini is about to start (e.g. while quitting a
@@ -172,6 +174,10 @@ Start a game from slot-mini (app mode is fine).
       immediately. Note roughly how long it takes compared with Onion's menu.
 - [ ] The game's sound stops while the menu is up (no buzz or loop).
 - [ ] The menu stays put: the game does not flicker through it.
+- [ ] Open and close the menu ten times in a row, in a couple of games: it
+      shows every time (0.2.0 sometimes left it invisible).
+- [ ] Resume with A, then Save State with A: the game does not see an A
+      press (0.2.0 passed it through). POWER in the menu resumes the game.
 - [ ] B (or MENU again) resumes exactly where you were.
 - [ ] Save State, then later Load State: RetroArch shows its own "saved" or
       "loaded" message, and the load returns to the saved moment.

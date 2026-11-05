@@ -73,7 +73,11 @@ pub fn parse(buf: &mut Vec<u8>, size: usize) -> Vec<Event> {
 pub struct Evdev {
     file: File,
     buf: Vec<u8>,
+    grabbed: bool,
 }
+
+/// `EVIOCGRAB`: `_IOW('E', 0x90, int)`.
+const EVIOCGRAB: libc::c_ulong = 0x4004_4590;
 
 impl Evdev {
     pub fn open(path: &Path) -> std::io::Result<Evdev> {
@@ -87,7 +91,25 @@ impl Evdev {
         Ok(Evdev {
             file,
             buf: Vec::new(),
+            grabbed: false,
         })
+    }
+
+    /// Take the device for ourselves, or give it back. While grabbed, no
+    /// other reader (the game, Onion's keymon) sees any button. Onion's keymon
+    /// grabs the same way. Does nothing if already in that state.
+    pub fn grab(&mut self, on: bool) {
+        if on == self.grabbed {
+            return;
+        }
+        // SAFETY: EVIOCGRAB takes an int by value. A regular file (tests)
+        // cannot be grabbed; the call fails harmlessly there.
+        unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as _, on as libc::c_int) };
+        self.grabbed = on;
+    }
+
+    pub fn grabbed(&self) -> bool {
+        self.grabbed
     }
 
     /// Wait up to `timeout_ms` for input (negative waits forever), then
