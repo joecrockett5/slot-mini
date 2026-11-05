@@ -326,6 +326,8 @@ fn main() {
     }
     // Leave the screen on the framebuffer page Onion's programs expect.
     out.close(&frame);
+    // A sound player kept ready must not outlive slot-mini.
+    app.close_sound();
     if let Some(p) = &a.shot {
         if let Err(e) = slot_mini_gfx::save_png(&frame, p) {
             eprintln!("slot-mini: {}: {e}", p.display());

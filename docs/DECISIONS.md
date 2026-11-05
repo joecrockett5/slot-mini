@@ -187,3 +187,13 @@ Calls made without asking, and why. Newest last.
     the minute and the battery is read every 2 s; a press still wakes the
     loop at once. Held buttons come from the kernel's key state, so a lost
     release can never keep the loop at 60 fps.
+47. **MENU hotkeys belong to Onion and RetroArch** (0.4.7, the maintainer's
+    request). Any other button with MENU, in any order, makes it a
+    combination; the hold (eject) is decided on release, so a hotkey after
+    a long MENU press never ejects. The price: the eject now happens when
+    MENU is let go, not at 0.7 s.
+48. **Sounds on slot's timing, from a player kept ready** (0.4.7). Without
+    a warm player Onion's `ffplay` spends its start-up loading libraries,
+    which put the clip well after the moment it belongs to. A parked player
+    costs a few megabytes of memory and no CPU, and is only kept while
+    sounds are on.

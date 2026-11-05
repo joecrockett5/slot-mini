@@ -162,12 +162,45 @@ fn holding_menu_ejects_without_opening_the_menu() {
     let mut o = overlay(&log, dir.path());
     o.handle(Event::Press(Button::Menu), 0);
     o.tick(500);
-    assert!(log.take().is_empty());
-    o.tick(700);
-    assert_eq!(log.take(), vec!["quit"]);
+    o.tick(900);
+    assert!(log.take().is_empty(), "decided on release, not while held");
     o.handle(Event::Release(Button::Menu), 900);
+    assert_eq!(log.take(), vec!["quit"]);
     assert!(!o.is_open());
+    o.handle(Event::Press(Button::Menu), 1000);
+    o.handle(Event::Release(Button::Menu), 1100);
     assert!(log.take().is_empty(), "nothing more once quitting");
+}
+
+/// RetroArch's and Onion's MENU hotkeys: MENU held (even for a while) with
+/// another button, in either order, neither opens the menu nor ejects.
+#[test]
+fn menu_hotkeys_never_open_the_menu_or_eject() {
+    let log = Log::default();
+    let dir = tempfile::tempdir().unwrap();
+    let mut o = overlay(&log, dir.path());
+    // MENU held a second and a half, then R2 (save state).
+    o.handle(Event::Press(Button::Menu), 0);
+    o.tick(1000);
+    o.handle(Event::Press(Button::R2), 1500);
+    o.handle(Event::Release(Button::R2), 1600);
+    o.handle(Event::Release(Button::Menu), 1700);
+    // L1 a moment before MENU (pressed "together").
+    o.handle(Event::Press(Button::L1), 2000);
+    o.handle(Event::Press(Button::Menu), 2010);
+    o.handle(Event::Release(Button::L1), 2100);
+    o.handle(Event::Release(Button::Menu), 2110);
+    // MENU + POWER (screenshot).
+    o.handle(Event::Press(Button::Menu), 3000);
+    o.handle(Event::Press(Button::Power), 3050);
+    o.handle(Event::Release(Button::Power), 3100);
+    o.handle(Event::Release(Button::Menu), 3150);
+    assert!(!o.is_open());
+    assert!(log.take().is_empty(), "the game was left alone");
+    // A plain tap still opens the menu.
+    o.handle(Event::Press(Button::Menu), 4000);
+    o.handle(Event::Release(Button::Menu), 4100);
+    assert!(o.is_open());
 }
 
 #[test]

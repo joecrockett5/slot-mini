@@ -286,3 +286,38 @@ fn menu_shows_the_cpu_state() {
     );
     golden("about_cpu", &frame);
 }
+
+/// slot's timing: the insert's click lands as the cart seats, so the clip
+/// starts its lead before then, not when the cart starts moving.
+#[test]
+fn the_insert_sound_lands_as_the_cart_seats() {
+    let rig = Rig::new();
+    let played = Arc::new(Mutex::new(Vec::new()));
+    let opts = Options {
+        sound: Some(Box::new(Recorder(played.clone()))),
+        face_wait: None,
+        seed: 1,
+    };
+    let status = FixedStatus {
+        battery: None,
+        wifi: false,
+        clock: (0, 0),
+        charging: false,
+    };
+    let mut app = App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
+    app.tick(0);
+    app.render(&mut frame);
+    app.handle(slot_mini_gfx::Event::Press(Button::A));
+    app.tick(16);
+    app.handle(slot_mini_gfx::Event::Release(Button::A));
+    let start = 16;
+    let lead = Clip::Insert.lead();
+    let due = start + ((slot_mini::app::SEATED_AT - lead) * 1000.0).ceil() as u64;
+    app.tick(due - 20);
+    assert!(played.lock().unwrap().is_empty(), "not yet");
+    app.tick(due + 1);
+    assert_eq!(*played.lock().unwrap(), vec![Clip::Insert]);
+    app.tick(due + 100);
+    assert_eq!(played.lock().unwrap().len(), 1, "once");
+}

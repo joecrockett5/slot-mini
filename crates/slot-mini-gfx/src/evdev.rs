@@ -12,22 +12,24 @@ const EV_KEY: u16 = 1;
 
 /// Onion's hardware key map: Linux key code to button.
 pub const KEYMAP: &[(u16, Button)] = &[
-    (103, Button::Up),    // KEY_UP
-    (108, Button::Down),  // KEY_DOWN
-    (105, Button::Left),  // KEY_LEFT
-    (106, Button::Right), // KEY_RIGHT
-    (57, Button::A),      // KEY_SPACE
-    (29, Button::B),      // KEY_LEFTCTRL
-    (42, Button::X),      // KEY_LEFTSHIFT
-    (56, Button::Y),      // KEY_LEFTALT
-    (18, Button::L1),     // KEY_E
-    (20, Button::R1),     // KEY_T
-    (15, Button::L2),     // KEY_TAB
-    (14, Button::R2),     // KEY_BACKSPACE
-    (97, Button::Select), // KEY_RIGHTCTRL
-    (28, Button::Start),  // KEY_ENTER
-    (1, Button::Menu),    // KEY_ESC
-    (116, Button::Power), // KEY_POWER
+    (103, Button::Up),         // KEY_UP
+    (108, Button::Down),       // KEY_DOWN
+    (105, Button::Left),       // KEY_LEFT
+    (106, Button::Right),      // KEY_RIGHT
+    (57, Button::A),           // KEY_SPACE
+    (29, Button::B),           // KEY_LEFTCTRL
+    (42, Button::X),           // KEY_LEFTSHIFT
+    (56, Button::Y),           // KEY_LEFTALT
+    (18, Button::L1),          // KEY_E
+    (20, Button::R1),          // KEY_T
+    (15, Button::L2),          // KEY_TAB
+    (14, Button::R2),          // KEY_BACKSPACE
+    (97, Button::Select),      // KEY_RIGHTCTRL
+    (28, Button::Start),       // KEY_ENTER
+    (1, Button::Menu),         // KEY_ESC
+    (116, Button::Power),      // KEY_POWER
+    (115, Button::VolumeUp),   // KEY_VOLUMEUP
+    (114, Button::VolumeDown), // KEY_VOLUMEDOWN
 ];
 
 pub fn button(code: u16) -> Option<Button> {
@@ -83,6 +85,18 @@ const KEY_BYTES: usize = 0x2ff / 8 + 1;
 /// `EVIOCGKEY(len)`: `_IOC(_IOC_READ, 'E', 0x18, len)`.
 const EVIOCGKEY: libc::c_ulong = 0x8000_0000 | ((KEY_BYTES as libc::c_ulong) << 16) | 0x4518;
 
+/// The buttons in `KEYMAP` that are down in a key bitmap.
+pub fn buttons_down(bits: &[u8]) -> Vec<Button> {
+    KEYMAP
+        .iter()
+        .filter(|(code, _)| {
+            let c = *code as usize;
+            bits.get(c / 8).is_some_and(|b| b & (1 << (c % 8)) != 0)
+        })
+        .map(|(_, b)| *b)
+        .collect()
+}
+
 /// Whether any key in `KEYMAP` is down in a key bitmap.
 pub fn any_mapped_down(bits: &[u8]) -> bool {
     KEYMAP.iter().any(|(code, _)| {
@@ -122,6 +136,14 @@ impl Evdev {
 
     pub fn grabbed(&self) -> bool {
         self.grabbed
+    }
+
+    /// The buttons held right now, from the kernel's own key state.
+    pub fn down_buttons(&self) -> Option<Vec<Button>> {
+        let mut bits = [0u8; KEY_BYTES];
+        // SAFETY: EVIOCGKEY writes at most KEY_BYTES into `bits`.
+        let r = unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCGKEY as _, bits.as_mut_ptr()) };
+        (r >= 0).then(|| buttons_down(&bits))
     }
 
     /// Whether any button is held right now, from the kernel's own key
@@ -223,10 +245,12 @@ mod tests {
         // KEY_SPACE (57) is A.
         bits[57 / 8] |= 1 << (57 % 8);
         assert!(any_mapped_down(&bits));
-        // An unmapped key (KEY_VOLUMEUP, 115) does not count.
+        assert_eq!(buttons_down(&bits), vec![Button::A]);
+        // An unmapped key (KEY_F1, 59) does not count.
         let mut bits = [0u8; KEY_BYTES];
-        bits[115 / 8] |= 1 << (115 % 8);
+        bits[59 / 8] |= 1 << (59 % 8);
         assert!(!any_mapped_down(&bits));
+        assert!(buttons_down(&bits).is_empty());
         assert_eq!(EVIOCGKEY, 0x8060_4518);
     }
 

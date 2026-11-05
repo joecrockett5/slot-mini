@@ -392,6 +392,21 @@ Save and Load State worked on the device. Fixed:
 - Tests: `cpufreq.rs` (settle, leave alone, describe, own use), the key
   bitmap (`evdev.rs`), `menu_shows_the_cpu_state` (golden `about_cpu`).
 
+## 0.4.7: hotkeys, and sounds on time
+
+- In games: MENU with any other button (in any order, the volume keys
+  included, MENU held for any time) is a hotkey and is left alone; tap and
+  hold are decided when MENU is released. The helper refreshes which
+  buttons are down from the kernel (`Evdev::down_buttons`) before each
+  batch of events. Volume keys are mapped (`Button::VolumeUp/Down`).
+- Sounds: the insert clip plays at `SEATED_AT - lead` as slot does (it
+  played when the cart started moving). A player is kept ready on a FIFO
+  (`Player::warm`, `prepare`, `close`) so a clip starts at once; stopped
+  with its process group on exit or when sounds go off; leftovers cleared.
+- Tests: MENU gestures (`ingame.rs` unit and `menu_hotkeys_never_open_the_menu_or_eject`),
+  the key bitmap, the warm player (FIFO hand-over, close, stale players),
+  `the_insert_sound_lands_as_the_cart_seats`.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

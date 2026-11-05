@@ -37,47 +37,60 @@ pub enum Gesture {
     Hold,
 }
 
-/// Tells a tap of MENU from a hold, and ignores MENU used in a combination
-/// with another button (Onion's MENU shortcuts).
+/// Tells a tap of MENU from a hold, and leaves MENU alone whenever it is
+/// part of a combination (Onion's and RetroArch's MENU hotkeys: MENU + R2
+/// to save, MENU + L to rewind, ...): any other button down when MENU goes
+/// down, or pressed before it comes up, makes it a combination, whichever
+/// came first. Both gestures are decided when MENU is released, so holding
+/// MENU before pressing the rest of a hotkey never ejects the game.
 #[derive(Default, Debug)]
 pub struct MenuButton {
     down: Option<Millis>,
     combo: bool,
-    fired: bool,
+    /// Other buttons down now.
+    others: Vec<Button>,
 }
 
 impl MenuButton {
     pub fn feed(&mut self, ev: Event, now: Millis) -> Option<Gesture> {
         match ev {
             Event::Press(Button::Menu) => {
-                *self = MenuButton {
-                    down: Some(now),
-                    ..MenuButton::default()
-                };
+                self.down = Some(now);
+                self.combo = !self.others.is_empty();
                 None
             }
-            Event::Press(_) if self.down.is_some() => {
-                self.combo = true;
+            Event::Press(b) => {
+                if !self.others.contains(&b) {
+                    self.others.push(b);
+                }
+                if self.down.is_some() {
+                    self.combo = true;
+                }
                 None
             }
             Event::Release(Button::Menu) => {
-                let tap = self.down.is_some_and(|d| now.saturating_sub(d) < HOLD_MS)
-                    && !self.combo
-                    && !self.fired;
-                *self = MenuButton::default();
-                tap.then_some(Gesture::Tap)
+                let gesture = match self.down.take() {
+                    Some(_) if self.combo => None,
+                    Some(d) if now.saturating_sub(d) >= HOLD_MS => Some(Gesture::Hold),
+                    Some(_) => Some(Gesture::Tap),
+                    None => None,
+                };
+                self.combo = false;
+                gesture
             }
-            _ => None,
+            Event::Release(b) => {
+                self.others.retain(|o| *o != b);
+                None
+            }
+            Event::Quit => None,
         }
     }
 
-    pub fn tick(&mut self, now: Millis) -> Option<Gesture> {
-        let down = self.down?;
-        if self.combo || self.fired || now.saturating_sub(down) < HOLD_MS {
-            return None;
-        }
-        self.fired = true;
-        Some(Gesture::Hold)
+    /// Which other buttons are down, from the device itself where it can
+    /// say (so a release that went missing cannot make every MENU a
+    /// combination).
+    pub fn set_others(&mut self, down: Vec<Button>) {
+        self.others = down.into_iter().filter(|b| *b != Button::Menu).collect();
     }
 
     pub fn held(&self) -> bool {
@@ -357,9 +370,15 @@ impl<G: Game, S: Screen> Overlay<G, S> {
         self.open.is_some()
     }
 
-    /// Whether to wake soon (MENU is down and might become a hold).
+    /// Whether to wake soon. Gestures are decided on release, so nothing
+    /// waits on the clock.
     pub fn wants_tick(&self) -> bool {
-        self.button.held()
+        false
+    }
+
+    /// See `MenuButton::set_others`.
+    pub fn set_other_buttons(&mut self, down: Vec<Button>) {
+        self.button.set_others(down);
     }
 
     /// While the menu is up the buttons are the menu's alone (the helper
@@ -403,18 +422,18 @@ impl<G: Game, S: Screen> Overlay<G, S> {
             }
             return;
         }
-        if self.button.feed(ev, now) == Some(Gesture::Tap) {
-            self.open_menu();
+        match self.button.feed(ev, now) {
+            Some(Gesture::Tap) => self.open_menu(),
+            Some(Gesture::Hold) => {
+                // slot: hold MENU to eject.
+                self.quitting = true;
+                self.game.quit();
+            }
+            None => {}
         }
     }
 
-    pub fn tick(&mut self, now: Millis) {
-        if self.open.is_none() && !self.quitting && self.button.tick(now) == Some(Gesture::Hold) {
-            // slot: hold MENU to eject.
-            self.quitting = true;
-            self.game.quit();
-        }
-    }
+    pub fn tick(&mut self, _now: Millis) {}
 
     fn open_menu(&mut self) {
         self.game.pause();
@@ -725,7 +744,15 @@ pub fn run(paths: &Paths, fb: &Path, input: &Path) {
         } else {
             250
         };
-        for ev in buttons.wait(wait) {
+        let events = buttons.wait(wait);
+        if !events.is_empty() {
+            // What is down now, from the kernel (it already includes this
+            // batch); the batch is then applied on top, in order.
+            if let Some(down) = buttons.down_buttons() {
+                overlay.set_other_buttons(down);
+            }
+        }
+        for ev in events {
             overlay.handle(ev, clock.elapsed().as_millis() as Millis);
         }
         overlay.tick(clock.elapsed().as_millis() as Millis);
@@ -745,28 +772,46 @@ mod tests {
     #[test]
     fn tap_hold_and_combinations() {
         let mut b = MenuButton::default();
-        assert_eq!(b.feed(Event::Press(Button::Menu), 0), None);
-        assert_eq!(b.tick(300), None);
-        assert_eq!(
-            b.feed(Event::Release(Button::Menu), 350),
-            Some(Gesture::Tap)
-        );
+        let press = |b: &mut MenuButton, k, t| b.feed(Event::Press(k), t);
+        let release = |b: &mut MenuButton, k, t| b.feed(Event::Release(k), t);
+        assert_eq!(press(&mut b, Button::Menu, 0), None);
+        assert_eq!(release(&mut b, Button::Menu, 350), Some(Gesture::Tap));
 
-        b.feed(Event::Press(Button::Menu), 1000);
-        assert_eq!(b.tick(1699), None);
-        assert_eq!(b.tick(1700), Some(Gesture::Hold));
-        assert_eq!(b.tick(1800), None, "a hold fires once");
-        assert_eq!(
-            b.feed(Event::Release(Button::Menu), 1900),
-            None,
-            "and is not also a tap"
-        );
+        // A hold is told on release, once.
+        press(&mut b, Button::Menu, 1000);
+        assert_eq!(release(&mut b, Button::Menu, 1700), Some(Gesture::Hold));
 
-        // MENU + Up (an Onion shortcut) is neither.
-        b.feed(Event::Press(Button::Menu), 3000);
-        b.feed(Event::Press(Button::Up), 3050);
-        assert_eq!(b.tick(4000), None);
-        assert_eq!(b.feed(Event::Release(Button::Menu), 4100), None);
+        // MENU + R2 (save state) is neither, held short or long.
+        press(&mut b, Button::Menu, 3000);
+        press(&mut b, Button::R2, 3050);
+        release(&mut b, Button::R2, 3100);
+        assert_eq!(release(&mut b, Button::Menu, 3150), None);
+        press(&mut b, Button::Menu, 4000);
+        press(&mut b, Button::R2, 5500);
+        assert_eq!(release(&mut b, Button::Menu, 5600), None, "no eject");
+        release(&mut b, Button::R2, 5700);
+
+        // The other button first (pressed together, a little early).
+        press(&mut b, Button::L1, 6000);
+        press(&mut b, Button::Menu, 6010);
+        release(&mut b, Button::L1, 6100);
+        assert_eq!(release(&mut b, Button::Menu, 6120), None);
+
+        // Volume keys count too.
+        press(&mut b, Button::Menu, 7000);
+        press(&mut b, Button::VolumeUp, 7050);
+        assert_eq!(release(&mut b, Button::Menu, 7100), None);
+        release(&mut b, Button::VolumeUp, 7150);
+
+        // And afterwards a plain tap is a tap again.
+        press(&mut b, Button::Menu, 8000);
+        assert_eq!(release(&mut b, Button::Menu, 8100), Some(Gesture::Tap));
+
+        // A release that went missing: the device's own key state wins.
+        press(&mut b, Button::X, 9000);
+        b.set_others(vec![Button::Menu]);
+        press(&mut b, Button::Menu, 9100);
+        assert_eq!(release(&mut b, Button::Menu, 9200), Some(Gesture::Tap));
     }
 
     #[test]

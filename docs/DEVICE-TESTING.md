@@ -108,7 +108,8 @@ Start **Apps -> slot-mini**.
       note it exactly, whether or not you heard anything. With Onion's
       logging on, `.tmp_update/logs/slot-mini.log` has the player's full
       output (`slot-mini: sound:` lines).
-- [ ] Insert a cart: slot's insert sound plays promptly.
+- [ ] Insert a cart: slot's insert sound's click lands as the cart seats in
+      the slot (0.4.7), not before or well after.
       Come back in boot-launcher mode later and check the eject sound.
       **Important:** the game's own sound works normally after an insert sound
       (the sound player must not hold the audio device). If it does not, turn
@@ -202,6 +203,11 @@ Start a game from slot-mini (app mode is fine).
       mode; via Onion's menu in app mode). Tap A resumes from that point.
 - [ ] MENU + another button (Onion's shortcuts, such as brightness) still
       does Onion's shortcut and does not open the menu.
+- [ ] RetroArch hotkeys (0.4.7): MENU + R2 saves, MENU + L2 loads, MENU + R
+      fast-forwards, MENU + L rewinds, MENU + SELECT opens RetroArch's menu.
+      None opens slot's menu or ejects, also when MENU is held a second or
+      two before the other button, or the other button is pressed first.
+- [ ] Hold MENU about a second and let go: the game ejects (on release).
 - [ ] After leaving the game, MENU in Onion's own menu works as before
       (opens Onion's Game Switcher).
 - [ ] A game started from Onion's own menu still has Onion's MENU.

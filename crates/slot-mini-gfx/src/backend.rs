@@ -23,6 +23,10 @@ pub enum Button {
     Start,
     Menu,
     Power,
+    /// The side volume keys: Onion handles them; slot-mini only notes them
+    /// (a MENU combination with one is not a MENU tap).
+    VolumeUp,
+    VolumeDown,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

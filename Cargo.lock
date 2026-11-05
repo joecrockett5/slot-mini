@@ -708,7 +708,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slot-mini"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "crc32fast",
  "image-webp",
@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "slot-mini-gfx"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "fontdue",
  "libc",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "slot-mini-store"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "libc",
  "tempfile",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "slot-mini-ui"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "fontdue",
  "png",
