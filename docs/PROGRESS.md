@@ -338,6 +338,19 @@ Save and Load State worked on the device. Fixed:
   tests now wait for its faces thread in real time instead of relying on
   slow frames.
 
+## 0.4.3: sound test and player diagnostics
+
+- Reported on the device: Sounds on, but no sound. slot has no menu sounds
+  (only insert, eject, and the label printer's buzz and tear), so only the
+  insert and eject clips are expected; the report is that they are silent.
+- Turning Sounds on in MENU plays the insert clip at once, as a test.
+- `ffplay` runs from `.tmp_update` (as Onion's video player app runs it)
+  with `-loglevel error` and its stderr in slot-mini's log; a waiter thread
+  per clip logs a failed exit. A missing player is logged.
+- Tests: `turning_sounds_on_plays_one`; the player test waits on its
+  waiters.
+- Next: read the log from the device and fix the cause.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

@@ -148,8 +148,11 @@ layout, either:
   (slot's own wood otherwise). Any size; it is scaled to cover and cropped.
 - **Theme:** copy `App/slot-mini/theme.txt.example` to `theme.txt` and edit: `appearance = light` for slot's
   light look, plus `footer_ink`, `heart_ink` and `wallpaper_tint`.
-- **Sounds:** slot's cartridge insert and eject sounds, **MENU -> Sounds**. Off by default: they are played
-  through Onion's `ffplay`, which has not been checked on a device yet.
+- **Sounds:** slot's cartridge insert and eject sounds, **MENU -> Sounds**. slot has no menu or scrolling
+  sounds; its only other effects belong to the label printer's animation, which slot-mini does not have. Off by
+  default: they are played through Onion's `ffplay`, which has not been confirmed on a device yet. Turning
+  Sounds on plays the insert sound at once, as a test; with Onion's logging on, the player's errors go to
+  `.tmp_update/logs/slot-mini.log`.
 
 ## Files slot-mini writes
 

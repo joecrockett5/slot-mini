@@ -154,3 +154,40 @@ fn hold_a_timing_matches_slot() {
         "a tap resumes"
     );
 }
+
+/// Turning Sounds on in MENU plays the insert clip at once (a quick test on
+/// the device); turning it off plays nothing.
+#[test]
+fn turning_sounds_on_plays_one() {
+    let rig = Rig::new();
+    let played = Arc::new(Mutex::new(Vec::new()));
+    let opts = Options {
+        sound: Some(Box::new(Recorder(played.clone()))),
+        face_wait: None,
+        seed: 1,
+    };
+    let status = FixedStatus {
+        battery: None,
+        wifi: false,
+        clock: (0, 0),
+        charging: false,
+    };
+    let mut app = App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
+    let mut tap = |app: &mut App, b: Button| {
+        app.handle(slot_mini_gfx::Event::Press(b));
+        app.handle(slot_mini_gfx::Event::Release(b));
+        app.tick(16);
+        app.render(&mut frame);
+    };
+    tap(&mut app, Button::Menu);
+    assert_eq!(app.phase, Phase::About);
+    // Sounds is the first row: Off -> On.
+    tap(&mut app, Button::A);
+    assert!(app.settings.sounds);
+    assert_eq!(*played.lock().unwrap(), vec![Clip::Insert]);
+    // On -> Off: silent.
+    tap(&mut app, Button::A);
+    assert!(!app.settings.sounds);
+    assert_eq!(played.lock().unwrap().len(), 1);
+}

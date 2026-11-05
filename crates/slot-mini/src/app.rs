@@ -579,7 +579,13 @@ impl App {
             self.phase = Phase::Shelf;
             return;
         };
-        match about.press(b, &mut self.settings, &self.paths, &mut self.updater) {
+        let sounds = self.settings.sounds;
+        let outcome = about.press(b, &mut self.settings, &self.paths, &mut self.updater);
+        // Turning sounds on plays one at once: a quick test on the device.
+        if self.settings.sounds && !sounds {
+            self.play(crate::sound::Clip::Insert);
+        }
+        match outcome {
             crate::about::Outcome::Stay => {}
             crate::about::Outcome::Close => {
                 if let Some(a) = self.about.take() {
