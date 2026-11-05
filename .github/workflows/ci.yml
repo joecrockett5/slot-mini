@@ -66,3 +66,25 @@ jobs:
         with:
           name: slot-mini-release
           path: dist/slot-mini-*.zip
+
+  release:
+    name: Publish release
+    # Only for pushes to main, and only once both builds and all tests pass.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [desktop, device]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: slot-mini-release
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release.sh

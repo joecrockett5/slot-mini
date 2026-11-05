@@ -20,7 +20,9 @@ Not affiliated with slot, Onion or Miyoo.
 
 ## Install
 
-1. Download `slot-mini-<version>.zip` from the latest CI run (Actions -> CI -> `slot-mini-release`).
+1. Download `slot-mini-<version>.zip` from the
+   [latest release](https://github.com/joecrockett5/slot-mini/releases/latest). Every push to `main` also
+   refreshes the **Latest main build** pre-release, for trying changes before the next version.
 2. Unzip it at the root of your Onion SD card, so that `App/slot-mini/` lands next to Onion's other apps.
    The zip contains that folder and nothing else.
 3. On the device: **Apps -> slot-mini**.
@@ -169,6 +171,16 @@ scripts/package.sh
 
 The device build is a static 32-bit ARM binary (Cortex-A7, NEON) linked with `rust-lld`;
 `scripts/package.sh` makes the release zip in `dist/`.
+
+### Releases
+
+CI publishes releases from `main` once both builds and all tests pass (`release` job in
+`.github/workflows/ci.yml`, script `scripts/release.sh`):
+
+- if `v<version>` from `Cargo.toml` has not been released, it becomes a release tagged at that commit;
+- otherwise the push replaces the rolling `main-latest` pre-release.
+
+To cut a new numbered release, bump `version` in the workspace `Cargo.toml` and merge to `main`.
 
 ## Testing
 
