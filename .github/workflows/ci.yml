@@ -1,8 +1,13 @@
 name: CI
 
+# Every push and pull request runs the desktop job (format, clippy, tests,
+# boot shim tests). The armv7 device build, its tests under qemu and the
+# release zip run only for pushes to main, which publish a release, or when
+# started by hand (Actions -> CI -> Run workflow) on any branch.
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -37,6 +42,9 @@ jobs:
 
   device:
     name: armv7 musl build
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

@@ -147,3 +147,8 @@ Calls made without asking, and why. Newest last.
     a second of the charger going in or out; reading a small file in memory
     every 2 seconds costs nothing. The gauge turns green while charging, as
     the maintainer asked; slot only shows the bolt.
+39. **The armv7 build runs only on `main`** (maintainer's choice). Pull
+    requests and branches get the desktop job (fmt, clippy, every test, the
+    shim tests); the slow cross build, qemu tests and zip run where a release
+    is published. An armv7-only failure therefore shows up after merging, and
+    stops that release; **Run workflow** runs the armv7 job on a branch first.

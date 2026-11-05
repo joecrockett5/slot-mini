@@ -286,6 +286,9 @@ Save and Load State worked on the device. Fixed:
   footer ink, as slot builds it) and the gauge's fill turns green
   (`CHARGING_FILL` in `battery.rs`, noted as a change in the copied file).
 - Tests: `status.rs` unit tests for the file, `shelf_charging` golden.
+- CI: the armv7 job (release build, qemu tests, zip) runs only for pushes to
+  `main` and manual runs; pull requests and other branches run the desktop
+  job.
 
 ## Open questions
 
