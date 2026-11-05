@@ -37,7 +37,9 @@ const SLOT_NAME_IN_MS: Millis = 200;
 const SLOT_NAME_HOLD_MS: Millis = 1200;
 const SLOT_NAME_OUT_MS: Millis = 800;
 /// slot: `BATTERY_POLL_MS`.
-const STATUS_POLL_MS: Millis = 10_000;
+/// Battery, charging and Wi-Fi are tiny files in memory; every two seconds
+/// keeps the charging bolt prompt.
+const STATUS_POLL_MS: Millis = 2_000;
 /// Shown when no GBA, GB or GBC games were found.
 const EMPTY_TEXT: &str = "No games in Roms/GBA, GBC or GB";
 /// An animation that starts with the next frame shown.
@@ -116,6 +118,8 @@ struct Faces {
     slot: [(TexId, TexId); 2],
     ground: Option<(TexId, u32)>,
     wifi: Option<(TexId, u32, u32)>,
+    /// slot's charging bolt, shown left of the battery while charging.
+    bolt: Option<TexId>,
 }
 
 #[derive(Default)]
@@ -148,6 +152,7 @@ pub struct App {
     a_held: Option<Millis>,
     status: Box<dyn Status>,
     battery: Option<u8>,
+    charging: bool,
     wifi: bool,
     polled: Option<Millis>,
     now: Millis,
@@ -213,6 +218,7 @@ impl App {
             a_held: None,
             status,
             battery: None,
+            charging: false,
             wifi: false,
             polled: None,
             now,
@@ -608,6 +614,7 @@ impl App {
         {
             self.polled = Some(now);
             self.battery = self.status.battery();
+            self.charging = self.status.charging();
             self.wifi = self.status.wifi();
         }
     }
@@ -911,13 +918,16 @@ impl App {
     fn draw_footer(&self, out: &mut Vec<Draw>) {
         let battery = self.battery.map(|percent| Battery {
             percent,
-            charge: Charge::Unknown,
+            charge: match self.charging {
+                true => Charge::Charging,
+                false => Charge::Unknown,
+            },
         });
         draw_footer(
             self.stage,
             battery,
             self.percent.printed,
-            None,
+            self.statics.bolt,
             self.clock.printed,
             self.theme.footer_ink,
             out,
@@ -980,6 +990,13 @@ impl Faces {
         let empty = (upload(gfx, &empty), empty.w, empty.h);
         let wifi = slot_mini_ui::wifi_face(3, theme.footer_ink);
         let wifi = Some((upload(gfx, &wifi), wifi.w, wifi.h));
+        // slot's charging bolt, in the footer's ink (slot: frontend.rs).
+        let bolt = slot_mini_ui::icon_face(
+            slot_mini_ui::Icon::Charging,
+            slot_mini_ui::BOLT_PX,
+            theme.footer_ink,
+        );
+        let bolt = Some(gfx.upload_rgba(bolt.w, bolt.h, &bolt.rgba));
         let ground = ground(paths, stage, seed).map(|s| {
             let w = s.w;
             (gfx.upload(s), w)
@@ -992,6 +1009,7 @@ impl Faces {
             slot,
             ground,
             wifi,
+            bolt,
         }
     }
 

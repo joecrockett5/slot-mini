@@ -51,7 +51,7 @@ slot-mini renders.
 | Heart | Pixel heart sticker on the label corner (`HEART_INK`). | Same. |
 | Slot | `slot_front_*.png` and `slot_back_*.png` bitmaps, dark and light. | Same bitmaps, cropped to the 640 canvas as slot does on 4:3 panels. |
 | Platform title | Platform name above the slot, fades out after switching. | Same timing. |
-| Footer | Battery gauge and percentage on the left, clock on the right, Wi-Fi icon after the battery, ink colour by theme. | Same layout; battery from `/tmp/percBat`, no charging bolt (see `PLATFORM.md`). |
+| Footer | Battery gauge and percentage on the left, clock on the right, Wi-Fi icon after the battery, ink colour by theme. | Same layout; battery from `/tmp/percBat`; slot's charging bolt from batmon's `/tmp/.axp_result` (see `PLATFORM.md`), plus a green fill while charging (slot-mini addition). |
 | Button legend | Menu screens show B/A legend plates in the footer. | Same, using slot's `buttonlegend_*.png` assets. |
 | Wallpaper | `Wallpapers/*.png` scaled to cover and centre-cropped; Random picks one at boot. | Random at boot from `Wallpapers/` in slot-mini's app folder or on the SD root; slot's `background_default.png` otherwise. Scaled once at start-up, not per frame. |
 | Theme | Dark or Light appearance (`settings.md`) stored in slot's `key = value` config format. | `theme.txt` in slot-mini's app folder, same `key = value` format (slot's `ini.rs` parser): `appearance = dark|light` plus optional colour overrides. |
@@ -82,8 +82,9 @@ with `scripts/parity.py <name> <slot png> <golden png>`.
 ![Shelf, label art](parity/shelf.png)
 
 slot-mini: `crates/slot-mini/tests/golden/shelf_real_label.png`. Same cart
-sizes and positions, slot chrome, footer and wallpaper. slot shows a charging
-bolt; slot-mini never does (see `PLATFORM.md`).
+sizes and positions, slot chrome, footer and wallpaper. Both show slot's charging
+bolt while charging; slot-mini also turns the gauge's fill green
+(`shelf_charging.png`).
 
 ### Shelf with a text label
 

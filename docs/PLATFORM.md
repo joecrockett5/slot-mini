@@ -174,10 +174,18 @@ as a decimal number to `/tmp/percBat` whenever it changes
 (`Onion:src/common/system/battery.h#L20-L53`). slot-mini reads the file at most
 once every 10 seconds and hides the gauge if it is missing or out of range.
 
-**Charging: confirmed but expensive.** On the Mini Plus charging is read by
-running `/customer/app/axp_test` and parsing its JSON (`battery.h#L72-L88`), or
-by `axp 0` in `runtime.sh`. Spawning a process every few seconds is not cheap
-on the launcher's hot path, so slot-mini does not show a charging bolt.
+**Charging: from batmon's copy of `axp_test` (0.3.2).** On the Mini Plus,
+Onion asks the PMIC by running `/customer/app/axp_test` and parsing its JSON
+(`battery.h`, `battery_isCharging`: `"charging":3` means charging). Spawning
+that every few seconds would be too costly for the launcher, but batmon already
+does it and saves the answer to `/tmp/.axp_result` (`batmon.c`,
+`getBatPercMMP`): at every battery check, and straight away when charging
+starts or stops (its loop runs every second). slot-mini reads that file with
+the battery, every 2 seconds, and shows slot's bolt and a green gauge while it
+says `"charging":3`. On the original Mini batmon writes the same file
+(`saveFakeAxpResult`), with `"charging":3` while charging. A full battery that
+is still plugged in is reported as not charging, so the bolt goes away at
+100%.
 
 ## Wi-Fi
 

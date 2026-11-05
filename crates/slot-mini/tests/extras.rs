@@ -86,6 +86,7 @@ fn insert_and_eject_play_slots_clips() {
         battery: None,
         wifi: false,
         clock: (0, 0),
+        charging: false,
     };
     let mut app = App::new(rig.paths.clone(), Box::new(status), opts, 0);
     let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
@@ -117,6 +118,7 @@ fn insert_and_eject_play_slots_clips() {
         battery: None,
         wifi: false,
         clock: (0, 0),
+        charging: false,
     };
     let mut again = App::new(rig.paths.clone(), Box::new(status), opts, 0);
     // The eject sound starts with the first frame shown, not at startup.

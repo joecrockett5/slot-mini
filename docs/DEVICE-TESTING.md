@@ -40,6 +40,8 @@ Start **Apps -> slot-mini**.
 - [ ] On a 752x560 panel: the 640x480 picture is centred with a black border.
 - [ ] The footer shows the battery percentage and the right time. If the time
       is off by hours, note the timezone set in Onion.
+- [ ] Plug the charger in: within a few seconds a bolt appears left of the
+      battery and its fill turns green. Unplug: both go back.
 - [ ] With Wi-Fi on and connected, a Wi-Fi icon appears after the battery.
 
 ## 2. App mode: buttons

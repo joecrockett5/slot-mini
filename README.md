@@ -245,7 +245,6 @@ Out of scope for now. The first few would be straightforward follow-ups:
 - **The label printer's print and tear animation**, and the studio cart's apply animation.
 - **The sticker curl** on the About screen.
 - **Per-shelf wallpapers** (`GB.png`, `GBA.png`, ... in slot).
-- Battery charging bolt (needs a cheap charging read on the Mini Plus).
 - Other Onion systems, the core picker, in-game features (save-state switcher, rewind and fast-forward
   bindings, shaders, bezels, colour grading), link play, the web companion and RomM belong to RetroArch or
   slot's own frontend and are not planned.

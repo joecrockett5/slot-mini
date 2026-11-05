@@ -81,6 +81,7 @@ fn main() {
             battery: Some(80),
             wifi: true,
             clock: (12, 0),
+            charging: false,
         };
         let opts = Options {
             sound: None,

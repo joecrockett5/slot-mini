@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/battery.rs
-// Changes: imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store)
+// Changes: imports point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage, slot_store -> slot_mini_store);
+//   while charging the fill is green (CHARGING_FILL), asked for by slot-mini's maintainer.
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use crate::power::{Battery, Charge};
@@ -10,6 +11,9 @@ use crate::footer::Printed;
 use crate::plate::HINT_H;
 
 pub const BOLT_PX: f32 = 18.0;
+
+/// The gauge's fill while charging (slot-mini addition).
+pub const CHARGING_FILL: [u8; 3] = [0x4c, 0xd9, 0x64];
 
 pub const GAUGE_W: f32 = 26.4;
 pub const GAUGE_H: f32 = 13.2;
@@ -59,13 +63,22 @@ pub fn draw_gauge(
     let inner = GAUGE_W - 4.0 * WALL;
     let fill = inner * f32::from(b.percent.min(100)) / 100.0;
     if fill > 0.0 {
-        rect(
-            cx + 2.0 * WALL,
-            y + 2.0 * WALL,
-            fill,
-            GAUGE_H - 4.0 * WALL,
-            out,
-        );
+        let colour = match b.charge {
+            Charge::Charging => [
+                CHARGING_FILL[0] as f32 / 255.0,
+                CHARGING_FILL[1] as f32 / 255.0,
+                CHARGING_FILL[2] as f32 / 255.0,
+                1.0,
+            ],
+            _ => colour,
+        };
+        out.push(Draw::Rect {
+            x: cx + 2.0 * WALL,
+            y: y + 2.0 * WALL,
+            w: fill,
+            h: GAUGE_H - 4.0 * WALL,
+            colour,
+        });
     }
 
     if let (Charge::Charging, Some(tex)) = (b.charge, bolt) {
