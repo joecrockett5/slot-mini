@@ -81,19 +81,25 @@ pub struct Player {
     program: PathBuf,
     args: Vec<String>,
     preload: Option<PathBuf>,
+    /// Where the player runs (Onion's video player runs it from
+    /// `.tmp_update`).
+    cwd: Option<PathBuf>,
     dir: PathBuf,
-    playing: Vec<Child>,
+    /// One waiter per clip: it reaps the player and logs a failure.
+    playing: Vec<std::thread::JoinHandle<()>>,
 }
 
 impl Player {
     /// Onion's ffplay through libpadsp.so, with clips cached in `dir`.
+    /// The player's own errors go to slot-mini's log (`-loglevel error`).
     pub fn onion(sd: &Path, dir: PathBuf) -> Player {
         Player {
             program: sd.join(".tmp_update/bin/ffplay"),
-            args: ["-nodisp", "-autoexit", "-loglevel", "quiet"]
+            args: ["-nodisp", "-autoexit", "-loglevel", "error"]
                 .map(String::from)
                 .to_vec(),
             preload: Some(sd.join("miyoo/lib/libpadsp.so")),
+            cwd: Some(sd.join(".tmp_update")),
             dir,
             playing: Vec::new(),
         }
@@ -104,6 +110,7 @@ impl Player {
             program,
             args,
             preload: None,
+            cwd: None,
             dir,
             playing: Vec::new(),
         }
@@ -122,9 +129,9 @@ impl Player {
 
 impl Sound for Player {
     fn play(&mut self, clip: Clip) {
-        self.playing
-            .retain_mut(|c| matches!(c.try_wait(), Ok(None)));
+        self.playing.retain(|w| !w.is_finished());
         if !self.program.is_file() {
+            eprintln!("slot-mini: sound: no player at {}", self.program.display());
             return;
         }
         let file = match self.file(clip) {
@@ -139,14 +146,30 @@ impl Sound for Player {
             .arg(&file)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            // The player's errors land in slot-mini's log.
+            .stderr(Stdio::inherit());
         if let Some(p) = self.preload.as_ref().filter(|p| p.is_file()) {
             cmd.env("LD_PRELOAD", p);
         }
+        if let Some(d) = self.cwd.as_ref().filter(|d| d.is_dir()) {
+            cmd.current_dir(d);
+        }
+        let name = clip.name();
         match cmd.spawn() {
-            Ok(child) => self.playing.push(child),
+            Ok(child) => self
+                .playing
+                .push(std::thread::spawn(move || reap(child, name))),
             Err(e) => eprintln!("slot-mini: sound: {}: {e}", self.program.display()),
         }
+    }
+}
+
+/// Wait for a player and log how it ended if it failed.
+fn reap(mut child: Child, name: &str) {
+    match child.wait() {
+        Ok(s) if s.success() => {}
+        Ok(s) => eprintln!("slot-mini: sound: the player failed on {name}: {s}"),
+        Err(e) => eprintln!("slot-mini: sound: {name}: {e}"),
     }
 }
 
@@ -185,8 +208,8 @@ mod tests {
         let mut p = Player::new(script, vec!["-q".into()], d.path().join("clips"));
         p.play(Clip::Insert);
         p.play(Clip::Eject);
-        for c in &mut p.playing {
-            c.wait().unwrap();
+        for w in p.playing.drain(..) {
+            w.join().unwrap();
         }
         let played = std::fs::read_to_string(&log).unwrap();
         assert!(

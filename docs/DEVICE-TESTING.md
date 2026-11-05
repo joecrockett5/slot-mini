@@ -100,7 +100,10 @@ Start **Apps -> slot-mini**.
 - [ ] Label Printer with the label service off says to use Cart Studio.
 - [ ] Copy a label made in Cart Studio to `Labels/GBA/<rom name>.png`; restart
       slot-mini: the cart shows it.
-- [ ] MENU -> Sounds: On. Insert a cart: slot's insert sound plays promptly.
+- [ ] MENU -> Sounds: On plays slot's insert sound at once (0.4.3). If it
+      is silent, copy `.tmp_update/logs/slot-mini.log` (with Onion's logging
+      on): any `slot-mini: sound:` line says why.
+- [ ] Insert a cart: slot's insert sound plays promptly.
       Come back in boot-launcher mode later and check the eject sound.
       **Important:** the game's own sound works normally after an insert sound
       (the sound player must not hold the audio device). If it does not, turn

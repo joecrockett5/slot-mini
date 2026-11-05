@@ -158,12 +158,21 @@ ones for sending frames, and `audioserver` holds the device anyway.
 A static musl binary cannot be preloaded, so slot-mini cannot open the
 emulated `/dev/dsp` itself. **Unresolved on hardware.** The simplest path that
 uses only what Onion ships is to spawn
-`/mnt/SDCARD/.tmp_update/bin/ffplay -nodisp -autoexit -loglevel quiet <clip>.wav`
-with `LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so` (Onion ships `ffplay` in
-`.tmp_update/bin/`). slot-mini does this for the insert and eject clips, but
+`/mnt/SDCARD/.tmp_update/bin/ffplay -nodisp -autoexit -loglevel error <clip>.wav`
+with `LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so` (Onion 4.3.1-1 ships
+`ffplay` in `.tmp_update/bin/`), from `.tmp_update` as Onion's own video
+player app runs it. slot-mini does this for the insert and eject clips, but
 it starts with sound **off** (`sounds = off` in its settings) until someone
 confirms on a device that it plays promptly and does not hold the audio
 device when RetroArch starts. See `DEVICE-TESTING.md`.
+
+**Reported on a device (0.4.2): no sound with Sounds on.** Not yet
+explained. Since 0.4.3, turning Sounds on plays the insert clip at once, and
+the player's errors (and a non-zero exit) are written to slot-mini's log, so
+the cause can be read off the device. Candidates: the preload or `ffplay`'s
+audio output not reaching `audioserver`; in app mode the insert clip racing
+slot-mini's exit and RetroArch's start; the eject clip only plays in
+boot-launcher mode.
 
 ## Battery and charging
 

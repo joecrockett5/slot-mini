@@ -6,7 +6,7 @@ members = ["crates/*"]
 edition = "2021"
 rust-version = "1.96"
 license = "GPL-3.0-or-later"
-version = "0.4.2"
+version = "0.4.3"
 
 [workspace.dependencies]
 fontdue = "0.9"
