@@ -148,3 +148,62 @@ fn wallpaper_theme_and_status() {
     d.run(2500);
     golden("shelf_light_wallpaper", &d.frame);
 }
+
+/// Jumping far along a shelf, or to another shelf, must not show carts as
+/// flat label colour while their faces are built (seen on the device). Uses
+/// the device's real wait, not the tests' unlimited one.
+#[test]
+fn big_jumps_never_flash_placeholders() {
+    use slot_mini::status::FixedStatus;
+    use slot_mini::{App, Options};
+    use slot_mini_gfx::{Canvas, Event, SCREEN_H, SCREEN_W};
+
+    let rig = Rig::new();
+    // A long shelf, so letter jumps land far from what was built.
+    let gba = rig.paths.sd.join("Roms/GBA");
+    for c in b'A'..=b'Z' {
+        for i in 0..6 {
+            std::fs::write(gba.join(format!("{} Game {i}.gba", c as char)), [0u8; 512]).unwrap();
+        }
+    }
+    let opts = Options {
+        sound: None,
+        face_wait: Some(slot_mini::app::FACE_WAIT),
+        seed: 1,
+    };
+    let status = FixedStatus {
+        battery: None,
+        wifi: false,
+        clock: (0, 0),
+    };
+    let mut app = App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
+    let mut now = 0;
+    let mut step = |app: &mut App, ev: Option<Event>| {
+        if let Some(ev) = ev {
+            app.handle(ev);
+        }
+        now += 16;
+        app.tick(now);
+        app.render(&mut frame);
+        assert_eq!(
+            app.placeholders_on_screen(),
+            0,
+            "a cart flashed its label colour at {now} ms"
+        );
+    };
+    step(&mut app, None);
+    for _ in 0..12 {
+        step(&mut app, Some(Event::Press(Button::Down)));
+        step(&mut app, Some(Event::Release(Button::Down)));
+    }
+    for b in [Button::R1, Button::R1, Button::L1, Button::L1, Button::L1] {
+        step(&mut app, Some(Event::Press(b)));
+        step(&mut app, Some(Event::Release(b)));
+    }
+    // Held scrolling at slot's fastest repeat.
+    step(&mut app, Some(Event::Press(Button::Right)));
+    for _ in 0..120 {
+        step(&mut app, None);
+    }
+}

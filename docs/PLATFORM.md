@@ -72,6 +72,13 @@ Onion's own display helper sets `yoffset` through `FBIOPUT_VSCREENINFO`
 `fb_var_screeninfo`. If the pan ioctl fails the backend falls back to drawing
 into the visible half (it may tear, but it shows).
 
+**Hand back page 0 on exit.** Onion's own programs assume the first page:
+`display_reset()` sets `yoffset = 0` after MainUI is killed, and the in-game
+Game Switcher overlay draws through Onion's SDL into page 0. Seen on a device
+with 0.1.0: leaving the panel on page 1 made MENU in a game show a black
+screen that still took input. slot-mini now copies its last frame to page 0
+and pans there before exiting.
+
 **Pixel format.** 32 bpp ARGB8888 little-endian (`0xAARRGGBB` in a `u32`), the
 format Onion's display helpers read and write directly as `uint32_t`. slot-mini
 writes alpha as `0xFF`.

@@ -40,6 +40,8 @@ const SLOT_NAME_OUT_MS: Millis = 800;
 const STATUS_POLL_MS: Millis = 10_000;
 /// Shown when no GBA, GB or GBC games were found.
 const EMPTY_TEXT: &str = "No games in Roms/GBA, GBC or GB";
+/// How long a frame waits for the faces it is about to show.
+pub const FACE_WAIT: Duration = Duration::from_millis(500);
 /// Faces kept decoded either side of the selected cart.
 const NEAR: i32 = 4;
 
@@ -78,9 +80,11 @@ pub struct Options {
     /// Where the insert and eject clips go. `None` picks Onion's player when
     /// `sounds = on`, silence otherwise.
     pub sound: Option<Box<dyn crate::sound::Sound>>,
-    /// How long a frame may wait for on-screen cart faces. `None` waits for
-    /// all of them (tests); the device waits a short while, then draws the
-    /// label colour in their place until they land.
+    /// How long a frame may wait for on-screen cart faces, as slot waits
+    /// (`FACES_WAIT_MS`). Every frame waits, so a jump far along the shelf or
+    /// to another shelf pauses briefly instead of flashing label-colour
+    /// placeholders. Only past the deadline does a cart show its label colour
+    /// until its face lands. `None` waits as long as it takes (tests).
     pub face_wait: Option<Duration>,
     /// Picks the random wallpaper.
     pub seed: u64,
@@ -90,7 +94,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             sound: None,
-            face_wait: Some(Duration::from_millis(250)),
+            face_wait: Some(FACE_WAIT),
             seed: 0,
         }
     }
@@ -663,6 +667,18 @@ impl App {
         self.now
     }
 
+    /// How many carts in view are still drawn as their label colour.
+    pub fn placeholders_on_screen(&self) -> usize {
+        self.shelf()
+            .map(|s| {
+                s.on_screen()
+                    .into_iter()
+                    .filter(|&i| s.face(i).is_none())
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
     // ---- faces ---------------------------------------------------------
 
     /// Ask for the faces near the selection, upload the finished ones, and
@@ -688,10 +704,6 @@ impl App {
             |s, i| shelves.get(s).and_then(|(_, sh)| sh.carts.get(i)),
             self.face_wait,
         );
-        if self.face_wait.is_some() {
-            // Only the first frame waits; after that faces pop in.
-            self.face_wait = Some(Duration::ZERO);
-        }
         for r in ready {
             let tex = self.gfx.upload(r.face.full);
             self.gfx.pin_scaled(tex, r.face.side);

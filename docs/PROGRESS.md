@@ -175,6 +175,26 @@ Nothing has run on a real Mini Plus. `DEVICE-TESTING.md` is the next step.
   interplay, the ffplay sound path, first-start time with many labels).
 - Roadmap items in the README.
 
+## 0.1.1 (first device feedback)
+
+Tested on a Mini Plus by the maintainer: it works. Two fixes:
+
+- MENU in a game (app mode) showed a black screen with the Game Switcher
+  invisible but working. slot-mini now hands the framebuffer back on page 0
+  when it exits (`Fbdev::hand_back`), where Onion's programs draw.
+- Big jumps (letter skips, shelf switches) flashed every cart as its label
+  colour. Every frame now waits up to 500 ms for the faces it shows, as slot
+  does. Regression test: `big_jumps_never_flash_placeholders` in
+  `tests/shelf.rs`. Under qemu-armv7: worst frame after a jump about 50 ms
+  (cold) / 34 ms (warm); held scrolling worst frame 30 ms cold, 13 ms warm.
+  Prefetching one more cart each side only shaved the scroll worst case to
+  22 ms and raised peak memory to 37 MB, so it stays at four.
+
+Also reported: in boot-launcher mode the in-game menu appears after a delay.
+That menu is Onion's Game Switcher, which pauses RetroArch and takes a
+screenshot first; it is not slot-mini's code. Worth comparing with Onion's
+own MainUI on the same game.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

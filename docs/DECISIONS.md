@@ -47,9 +47,10 @@ Calls made without asking, and why. Newest last.
     renderer draws whichever matches, and only moving carts use
     nearest-neighbour scaling. A smooth resize on the main thread cost ~94 ms
     per cart under qemu-armv7.
-14. **Only the first frame waits for cart faces** (up to 250 ms). After that,
-    a cart whose face is not ready shows slot's label-colour placeholder for a
-    frame or two instead of stalling the scroll.
+14. **Every frame waits for the cart faces it shows**, up to 500 ms, as
+    slot does. (0.1.0 waited only on the first frame; on the device, letter
+    jumps and shelf switches then flashed every cart as its label colour.)
+    A jump now pauses briefly (about 50 ms under qemu-armv7) instead.
 15. **Copied slot code is kept rustfmt-clean.** slot formats with default
     rustfmt; renaming `slot_store` to `slot_mini_store` makes a few lines
     too long, and rustfmt re-wraps them. Nothing else in copied code is
@@ -98,3 +99,8 @@ Calls made without asking, and why. Newest last.
 27. **With no original left, the shim runs slot-mini once more and then
     gives up** (exit 1), and Onion's loop tries again, rather than looping on
     `exec` inside one run.
+28. **On exit, the last frame is left on framebuffer page 0 and shown
+    there.** Onion's programs assume page 0 (`display_reset()` sets
+    `yoffset = 0`), and its in-game Game Switcher draws there. 0.1.0 exited
+    on whichever page its last frame used, which could leave the Game
+    Switcher drawing to a hidden page: a black screen that still took input.

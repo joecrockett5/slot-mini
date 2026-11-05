@@ -40,6 +40,8 @@ pub trait Backend {
     fn present(&mut self, frame: &Canvas);
     /// Events since the last call, oldest first. Never blocks.
     fn poll(&mut self) -> Vec<Event>;
+    /// Called once before the process exits, with the last frame shown.
+    fn close(&mut self, _last: &Canvas) {}
 }
 
 /// Encode a canvas as PNG.
@@ -151,6 +153,10 @@ impl Backend for Device {
 
     fn poll(&mut self) -> Vec<Event> {
         self.input.as_mut().map(|i| i.poll()).unwrap_or_default()
+    }
+
+    fn close(&mut self, last: &Canvas) {
+        self.fb.hand_back(last);
     }
 }
 

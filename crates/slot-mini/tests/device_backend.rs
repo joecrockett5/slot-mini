@@ -63,8 +63,8 @@ fn the_framebuffer_gets_the_same_frame_upside_down() {
         640 * 960 * 4,
         "the file keeps the framebuffer's size"
     );
-    // 120 frames alternate pages, so the last frame went to page 0 or 1;
-    // the first frame went to page 1. Take whichever page holds the shot.
+    // On exit the last frame is handed back on page 0, where Onion's own
+    // programs (the in-game Game Switcher) expect the screen to be.
     let decoder = png::Decoder::new(std::fs::File::open(&shot).unwrap());
     let mut reader = decoder.read_info().unwrap();
     let mut want = vec![0; reader.output_buffer_size()];
@@ -79,8 +79,5 @@ fn the_framebuffer_gets_the_same_frame_upside_down() {
         }
         rgba
     };
-    assert!(
-        page(0) == want || page(1) == want,
-        "neither framebuffer page matches the frame drawn"
-    );
+    assert!(page(0) == want, "page 0 does not hold the last frame");
 }
