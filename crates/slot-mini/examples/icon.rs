@@ -1,13 +1,20 @@
 //! Writes package/app/icon.png: a Game Boy cartridge drawn in the
 //! style of Onion's own app icons (flat colours, a dark line, a thick white
-//! outline), with a blank label. 128x128; Onion scales it down in its list.
+//! outline), with a blank label.
+//!
+//! Sized like Onion's default app icons (`static/build/Icons/Default/app/`
+//! in Onion's repo, e.g. `commander.png`): a 74x74 canvas holding about
+//! 60x65 of drawing, a 3.5 px white outline and a 2 px line inside it.
+//! Onion's Game Info screen shows icons at their own size, so a bigger
+//! canvas looks bigger than the rest.
 //!
 //!     cargo run --example icon -p slot-mini
 
 type Rgba = [f32; 4];
 
-const WHITE: Rgba = rgb(0xf2f6fa);
-const LINE: Rgba = rgb(0x231d4d);
+// The outline colours are Onion's.
+const WHITE: Rgba = rgb(0xf2f2f2);
+const LINE: Rgba = rgb(0x40396e);
 const BODY: Rgba = rgb(0x6c5ce7);
 const BODY_SHADE: Rgba = rgb(0x5446c8);
 const BODY_LIGHT: Rgba = rgb(0x8b7ff0);
@@ -65,10 +72,29 @@ fn over(dst: &mut Rgba, c: Rgba, a: f32) {
     dst[3] = a + dst[3] * (1.0 - a);
 }
 
+/// The canvas, as Onion's icons.
+const SIZE: u32 = 74;
+/// Output pixels per design unit. The cart is drawn on a 128-unit grid
+/// centred at (64, 64); its 96-unit height plus the outlines makes 62 px,
+/// which looks the same size as Onion's wider icons.
+const SCALE: f32 = 0.53;
+/// Onion's outline widths, in output pixels.
+const WHITE_W: f32 = 3.5;
+const LINE_W: f32 = 2.0;
+
+/// `p` in output pixels.
 fn pixel(p: (f32, f32)) -> Rgba {
-    // A Game Boy cartridge, the shape everyone knows: notched top-right
-    // corner, grip grooves along the top, a label, an arrow pointing in.
-    // Corners are rounded by `R`.
+    let c = SIZE as f32 / 2.0;
+    let q = ((p.0 - c) / SCALE + 64.0, (p.1 - c) / SCALE + 64.0);
+    // Distances below are in output pixels.
+    let sd = |v: &[(f32, f32)], round: f32| (polygon(q, v) - round) * SCALE;
+    design(q, sd)
+}
+
+/// A Game Boy cartridge, the shape everyone knows: notched top-right
+/// corner, grip grooves along the top, a label, an arrow pointing in.
+/// `p` is in design units; `sd` gives a shape's distance in output pixels.
+fn design(p: (f32, f32), sd: impl Fn(&[(f32, f32)], f32) -> f32) -> Rgba {
     const R: f32 = 4.0;
     let body = [
         (24.0, 20.0),
@@ -78,19 +104,19 @@ fn pixel(p: (f32, f32)) -> Rgba {
         (104.0, 108.0),
         (24.0, 108.0),
     ];
-    let d = polygon(p, &body) - R;
-    let recess = polygon(p, &rect(32.0, 47.0, 96.0, 90.0)) - 3.0;
-    let label = polygon(p, &rect(35.0, 50.0, 93.0, 87.0)) - 1.5;
-    let arrow = polygon(p, &[(57.0, 96.0), (71.0, 96.0), (64.0, 103.0)]) - 1.0;
+    let d = sd(&body, R);
+    let recess = sd(&rect(32.0, 47.0, 96.0, 90.0), 3.0);
+    let label = sd(&rect(35.0, 50.0, 93.0, 87.0), 1.5);
+    let arrow = sd(&[(57.0, 96.0), (71.0, 96.0), (64.0, 103.0)], 1.0);
 
     let mut out = [0.0; 4];
-    over(&mut out, WHITE, cover(d - 8.0));
-    over(&mut out, LINE, cover(d - 3.0));
+    over(&mut out, WHITE, cover(d - LINE_W - WHITE_W));
+    over(&mut out, LINE, cover(d - LINE_W));
     // Body: flat colour, lit along the top, darker along the bottom.
     let inside = cover(d);
     let fill = if p.1 > 105.0 {
         BODY_SHADE
-    } else if d > -4.0 && p.1 < 40.0 {
+    } else if d > -4.0 * SCALE && p.1 < 40.0 {
         BODY_LIGHT
     } else {
         BODY
@@ -98,12 +124,12 @@ fn pixel(p: (f32, f32)) -> Rgba {
     over(&mut out, fill, inside);
     // Grip grooves.
     for y in [32.0, 38.0] {
-        let g = polygon(p, &rect(32.0, y, 96.0, y + 1.0)) - 1.0;
+        let g = sd(&rect(32.0, y, 96.0, y + 1.0), 1.0);
         over(&mut out, RECESS, cover(g) * inside);
     }
     over(&mut out, RECESS, cover(arrow) * inside);
     over(&mut out, RECESS, cover(recess) * inside);
-    over(&mut out, LINE, cover(label - 1.5));
+    over(&mut out, LINE, cover(label - 1.0));
     // The label: blank, with a header band and a soft gloss stripe.
     let mut lab = LABEL;
     if p.1 < 59.0 {
@@ -119,7 +145,6 @@ fn pixel(p: (f32, f32)) -> Rgba {
 }
 
 fn main() {
-    const SIZE: u32 = 128;
     // 4x4 samples a pixel on top of the distance-based edges.
     const SS: u32 = 4;
     let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
