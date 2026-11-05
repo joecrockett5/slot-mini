@@ -78,6 +78,18 @@ pub struct Evdev {
 
 /// `EVIOCGRAB`: `_IOW('E', 0x90, int)`.
 const EVIOCGRAB: libc::c_ulong = 0x4004_4590;
+/// Bytes in the kernel's key bitmap (`KEY_MAX` 0x2ff, one bit per key).
+const KEY_BYTES: usize = 0x2ff / 8 + 1;
+/// `EVIOCGKEY(len)`: `_IOC(_IOC_READ, 'E', 0x18, len)`.
+const EVIOCGKEY: libc::c_ulong = 0x8000_0000 | ((KEY_BYTES as libc::c_ulong) << 16) | 0x4518;
+
+/// Whether any key in `KEYMAP` is down in a key bitmap.
+pub fn any_mapped_down(bits: &[u8]) -> bool {
+    KEYMAP.iter().any(|(code, _)| {
+        let c = *code as usize;
+        bits.get(c / 8).is_some_and(|b| b & (1 << (c % 8)) != 0)
+    })
+}
 
 impl Evdev {
     pub fn open(path: &Path) -> std::io::Result<Evdev> {
@@ -110,6 +122,16 @@ impl Evdev {
 
     pub fn grabbed(&self) -> bool {
         self.grabbed
+    }
+
+    /// Whether any button is held right now, from the kernel's own key
+    /// state (`EVIOCGKEY`), so a lost release can never leave a button
+    /// "held". `None` where the device cannot say (a regular file in tests).
+    pub fn any_down(&self) -> Option<bool> {
+        let mut bits = [0u8; KEY_BYTES];
+        // SAFETY: EVIOCGKEY writes at most KEY_BYTES into `bits`.
+        let r = unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCGKEY as _, bits.as_mut_ptr()) };
+        (r >= 0).then(|| any_mapped_down(&bits))
     }
 
     /// Wait up to `timeout_ms` for input (negative waits forever), then
@@ -192,6 +214,20 @@ mod tests {
             parse(&mut bytes, EVENT_SIZE_32),
             vec![Event::Press(Button::Select)]
         );
+    }
+
+    #[test]
+    fn held_keys_from_the_kernel_bitmap() {
+        let mut bits = [0u8; KEY_BYTES];
+        assert!(!any_mapped_down(&bits));
+        // KEY_SPACE (57) is A.
+        bits[57 / 8] |= 1 << (57 % 8);
+        assert!(any_mapped_down(&bits));
+        // An unmapped key (KEY_VOLUMEUP, 115) does not count.
+        let mut bits = [0u8; KEY_BYTES];
+        bits[115 / 8] |= 1 << (115 % 8);
+        assert!(!any_mapped_down(&bits));
+        assert_eq!(EVIOCGKEY, 0x8060_4518);
     }
 
     #[test]

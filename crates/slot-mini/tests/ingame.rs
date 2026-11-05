@@ -187,8 +187,17 @@ fn menu_shortcuts_with_other_buttons_are_left_alone() {
 /// A stand-in RetroArch: a real process to freeze and thaw, and a UDP
 /// listener on RetroArch's command port answering GET_STATUS.
 #[cfg(target_os = "linux")]
+/// RetroArch's command port is fixed (55355): the tests that listen on it
+/// or send to it take turns, or one hears the other's commands.
+static RETROARCH_PORT: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn port_turn() -> std::sync::MutexGuard<'static, ()> {
+    RETROARCH_PORT.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn retroarch_is_paused_frozen_and_thawed() {
+    let _turn = port_turn();
     use slot_mini::ingame::RetroArch;
     let Ok(sock) = std::net::UdpSocket::bind("127.0.0.1:55355") else {
         eprintln!("port 55355 busy; skipping");
@@ -270,6 +279,8 @@ fn the_helper_process_end_to_end() {
         // Under qemu-user, /proc shows qemu, not the emulated programs.
         return;
     }
+    // The helper sends to RetroArch's port.
+    let _turn = port_turn();
     let rig = common::Rig::new();
     let dir = rig.dir.path();
     // A "retroarch": sleep, renamed, so /proc/<pid>/comm says retroarch.

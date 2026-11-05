@@ -164,6 +164,8 @@ pub struct App {
     status: Box<dyn Status>,
     battery: Option<u8>,
     charging: bool,
+    /// The CPU's governor and clock and slot-mini's CPU use (MENU shows it).
+    cpu: Option<String>,
     wifi: bool,
     polled: Option<Millis>,
     now: Millis,
@@ -241,6 +243,7 @@ impl App {
             status,
             battery: None,
             charging: false,
+            cpu: None,
             wifi: false,
             polled: None,
             now,
@@ -584,7 +587,9 @@ impl App {
             s.release_hold();
         }
         self.a_held = None;
-        self.about = Some(crate::about::About::new(&self.paths));
+        let mut about = crate::about::About::new(&self.paths);
+        about.diag = self.cpu.clone();
+        self.about = Some(about);
         self.phase = Phase::About;
     }
 
@@ -746,6 +751,10 @@ impl App {
             self.polled = Some(now);
             self.battery = self.status.battery();
             self.charging = self.status.charging();
+            self.cpu = self.status.cpu();
+            if let Some(a) = self.about.as_mut() {
+                a.diag = self.cpu.clone();
+            }
             self.wifi = self.status.wifi();
         }
     }

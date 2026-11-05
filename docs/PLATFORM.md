@@ -188,6 +188,32 @@ audio output not reaching `audioserver`; in app mode the insert clip racing
 slot-mini's exit and RetroArch's start; the eject clip only plays in
 boot-launcher mode.
 
+## Power
+
+**Checked against Onion 4.3.1-1 (`keymon.c`, `system.h`, `runtime.sh`).**
+
+- **Screen off (short POWER).** keymon's `suspend_exec` grabs the buttons,
+  sends `SIGSTOP` to every user process except shells (slot-mini included),
+  mutes, turns the backlight and display off and sets the CPU governor to
+  `powersave` with the lowest minimum clock (`system_powersave_on`). It is
+  not a hardware sleep: the SoC, RAM and Wi-Fi stay powered. Unless
+  `/tmp/stay_awake` exists or Onion's sleep timer is 0, it shuts the
+  device down after the sleep timer. Nothing slot-mini does runs while the
+  screen is off; Wi-Fi left on is the largest drain then.
+- **The governor while the shelf is up.** The runtime sets `ondemand` after
+  every game. `cpuclock` (`/dev/mem` and `policy0/scaling_governor`), games
+  and the scrapers set `userspace` or `performance` meanwhile. As the boot
+  launcher slot-mini can run before anything has put it back; since 0.4.6 it
+  sets `ondemand` at start if it finds `performance` or `userspace`
+  (`cpufreq::settle`), and logs what it found.
+- **slot-mini when idle.** Unchanged frames are not drawn (0.4.2); after
+  half a second with no button held (read from the kernel with
+  `EVIOCGKEY`, 0.4.6) the loop waits on the button device, 100 ms at a time,
+  and after 5 s one second at a time. Measured on the device backend with a
+  file framebuffer: about 1 wake-up a second and no measurable CPU.
+- **Seeing it.** MENU's bottom line, when it has nothing else to show,
+  reads e.g. `CPU ondemand 408 MHz, slot-mini 0.2%` (0.4.6).
+
 ## Battery and charging
 
 **Battery level: confirmed.** `batmon` (started at boot) writes the percentage

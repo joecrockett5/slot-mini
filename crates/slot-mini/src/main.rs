@@ -180,12 +180,17 @@ fn backend(name: &str) -> Box<dyn Backend> {
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
-/// Unchanged frames (about half a second) before the loop starts sleeping.
-const IDLE_AFTER_FRAMES: u32 = 30;
+/// How long the screen must be unchanged (and no button held) before the
+/// loop starts sleeping on the button device.
+const IDLE_AFTER: Duration = Duration::from_millis(500);
 /// How long an idle loop sleeps on the button device. Anything that changes
-/// without a press (the clock, the battery, a face arriving) shows within
-/// this; a press wakes it at once.
+/// without a press (the battery, a face arriving) shows within this; a press
+/// wakes it at once.
 const IDLE_WAIT_MS: u32 = 100;
+/// After this long unchanged, wake once a second instead: the clock only
+/// changes by the minute and the battery is read every two seconds.
+const DEEP_IDLE_AFTER: Duration = Duration::from_secs(5);
+const DEEP_IDLE_WAIT_MS: u32 = 1000;
 
 extern "C" fn on_signal(_: libc::c_int) {
     STOP.store(true, Ordering::Release);
@@ -210,6 +215,18 @@ fn main() {
     // No game is running while slot-mini is: a helper left from the last one
     // (or its flag) would keep MENU away from Onion.
     slot_mini::ingame::clear_leftovers(&paths);
+    // Let the CPU slow down while the shelf idles (as Onion's runtime does
+    // after a game): a governor left at performance or userspace keeps it
+    // at full clock.
+    if a.backend == "device" && !a.sim {
+        let cpufreq = std::path::Path::new(slot_mini::cpufreq::CPUFREQ);
+        if let Some(was) = slot_mini::cpufreq::settle(cpufreq) {
+            eprintln!("slot-mini: CPU governor {was} -> ondemand");
+        }
+        if let Some(cpu) = slot_mini::cpufreq::describe(cpufreq) {
+            eprintln!("slot-mini: CPU {cpu}");
+        }
+    }
     if let Some(v) = slot_mini::update::after_restart(&paths) {
         eprintln!("slot-mini: now running {v}");
     }
@@ -249,12 +266,16 @@ fn main() {
     // button device instead of running at 60 fps: an idle shelf otherwise
     // keeps the CPU busy and the handheld warm.
     let pace = a.backend == "device" && !a.sim;
-    let mut still = 0u32;
+    let mut quiet_since = Instant::now();
     let mut held = 0usize;
     loop {
         let t = Instant::now();
-        let idle = pace && still >= IDLE_AFTER_FRAMES && held == 0;
+        let quiet = quiet_since.elapsed();
+        // Held buttons from the device itself where it can say: a counted
+        // press whose release went missing must not keep the loop at 60 fps.
+        let idle = pace && quiet >= IDLE_AFTER && !out.held().unwrap_or(held > 0);
         let mut events = match idle {
+            true if quiet >= DEEP_IDLE_AFTER => out.wait(DEEP_IDLE_WAIT_MS),
             true => out.wait(IDLE_WAIT_MS),
             false => out.poll(),
         };
@@ -269,7 +290,7 @@ fn main() {
             events.push(Event::Quit);
         }
         if !events.is_empty() {
-            still = 0;
+            quiet_since = Instant::now();
         }
         for ev in events {
             match ev {
@@ -283,9 +304,7 @@ fn main() {
         let changed = app.render(&mut frame);
         if changed || !pace || n == 0 {
             out.present(&frame);
-            still = 0;
-        } else {
-            still = still.saturating_add(1);
+            quiet_since = Instant::now();
         }
         if n == 0 {
             eprintln!(

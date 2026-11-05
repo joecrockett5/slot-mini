@@ -65,6 +65,9 @@ Start **Apps -> slot-mini**.
       no stutter when carts come to rest). Note any hitches.
 - [ ] With 100+ labels the first start after adding them is slower (labels are
       cached in `App/slot-mini/cache/labels/`); the second start is fast.
+- [ ] MENU's bottom line shows `CPU <governor> <MHz>, slot-mini <n>%` (0.4.6).
+      On an idle shelf expect `ondemand`, a low clock and well under 1%.
+      Note what it says if the handheld runs warm.
 - [ ] Leave slot-mini on the shelf for 10 minutes: the handheld stays cool
       and the battery barely moves. From a shell, `top` shows slot-mini near
       0% CPU while idle. Scrolling afterwards is as smooth as before, and

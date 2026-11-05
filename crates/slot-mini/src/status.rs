@@ -13,6 +13,11 @@ pub trait Status {
     fn charging(&mut self) -> bool {
         false
     }
+    /// The CPU's governor and clock and slot-mini's own CPU use, for MENU's
+    /// bottom line ("CPU ondemand 408 MHz, slot-mini 0.3%").
+    fn cpu(&mut self) -> Option<String> {
+        None
+    }
     /// Local wall-clock time as (hour, minute).
     fn clock(&mut self) -> (u32, u32);
 }
@@ -43,6 +48,7 @@ impl Status for FixedStatus {
 /// Onion's files: `/tmp/percBat`, `/tmp/.axp_result`, `system.json`'s
 /// `wifi`, `wlan0`'s state.
 pub struct OnionStatus {
+    cpu_use: crate::cpufreq::CpuUse,
     perc_bat: PathBuf,
     axp_result: PathBuf,
     system_json: PathBuf,
@@ -52,6 +58,7 @@ pub struct OnionStatus {
 impl OnionStatus {
     pub fn new(paths: &Paths) -> OnionStatus {
         OnionStatus {
+            cpu_use: crate::cpufreq::CpuUse::new(),
             perc_bat: paths.tmp.join("percBat"),
             axp_result: paths.tmp.join(".axp_result"),
             system_json: paths.sd.join("system.json"),
@@ -114,6 +121,17 @@ impl Status for OnionStatus {
 
     fn charging(&mut self) -> bool {
         std::fs::read_to_string(&self.axp_result).is_ok_and(|j| axp_charging(&j))
+    }
+
+    fn cpu(&mut self) -> Option<String> {
+        let clock = crate::cpufreq::describe(std::path::Path::new(crate::cpufreq::CPUFREQ));
+        let own = self.cpu_use.sample();
+        match (clock, own) {
+            (Some(c), Some(p)) => Some(format!("CPU {c}, slot-mini {p:.1}%")),
+            (Some(c), None) => Some(format!("CPU {c}")),
+            (None, Some(p)) => Some(format!("slot-mini CPU {p:.1}%")),
+            (None, None) => None,
+        }
     }
 }
 
