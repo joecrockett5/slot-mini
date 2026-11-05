@@ -307,6 +307,18 @@ Save and Load State worked on the device. Fixed:
   `tests/cores.rs` (the whole flow, cancel, Game Boy and missing cores, two
   goldens), the turned blit.
 
+## 0.4.1: the save goes with the game
+
+- When the core picker changes a game's core, `cores::carry_save` copies its
+  in-game save (`Saves/CurrentProfile/saves/<core>/<rom>.srm`) to the new
+  core, keeps a different save it replaces as `.bak_<time>`, and sets the new
+  core's auto state aside, as Onion's `transfer_mgba_save.sh` does. If the
+  save cannot be carried, the core is not changed.
+- Notices: "Save carried over to gpSP", or "Now runs on gpSP" when there was
+  no save to carry.
+- Tests: `cores.rs` (carry, backups, empty and missing saves), and the
+  picker carrying a save there and back (`tests/cores.rs`).
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

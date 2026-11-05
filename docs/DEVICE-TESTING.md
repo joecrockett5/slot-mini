@@ -219,12 +219,16 @@ none, install the previous release's zip by hand first.
 
 - [ ] START on a GBA game: the other carts dim, the cart opens and the chip
       sits on mGBA (or on the core Onion's Game List Options shows). Smooth?
-- [ ] Right, then A: the chip hops to gpSP, the cart closes, "gpSP keeps its
-      own saves" shows. Onion's Game List Options for that game says gpSP.
+- [ ] On a game with an in-game save made on mGBA: Right, then A. The chip
+      hops to gpSP, the cart closes, "Save carried over to gpSP" shows.
+      Onion's Game List Options for that game says gpSP.
 - [ ] Tap A on that game: it runs on gpSP (RetroArch's menu, Information,
-      Core Information), and has no mGBA save, as expected.
-- [ ] START, Left, A: back to mGBA; `Roms/GBA/.game_config/<game>.cfg` is gone
-      and the game has its mGBA save again.
+      Core Information) and starts from the title screen, and Continue loads
+      the same save as on mGBA.
+- [ ] Save in the game on gpSP, quit. START, Left, A: back to mGBA, "Save
+      carried over to mGBA"; `Roms/GBA/.game_config/<game>.cfg` is gone and
+      the game has the newer save. `Saves/CurrentProfile/saves/mGBA/` holds
+      the older one as `<game>.srm.bak_<time>`.
 - [ ] START, Right, B: nothing changes.
 - [ ] START on a GB or GBC game does nothing.
 

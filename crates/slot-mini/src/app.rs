@@ -529,19 +529,33 @@ impl App {
         };
         let cart = scene.cart().clone();
         let before = crate::cores::chosen(&self.paths, &cart);
-        match crate::cores::choose(&self.paths, &cart, core) {
-            // Onion keeps saves and states per core: say so on a change.
-            Ok(()) if core != before => {
-                self.notice = Some(format!("{} keeps its own saves", core.text()));
-                self.shelf_named = Some(now);
-            }
-            Ok(()) => {}
-            Err(e) => {
+        if core == before {
+            // Written anyway: a stray per-game file for the default goes.
+            if let Err(e) = crate::cores::choose(&self.paths, &cart, core) {
                 eprintln!("slot-mini: core: {e}");
-                self.notice = Some("Could not save the core".into());
-                self.shelf_named = Some(now);
             }
+            return;
         }
+        // The save first: if it cannot be carried, the core stays as it was.
+        use crate::cores::Carried;
+        let notice = match crate::cores::carry_save(&self.paths, &cart, before, core) {
+            Err(e) => {
+                eprintln!("slot-mini: core: carrying the save: {e}");
+                "Save not carried over: core unchanged".to_string()
+            }
+            Ok(carried) => match crate::cores::choose(&self.paths, &cart, core) {
+                Err(e) => {
+                    eprintln!("slot-mini: core: {e}");
+                    "Could not save the core".to_string()
+                }
+                Ok(()) if carried == Carried::Copied => {
+                    format!("Save carried over to {}", core.text())
+                }
+                Ok(()) => format!("Now runs on {}", core.text()),
+            },
+        };
+        self.notice = Some(notice);
+        self.shelf_named = Some(now);
     }
 
     fn open_about(&mut self) {
