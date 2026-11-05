@@ -156,7 +156,12 @@ pub struct App {
     wifi: bool,
     polled: Option<Millis>,
     now: Millis,
+    /// The last frame's draw list, the buffer the next one is built in, and
+    /// which canvas (its pixels' address and size) was last drawn with which
+    /// texture generation: together they tell an unchanged frame.
     draws: Vec<Draw>,
+    spare: Vec<Draw>,
+    drawn: Option<((usize, u32, u32), u64)>,
     pub studio: Option<crate::studio_ui::StudioUi>,
     pub about: Option<crate::about::About>,
     sound: Box<dyn crate::sound::Sound>,
@@ -227,6 +232,8 @@ impl App {
             polled: None,
             now,
             draws: Vec::new(),
+            spare: Vec::new(),
+            drawn: None,
             studio: None,
             about: None,
             sound,
@@ -904,10 +911,15 @@ impl App {
     // ---- drawing -------------------------------------------------------
 
     /// Bring faces and text up to date and draw the frame.
-    pub fn render(&mut self, canvas: &mut Canvas) {
+    /// Build this frame's draw list and draw it into `canvas`. Returns
+    /// whether the canvas changed: a frame whose draw list and textures are
+    /// the same as the last one drawn into this canvas is not drawn again,
+    /// so an idle shelf costs almost nothing (and the caller need not show
+    /// it).
+    pub fn render(&mut self, canvas: &mut Canvas) -> bool {
         self.sync_faces();
         self.sync_text();
-        let mut out = std::mem::take(&mut self.draws);
+        let mut out = std::mem::take(&mut self.spare);
         out.clear();
         match (self.studio.as_mut(), self.about.as_mut()) {
             (Some(ui), _) if self.phase == Phase::Studio => {
@@ -923,15 +935,21 @@ impl App {
             ),
             _ => self.draw(&mut out),
         }
-        canvas.clear(0);
-        self.gfx.render(&out, canvas);
-        self.draws = out;
+        let target = (canvas.px.as_ptr() as usize, canvas.w, canvas.h);
+        let same = out == self.draws && self.drawn == Some((target, self.gfx.generation()));
+        if !same {
+            canvas.clear(0);
+            self.gfx.render(&out, canvas);
+            self.drawn = Some((target, self.gfx.generation()));
+        }
+        self.spare = std::mem::replace(&mut self.draws, out);
         if let Phase::Ejecting { at, .. } = &mut self.phase {
             if *at == NOT_STARTED {
                 *at = self.now;
                 self.play(crate::sound::Clip::Eject);
             }
         }
+        !same
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {

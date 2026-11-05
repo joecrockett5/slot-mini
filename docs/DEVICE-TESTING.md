@@ -65,6 +65,10 @@ Start **Apps -> slot-mini**.
       no stutter when carts come to rest). Note any hitches.
 - [ ] With 100+ labels the first start after adding them is slower (labels are
       cached in `App/slot-mini/cache/labels/`); the second start is fast.
+- [ ] Leave slot-mini on the shelf for 10 minutes: the handheld stays cool
+      and the battery barely moves. From a shell, `top` shows slot-mini near
+      0% CPU while idle. Scrolling afterwards is as smooth as before, and
+      the clock still changes on the minute.
 - [ ] Check memory while scrolling: from a shell (Onion's terminal or SSH),
       `grep VmHWM /proc/$(pidof slot-mini)/status`. Budget: under 40 MB.
 

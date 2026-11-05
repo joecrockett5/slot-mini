@@ -148,6 +148,9 @@ pub struct Renderer {
     /// Pre-scaled copies of a texture, drawn when a draw asks for about
     /// their size. Built off the main thread by whoever made the texture.
     pinned: HashMap<usize, Vec<Sprite>>,
+    /// Bumped by every change to any texture, so a caller can tell that the
+    /// same draw list would now look different.
+    generation: u64,
 }
 
 impl Renderer {
@@ -155,7 +158,13 @@ impl Renderer {
         Renderer::default()
     }
 
+    /// Changes whenever any texture is uploaded, replaced, pinned or freed.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     pub fn upload(&mut self, sprite: Sprite) -> TexId {
+        self.generation += 1;
         match self.free.pop() {
             Some(i) => {
                 self.textures[i] = Some(sprite);
@@ -174,6 +183,7 @@ impl Renderer {
 
     /// Replace a texture's pixels, keeping its id. Pinned copies are dropped.
     pub fn replace(&mut self, id: TexId, sprite: Sprite) {
+        self.generation += 1;
         if let Some(slot) = self.textures.get_mut(id.0) {
             *slot = Some(sprite);
         }
@@ -182,12 +192,14 @@ impl Renderer {
 
     /// Attach a pre-scaled copy of `id`, used for draws of about its size.
     pub fn pin_scaled(&mut self, id: TexId, sprite: Sprite) {
+        self.generation += 1;
         if self.get(id).is_some() {
             self.pinned.entry(id.0).or_default().push(sprite);
         }
     }
 
     pub fn free(&mut self, id: TexId) {
+        self.generation += 1;
         if let Some(slot) = self.textures.get_mut(id.0) {
             if slot.take().is_some() {
                 self.free.push(id.0);
