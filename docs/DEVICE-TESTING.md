@@ -194,6 +194,25 @@ Start a game from slot-mini (app mode is fine).
 - [ ] MENU -> In-game menu: Off in slot-mini gives MENU back to Onion in
       games launched from slot-mini.
 
+## 11. Updates over Wi-Fi (0.3.0)
+
+Needs a numbered release newer than the version on the card. If there is
+none, install the previous release's zip by hand first.
+
+- [ ] Wi-Fi off: MENU -> Check for updates says "No connection. Is Wi-Fi on?"
+- [ ] Wi-Fi on: it says "Up to date" or offers "Install update x.y.z" within
+      a few seconds.
+- [ ] Install: "Downloading" counts up, then "Installing", then "Updated.
+      Restarting", and slot-mini comes back on its own showing the new version
+      in MENU. Note how long it took.
+- [ ] Settings, favourites and the cart you were on are unchanged.
+      `App/slot-mini/update/previous/` holds the old binary.
+- [ ] Do the same in boot-launcher mode. Afterwards power off and on:
+      slot-mini still starts, and `.tmp_update/bin/MainUI-*` still start with
+      `# slot-mini boot shim`.
+- [ ] If the device clock is far off (e.g. year 2000), the check says the
+      clock is wrong instead of failing silently.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

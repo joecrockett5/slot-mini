@@ -10,3 +10,6 @@ label_service = off
 
 # Clock: 24h or 12h
 clock = 24h
+
+# Where MENU -> Check for updates looks for releases (GitHub owner/repo).
+# update_repo = joecrockett5/slot-mini

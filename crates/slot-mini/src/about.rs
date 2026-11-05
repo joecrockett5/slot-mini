@@ -8,12 +8,14 @@ use slot_mini_ui::{draw_backdrop, hint_face, title_line_face, word_ink, FOOTER_Y
 
 use crate::paths::Paths;
 use crate::settings::Settings;
+use crate::update::{Status, Updater};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Row {
     Sounds,
     IngameMenu,
     BootLauncher,
+    Update,
     ExitToOnion,
 }
 
@@ -48,6 +50,7 @@ impl About {
                 Row::Sounds,
                 Row::IngameMenu,
                 Row::BootLauncher,
+                Row::Update,
                 Row::ExitToOnion,
             ],
             launcher: crate::switch::installed(paths),
@@ -60,8 +63,18 @@ impl About {
         &self.rows
     }
 
-    pub fn press(&mut self, b: Button, settings: &mut Settings, paths: &Paths) -> Outcome {
+    pub fn press(
+        &mut self,
+        b: Button,
+        settings: &mut Settings,
+        paths: &Paths,
+        updater: &mut Updater,
+    ) -> Outcome {
         let n = self.rows.len();
+        // Leaving mid-install would hide the restart that follows it.
+        if updater.busy() && matches!(b, Button::B | Button::Menu) {
+            return Outcome::Stay;
+        }
         match b {
             Button::Up => self.row = (self.row + n - 1) % n,
             Button::Down => self.row = (self.row + 1) % n,
@@ -93,6 +106,11 @@ impl About {
                     });
                     self.launcher = crate::switch::installed(paths);
                 }
+                Row::Update if b == Button::A => {
+                    self.note = None;
+                    updater.press(paths, &settings.update_repo);
+                }
+                Row::Update => {}
                 Row::ExitToOnion if b == Button::A => return Outcome::ExitToOnion,
                 Row::ExitToOnion => {}
             },
@@ -121,9 +139,18 @@ impl About {
         }
     }
 
-    fn label(&self, row: Row, settings: &Settings) -> String {
+    fn label(&self, row: Row, settings: &Settings, update: &Status) -> String {
         let on = |b: bool| if b { "On" } else { "Off" };
         match row {
+            Row::Update => match update {
+                Status::Idle | Status::Failed(_) => "Check for updates".into(),
+                Status::Checking => "Checking for updates...".into(),
+                Status::UpToDate => "Up to date".into(),
+                Status::Available(r) => format!("Install update {}", r.version),
+                Status::Downloading { percent, .. } => format!("Downloading {percent}%"),
+                Status::Installing(_) => "Installing...".into(),
+                Status::Installed(_) => "Updated. Restarting...".into(),
+            },
             Row::Sounds => format!("Sounds: {}", on(settings.sounds)),
             Row::IngameMenu => format!("In-game menu: {}", on(settings.ingame_menu)),
             Row::BootLauncher => format!("Boot launcher: {}", on(self.launcher)),
@@ -136,6 +163,7 @@ impl About {
         stage: Stage,
         ground: Option<(TexId, u32)>,
         settings: &Settings,
+        update: &Status,
         gfx: &mut Renderer,
         out: &mut Vec<Draw>,
     ) {
@@ -150,22 +178,37 @@ impl About {
                 alpha,
             });
         };
-        let mut y = 44.0;
+        let mut y = 30.0;
         for (i, line) in INFO.iter().enumerate() {
             let f = self.face(gfx, line, i == 0);
             put(out, f, y, if i == 0 { 1.0 } else { 0.8 });
-            y += if i == 0 { 44.0 } else { 28.0 };
+            y += if i == 0 { 42.0 } else { 26.0 };
         }
-        y += 24.0;
+        y += 16.0;
         for (i, row) in self.rows.clone().into_iter().enumerate() {
-            let text = self.label(row, settings);
+            let text = self.label(row, settings, update);
             let f = self.face(gfx, &text, true);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
-            y += 46.0;
+            y += 42.0;
         }
-        if let Some(note) = self.note.clone() {
+        let update_note = match update {
+            Status::UpToDate => Some(format!(
+                "slot-mini {} is the latest release.",
+                env!("CARGO_PKG_VERSION")
+            )),
+            Status::Available(r) => Some(format!(
+                "slot-mini {} is out. A installs it and restarts.",
+                r.version
+            )),
+            Status::Downloading { version, .. } | Status::Installing(version) => Some(format!(
+                "Installing slot-mini {version}. Keep the power on."
+            )),
+            Status::Failed(e) => Some(e.to_string()),
+            _ => None,
+        };
+        if let Some(note) = self.note.clone().or(update_note) {
             let f = self.face(gfx, &note, false);
-            put(out, f, y + 8.0, 0.9);
+            put(out, f, y + 4.0, 0.9);
         }
         slot_mini_ui::draw_empty_slot(stage, None, out);
         for (i, (key, label)) in [("B", "BACK"), ("A", "SELECT")].into_iter().enumerate() {

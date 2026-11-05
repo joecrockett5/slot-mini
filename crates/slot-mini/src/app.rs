@@ -46,6 +46,8 @@ const NOT_STARTED: Millis = Millis::MAX;
 pub const FACE_WAIT: Duration = Duration::from_millis(500);
 /// Faces kept decoded either side of the selected cart.
 const NEAR: i32 = 4;
+/// How long "Updated. Restarting..." shows before the restart.
+const RESTART_MS: Millis = 1500;
 
 /// Why the app stopped.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,6 +58,8 @@ pub enum Exit {
     ToOnion,
     /// The process was asked to stop.
     Quit,
+    /// An update was installed: start the new binary.
+    Restart,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -157,6 +161,10 @@ pub struct App {
     fetched: Option<std::sync::mpsc::Receiver<(Cart, std::path::PathBuf)>>,
     fetch_started: bool,
     restock_pending: bool,
+    /// MENU -> "Check for updates". Lives here, not in About, so an
+    /// install carries on if About is closed.
+    pub updater: crate::update::Updater,
+    restart_at: Option<Millis>,
     pub exit: Option<Exit>,
 }
 
@@ -216,6 +224,8 @@ impl App {
             fetched: None,
             fetch_started: false,
             restock_pending: false,
+            updater: crate::update::Updater::default(),
+            restart_at: None,
             exit: None,
         };
         app.restock();
@@ -473,7 +483,7 @@ impl App {
             self.phase = Phase::Shelf;
             return;
         };
-        match about.press(b, &mut self.settings, &self.paths) {
+        match about.press(b, &mut self.settings, &self.paths, &mut self.updater) {
             crate::about::Outcome::Stay => {}
             crate::about::Outcome::Close => {
                 if let Some(a) = self.about.take() {
@@ -571,6 +581,13 @@ impl App {
             ui.poll(&mut self.gfx);
         }
         self.sync_fetched();
+        // An installed update: let "Restarting" show, then start it.
+        if let crate::update::Status::Installed(_) = self.updater.status() {
+            let at = *self.restart_at.get_or_insert(now);
+            if now.saturating_sub(at) >= RESTART_MS && self.exit.is_none() {
+                self.exit = Some(Exit::Restart);
+            }
+        }
         match &self.phase {
             Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => {
                 if let Some((_, cart)) = self.current() {
@@ -802,6 +819,7 @@ impl App {
                 self.stage,
                 self.statics.ground,
                 &self.settings,
+                &self.updater.status(),
                 &mut self.gfx,
                 &mut out,
             ),

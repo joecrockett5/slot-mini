@@ -196,11 +196,11 @@ fn hold_a_falls_back_to_the_dev_runtime_flag() {
 fn menu_in_launcher_mode_hands_back_to_onion() {
     let rig = Rig::new();
     let mainui = launcher(&rig, "launcher");
-    // MENU opens About; "Exit to Onion" is the fourth row.
+    // MENU opens About; "Exit to Onion" is the last row (UP wraps to it).
     input(
         &rig,
         1,
-        "300:press:MENU,340:release:MENU,500:press:DOWN,540:release:DOWN,700:press:DOWN,740:release:DOWN,800:press:DOWN,840:release:DOWN,900:press:A,940:release:A",
+        "300:press:MENU,340:release:MENU,500:press:UP,540:release:UP,900:press:A,940:release:A",
     );
     run(&rig, 1, &["sh", mainui.to_str().unwrap()]);
     let log = read(rig.paths.tmp.join("runtime.log"));

@@ -25,6 +25,7 @@ pub mod studio_ui;
 pub mod studio_view;
 pub mod switch;
 pub mod theme;
+pub mod update;
 pub mod wallpaper;
 
 pub use app::{App, Exit, Options, Phase};

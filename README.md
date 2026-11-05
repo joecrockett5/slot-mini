@@ -30,6 +30,19 @@ Not affiliated with slot, Onion or Miyoo.
 slot-mini reads your games where Onion keeps them, `Roms/GBA`, `Roms/GBC` and `Roms/GB` (and one level of
 subfolders), for every system whose Onion emulator is installed. You never need to move games.
 
+### Updating
+
+With Wi-Fi on, press **MENU** and pick **Check for updates**. If a newer release is out, the row turns into
+**Install update x.y.z**: press A and slot-mini downloads it from this repo's GitHub releases,
+checks it, swaps it in and restarts on the new version. Only the app's own files
+change; settings, favourites, labels and the cache stay. The files it replaced are kept in
+`App/slot-mini/update/previous/` (copy them back with a computer to undo).
+
+Only numbered releases are offered, never the **Latest main build** pre-release. Nothing is checked unless
+you ask. To follow a fork, set `update_repo = owner/repo` in `App/slot-mini/data/settings.txt`.
+
+Unzipping a release over `App/slot-mini/` by hand still works too.
+
 ### Use it as the boot launcher (optional)
 
 In slot-mini press **MENU** and turn **Boot launcher** on. From then on slot-mini starts where Onion's
@@ -66,7 +79,7 @@ when slot-mini is missing). To remove the shim by hand, with the card in a compu
 | Hold A | Insert the cart and start fresh, without loading the state |
 | Y | Heart or un-heart the cart (hearted carts get a Favorites shelf) |
 | SELECT | Cart studio for this cart |
-| MENU | About: sounds, in-game menu, boot launcher, exit to Onion |
+| MENU | About: sounds, in-game menu, boot launcher, check for updates, exit to Onion |
 
 Hold A starts the game the way Onion's own "Reset game" (Game List Options) does, for that one run. As with
 Onion's Reset game, RetroArch still writes its auto state when you quit the game.
@@ -134,6 +147,7 @@ layout, either:
 | `App/slot-mini/data/state.txt` | The shelf and cart you were on |
 | `App/slot-mini/data/favorites.txt` | Hearted carts, in slot's format |
 | `App/slot-mini/cache/` | Scaled labels, ROM headers, the art index, sound clips |
+| `App/slot-mini/*`, `App/slot-mini/update/` | Only when you install an update: the new files, and the replaced ones in `update/previous/` |
 | `Labels/cart_shell.txt`, `Labels/<sys>/*.png` | Only when you change a cart in the studio or fetch labels |
 | `Roms/recentlist.json` | Each launch, as Onion's MainUI does, so the Game Switcher and resume work |
 | `.tmp_update/slot-mini/stock/`, `.tmp_update/bin/MainUI-*` | Only when you turn the boot launcher on |

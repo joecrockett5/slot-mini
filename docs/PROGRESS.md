@@ -245,6 +245,33 @@ Save and Load State worked on the device. Fixed:
   POWER resumes), `launch_cycle.rs` (eject starts on the first frame),
   `extras.rs` (eject sound with the first frame).
 
+## 0.2.2: app icon
+
+- The icon in Onion's Apps list is now a Game Boy cartridge in the style of
+  Onion's own icons (white outline, dark line, flat colours), with a blank
+  label. `cargo run --example icon -p slot-mini` draws it from shapes.
+
+## 0.3.0: updates over Wi-Fi
+
+- `src/update.rs`: GitHub's `releases/latest`, download with progress,
+  SHA-256 (ring, already in the tree through rustls), a small zip reader
+  (miniz_oxide inflate, also already in the tree), the version check of the
+  new binary, the backup-then-rename swap with roll-back, and a thread-backed
+  `Updater` the About screen drives.
+- About: "Check for updates" above "Exit to Onion"; it reads "Checking",
+  "Up to date", "Install update x.y.z", "Downloading n%", "Installing",
+  "Updated. Restarting". B is ignored while an install runs.
+- `Exit::Restart` -> `execv` of the new binary with the same arguments.
+  After a restart an installed boot shim is refreshed (`after_restart`).
+- `update_repo` in settings.txt (default `joecrockett5/slot-mini`).
+- Tests: `tests/update.rs` (a local stand-in for GitHub; check, download,
+  digest and CRC failures, a binary that is not the promised version, only
+  app files taken, the full MENU flow to `Exit::Restart`, the About golden
+  with an update offered). Checked by hand: the real binary updating itself
+  from a local server and `exec`-ing the new one.
+- Needs the device: TLS to GitHub (clock, roots), download speed, renaming
+  over the running binary on the card's FAT. DEVICE-TESTING.md section 11.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
