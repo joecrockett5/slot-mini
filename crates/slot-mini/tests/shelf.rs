@@ -144,9 +144,30 @@ fn wallpaper_theme_and_status() {
         battery: Some(9),
         wifi: true,
         clock: (21, 7),
+        charging: false,
     });
     d.run(2500);
     golden("shelf_light_wallpaper", &d.frame);
+}
+
+/// Charging: slot's bolt left of the gauge and a green fill, in both inks.
+#[test]
+fn charging_shows_a_bolt_and_a_green_gauge() {
+    let rig = Rig::new();
+    let mut d = rig.app_with(slot_mini::status::FixedStatus {
+        battery: Some(42),
+        wifi: true,
+        clock: (12, 0),
+        charging: true,
+    });
+    d.run(2500);
+    golden("shelf_charging", &d.frame);
+    // The gauge's fill is green while charging.
+    let green = (0..d.frame.h)
+        .flat_map(|y| (0..120).map(move |x| (x, y)))
+        .filter(|&(x, y)| d.frame.px[(y * d.frame.w + x) as usize] & 0x00ff_ffff == 0x004c_d964)
+        .count();
+    assert!(green > 20, "{green} green pixels");
 }
 
 /// Jumping far along a shelf, or to another shelf, must not show carts as
@@ -175,6 +196,7 @@ fn big_jumps_never_flash_placeholders() {
         battery: None,
         wifi: false,
         clock: (0, 0),
+        charging: false,
     };
     let mut app = App::new(rig.paths.clone(), Box::new(status), opts, 0);
     let mut frame = Canvas::new(SCREEN_W, SCREEN_H);

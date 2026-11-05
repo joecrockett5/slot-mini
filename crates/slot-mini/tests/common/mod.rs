@@ -32,6 +32,7 @@ impl Rig {
             battery: Some(76),
             wifi: false,
             clock: (12, 0),
+            charging: false,
         };
         self.app_with(status)
     }

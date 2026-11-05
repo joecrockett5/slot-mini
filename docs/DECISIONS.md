@@ -142,3 +142,13 @@ Calls made without asking, and why. Newest last.
 37. **Restart by `exec`, not by exiting.** Exiting would drop to Onion's
     menu in app mode and run the shim's fallbacks in launcher mode; `exec`
     keeps the PID and the arguments, so either mode carries on.
+38. **Charging is read from batmon's `/tmp/.axp_result`, not by running
+    `axp_test`** (0.3.2). batmon already runs it and rewrites the file within
+    a second of the charger going in or out; reading a small file in memory
+    every 2 seconds costs nothing. The gauge turns green while charging, as
+    the maintainer asked; slot only shows the bolt.
+39. **The armv7 build runs only on `main`** (maintainer's choice). Pull
+    requests and branches get the desktop job (fmt, clippy, every test, the
+    shim tests); the slow cross build, qemu tests and zip run where a release
+    is published. An armv7-only failure therefore shows up after merging, and
+    stops that release; **Run workflow** runs the armv7 job on a branch first.

@@ -278,6 +278,18 @@ Save and Load State worked on the device. Fixed:
   128x128, and Onion's Game Info screen draws icons at their own size), with
   Onion's outline widths and colours (3.5 px `#f2f2f2`, 2 px `#40396e`).
 
+## 0.3.2: charging indicator
+
+- `Status::charging` reads `"charging":3` from batmon's `/tmp/.axp_result`
+  (PLATFORM.md, Battery and charging). Status is polled every 2 s (was 10 s).
+- The footer shows slot's charging bolt (`Icon::Charging` at `BOLT_PX`, in the
+  footer ink, as slot builds it) and the gauge's fill turns green
+  (`CHARGING_FILL` in `battery.rs`, noted as a change in the copied file).
+- Tests: `status.rs` unit tests for the file, `shelf_charging` golden.
+- CI: the armv7 job (release build, qemu tests, zip) runs only for pushes to
+  `main` and manual runs; pull requests and other branches run the desktop
+  job.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

@@ -9,6 +9,10 @@ pub trait Status {
     /// Battery percentage, if known.
     fn battery(&mut self) -> Option<u8>;
     fn wifi(&mut self) -> bool;
+    /// Whether the battery is charging now.
+    fn charging(&mut self) -> bool {
+        false
+    }
     /// Local wall-clock time as (hour, minute).
     fn clock(&mut self) -> (u32, u32);
 }
@@ -18,6 +22,7 @@ pub struct FixedStatus {
     pub battery: Option<u8>,
     pub wifi: bool,
     pub clock: (u32, u32),
+    pub charging: bool,
 }
 
 impl Status for FixedStatus {
@@ -30,11 +35,16 @@ impl Status for FixedStatus {
     fn clock(&mut self) -> (u32, u32) {
         self.clock
     }
+    fn charging(&mut self) -> bool {
+        self.charging
+    }
 }
 
-/// Onion's files: `/tmp/percBat`, `system.json`'s `wifi`, `wlan0`'s state.
+/// Onion's files: `/tmp/percBat`, `/tmp/.axp_result`, `system.json`'s
+/// `wifi`, `wlan0`'s state.
 pub struct OnionStatus {
     perc_bat: PathBuf,
+    axp_result: PathBuf,
     system_json: PathBuf,
     operstate: PathBuf,
 }
@@ -43,6 +53,7 @@ impl OnionStatus {
     pub fn new(paths: &Paths) -> OnionStatus {
         OnionStatus {
             perc_bat: paths.tmp.join("percBat"),
+            axp_result: paths.tmp.join(".axp_result"),
             system_json: paths.sd.join("system.json"),
             operstate: PathBuf::from("/sys/class/net/wlan0/operstate"),
         }
@@ -59,6 +70,20 @@ impl OnionStatus {
 pub fn parse_perc_bat(text: &str) -> Option<u8> {
     let n: i64 = text.trim().parse().ok()?;
     (0..=100).contains(&n).then_some(n as u8)
+}
+
+/// `"charging": 3` in batmon's copy of `axp_test`'s answer
+/// (`{"battery":87, "voltage":4012, "charging":3}`), which batmon rewrites
+/// within a second of the charger being plugged in or out.
+pub fn axp_charging(json: &str) -> bool {
+    let Some(at) = json.find("\"charging\"") else {
+        return false;
+    };
+    let rest = json[at + 10..]
+        .trim_start()
+        .trim_start_matches(':')
+        .trim_start();
+    rest.starts_with('3') && !rest[1..].starts_with(|c: char| c.is_ascii_digit())
 }
 
 /// `"wifi": 1` in MainUI's system.json, without a JSON parser.
@@ -85,6 +110,10 @@ impl Status for OnionStatus {
 
     fn clock(&mut self) -> (u32, u32) {
         local_hm()
+    }
+
+    fn charging(&mut self) -> bool {
+        std::fs::read_to_string(&self.axp_result).is_ok_and(|j| axp_charging(&j))
     }
 }
 
@@ -120,6 +149,18 @@ mod tests {
     }
 
     #[test]
+    fn charging_from_axp_result() {
+        assert!(axp_charging(
+            "{\"battery\":87, \"voltage\":4012, \"charging\":3}"
+        ));
+        assert!(!axp_charging(
+            "{\"battery\":87, \"voltage\":4012, \"charging\":0}"
+        ));
+        assert!(!axp_charging("{\"battery\":87, \"charging\":30}"));
+        assert!(!axp_charging(""));
+    }
+
+    #[test]
     fn wifi_from_system_json() {
         assert!(wifi_setting("{\n\t\"vol\":\t20,\n\t\"wifi\":\t1,\n}"));
         assert!(!wifi_setting("{\"wifi\": 0}"));
@@ -141,6 +182,13 @@ mod tests {
         std::fs::write(&oper, "up\n").unwrap();
         assert_eq!(s.battery(), Some(42));
         assert!(s.wifi());
+        assert!(!s.charging());
+        std::fs::write(
+            paths.tmp.join(".axp_result"),
+            "{\"battery\":42, \"voltage\":3900, \"charging\":3}",
+        )
+        .unwrap();
+        assert!(s.charging());
     }
 
     #[test]

@@ -349,6 +349,7 @@ fn the_eject_starts_on_the_first_frame_shown() {
         battery: None,
         wifi: false,
         clock: (0, 0),
+        charging: false,
     };
     let mut app = slot_mini::App::new(rig.paths.clone(), Box::new(status), opts, 0);
     let mut frame = slot_mini_gfx::Canvas::new(640, 480);

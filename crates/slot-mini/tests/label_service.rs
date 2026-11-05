@@ -48,6 +48,7 @@ fn online() -> FixedStatus {
         battery: Some(76),
         wifi: true,
         clock: (12, 0),
+        charging: false,
     }
 }
 
