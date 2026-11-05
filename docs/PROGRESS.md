@@ -351,6 +351,20 @@ Save and Load State worked on the device. Fixed:
   waiters.
 - Next: read the log from the device and fix the cause.
 
+## 0.4.4: the sound test reports on screen
+
+- 0.4.3 on the device: still silent (games' sound fine). The cause has to
+  come from the device, so the test now says it on screen: MENU's note
+  shows "Sound test: playing..." and then how the player ended (`player
+  finished (N s)`, `exit N: <its first error line>`, `ffplay not found`,
+  `could not start the player: ...`). The player's whole output still goes
+  to the log.
+- `plate::line_ink`: a small-type line with its own width limit, so the
+  note can be a sentence (slot's `word_ink` caps at 320 px and drops words).
+- Tests: the player's report (`sound.rs`), and MENU showing a failing
+  player's error (`the_sound_test_shows_how_the_player_ended`, golden
+  `about_sound_test`).
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

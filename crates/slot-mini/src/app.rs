@@ -48,6 +48,17 @@ const NOT_STARTED: Millis = Millis::MAX;
 pub const FACE_WAIT: Duration = Duration::from_millis(500);
 /// Faces kept decoded either side of the selected cart.
 const NEAR: i32 = 4;
+/// The longest note MENU shows on its one line.
+const NOTE_CHARS: usize = 64;
+
+/// `s` cut to `n` characters, with an ellipsis if cut.
+fn short(s: &str, n: usize) -> String {
+    match s.chars().count() > n {
+        true => format!("{}...", s.chars().take(n - 3).collect::<String>()),
+        false => s.to_string(),
+    }
+}
+
 /// How long "Updated. Restarting..." shows before the restart.
 const RESTART_MS: Millis = 1500;
 
@@ -167,6 +178,8 @@ pub struct App {
     sound: Box<dyn crate::sound::Sound>,
     /// A sound sink handed in (tests) plays whatever the setting says.
     sound_given: bool,
+    /// A sound test is running from MENU; its outcome goes on MENU's note.
+    sound_test: bool,
     /// Labels arriving from slot's art service, when it is switched on.
     fetched: Option<std::sync::mpsc::Receiver<(Cart, std::path::PathBuf)>>,
     fetch_started: bool,
@@ -238,6 +251,7 @@ impl App {
             about: None,
             sound,
             sound_given,
+            sound_test: false,
             fetched: None,
             fetch_started: false,
             restock_pending: false,
@@ -581,9 +595,14 @@ impl App {
         };
         let sounds = self.settings.sounds;
         let outcome = about.press(b, &mut self.settings, &self.paths, &mut self.updater);
-        // Turning sounds on plays one at once: a quick test on the device.
+        // Turning sounds on plays one at once: a quick test on the device,
+        // whose outcome MENU then shows.
         if self.settings.sounds && !sounds {
             self.play(crate::sound::Clip::Insert);
+            self.sound_test = true;
+            if let Some(a) = self.about.as_mut() {
+                a.note = Some("Sound test: playing...".into());
+            }
         }
         match outcome {
             crate::about::Outcome::Stay => {}
@@ -681,6 +700,14 @@ impl App {
         }
         if let Some(ui) = self.studio.as_mut() {
             ui.poll(&mut self.gfx);
+        }
+        if self.sound_test {
+            if let Some(report) = self.sound.report() {
+                self.sound_test = false;
+                if let Some(a) = self.about.as_mut() {
+                    a.note = Some(short(&format!("Sound test: {report}"), NOTE_CHARS));
+                }
+            }
         }
         if let Some(scene) = self.core.as_mut() {
             scene.tick(&mut self.gfx, now);
