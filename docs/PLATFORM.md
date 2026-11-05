@@ -300,6 +300,19 @@ platform whose `Emu/<sys>/launch.sh` is missing gets no shelf.
   the framebuffer for its screenshots (`screenshot.h`). slot-mini pauses with
   `PAUSE_TOGGLE` (RetroArch stops its audio), then `SIGSTOP`s it so it
   cannot redraw, and draws on the page `FBIOGET_VSCREENINFO` says is shown.
+- **RetroArch may use more than two pages** (seen on a device with 0.2.0:
+  the menu sometimes stayed invisible but took input). Its video driver can
+  triple-buffer, and the panel may be showing a page past the second, or
+  `yoffset` may lag the page about to be shown. slot-mini re-reads the
+  geometry, then draws the menu on every page the framebuffer memory holds
+  and restores each one when the menu closes.
+- **Buttons reach every reader of `/dev/input/event0`.** RetroArch reads the
+  same device, so a frozen RetroArch still saw the menu's presses queued
+  when it thawed (seen on a device: A on Resume also pressed A in the game).
+  While its menu is open slot-mini takes the device with `EVIOCGRAB`, as
+  keymon does, and acts on a row only once every button is released, so no
+  half of a press is left for the game. While grabbed keymon sees no
+  buttons either, so POWER in the menu resumes the game.
 - **Not reproduced:** Onion's Game Switcher screenshot (`romScreens/<hash>.png`).
   Its name is a hash that can read past the end of the path string, so it
   cannot be computed exactly. Games left through slot-mini's menu may show an

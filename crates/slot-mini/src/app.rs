@@ -40,6 +40,8 @@ const SLOT_NAME_OUT_MS: Millis = 800;
 const STATUS_POLL_MS: Millis = 10_000;
 /// Shown when no GBA, GB or GBC games were found.
 const EMPTY_TEXT: &str = "No games in Roms/GBA, GBC or GB";
+/// An animation that starts with the next frame shown.
+const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
 pub const FACE_WAIT: Duration = Duration::from_millis(500);
 /// Faces kept decoded either side of the selected cart.
@@ -288,9 +290,10 @@ impl App {
             let found = kind.is_some_and(|k| self.select(k, *platform, stem))
                 || self.select(ShelfKind::System(*platform), *platform, stem);
             if found && state.launched {
-                self.play(crate::sound::Clip::Eject);
+                // The eject starts with the first frame shown (`render`):
+                // starting up can take longer than the whole animation.
                 self.phase = Phase::Ejecting {
-                    at: self.now,
+                    at: NOT_STARTED,
                     stem: stem.clone(),
                 };
             }
@@ -807,6 +810,12 @@ impl App {
         canvas.clear(0);
         self.gfx.render(&out, canvas);
         self.draws = out;
+        if let Phase::Ejecting { at, .. } = &mut self.phase {
+            if *at == NOT_STARTED {
+                *at = self.now;
+                self.play(crate::sound::Clip::Eject);
+            }
+        }
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {

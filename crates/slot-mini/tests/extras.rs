@@ -118,7 +118,11 @@ fn insert_and_eject_play_slots_clips() {
         wifi: false,
         clock: (0, 0),
     };
-    let _again = App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    let mut again = App::new(rig.paths.clone(), Box::new(status), opts, 0);
+    // The eject sound starts with the first frame shown, not at startup.
+    assert_eq!(*played.lock().unwrap(), vec![Clip::Insert]);
+    again.tick(16);
+    again.render(&mut frame);
     assert_eq!(*played.lock().unwrap(), vec![Clip::Insert, Clip::Eject]);
 }
 

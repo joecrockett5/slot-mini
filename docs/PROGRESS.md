@@ -226,6 +226,25 @@ from slot-mini with something like slot's, and make it open faster.
   `PAUSE_TOGGLE`, does the frozen game leave the screen alone, and how fast
   does the menu open. See DEVICE-TESTING.md, section 10.
 
+## 0.2.1: in-game menu fixes (device feedback on 0.2.0)
+
+Save and Load State worked on the device. Fixed:
+
+- **Menu sometimes invisible but taking input.** The helper drew on one of
+  two pages; RetroArch can use more, and the geometry was read once. Now it
+  re-reads the geometry when MENU opens, draws on every mapped page
+  (`Fbdev::refresh`, `mapped_pages`, `Screen::pages`) and restores them all.
+- **Menu presses reaching the game on resume.** The helper grabs
+  `/dev/input/event0` (`Evdev::grab`, `EVIOCGRAB`) while its menu is open
+  and performs the chosen row only when every button is up. POWER resumes.
+- **No eject animation.** In boot-launcher mode the eject's clock and sound
+  started at startup and the load time hid it. It now starts on the first
+  frame shown (`NOT_STARTED` in `app.rs`). In app mode there is no eject by
+  design: leaving a game goes back to Onion's menu, as before.
+- Tests: `ingame.rs` (three-page fake screen, buttons never reach the game,
+  POWER resumes), `launch_cycle.rs` (eject starts on the first frame),
+  `extras.rs` (eject sound with the first frame).
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

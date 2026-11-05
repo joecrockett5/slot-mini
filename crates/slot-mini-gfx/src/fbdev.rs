@@ -326,6 +326,38 @@ impl Fbdev {
         self.shown = page;
     }
 
+    /// Re-read the screen layout from the driver: another program
+    /// (RetroArch) may have changed it since this was opened.
+    pub fn refresh(&mut self) {
+        let fd = self.file.as_raw_fd();
+        let mut var = VarInfo::default();
+        // SAFETY: the ioctls fill structs of the kernel's layout.
+        let mut fix: FixInfo = unsafe { std::mem::zeroed() };
+        if unsafe { libc::ioctl(fd, FBIOGET_VSCREENINFO as _, &mut var) } != 0
+            || unsafe { libc::ioctl(fd, FBIOGET_FSCREENINFO as _, &mut fix) } != 0
+            || var.bits_per_pixel != 32
+            || var.yres == 0
+        {
+            return;
+        }
+        let stride = if fix.line_length > 0 {
+            fix.line_length
+        } else {
+            var.xres_virtual * 4
+        };
+        self.geometry.width = var.xres;
+        self.geometry.height = var.yres;
+        self.geometry.stride = stride;
+        self.var = var;
+    }
+
+    /// How many whole screens the mapping holds: every buffer a program
+    /// could be showing.
+    pub fn mapped_pages(&self) -> u32 {
+        let page = (self.geometry.stride * self.geometry.height) as usize;
+        (self.len / page.max(1)).max(1) as u32
+    }
+
     /// The page on screen now, as the driver reports it (another program,
     /// RetroArch, may have flipped since).
     pub fn displayed_page(&mut self) -> u32 {
@@ -333,7 +365,7 @@ impl Fbdev {
         let fd = self.file.as_raw_fd();
         // SAFETY: FBIOGET_VSCREENINFO fills a fb_var_screeninfo.
         if unsafe { libc::ioctl(fd, FBIOGET_VSCREENINFO as _, &mut var) } == 0 && var.yres > 0 {
-            return (var.yoffset / var.yres).min(self.geometry.pages - 1);
+            return (var.yoffset / var.yres).min(self.mapped_pages() - 1);
         }
         self.shown
     }
