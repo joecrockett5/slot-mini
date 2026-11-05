@@ -19,6 +19,8 @@ struct Args {
     frames: Option<u64>,
     /// Scripted input for the headless backend: `ms:press|release:BUTTON,...`
     input: Vec<(u64, Event)>,
+    /// Run as the in-game MENU helper beside RetroArch.
+    ingame: bool,
     /// Advance a simulated clock 16 ms per frame instead of real time, and
     /// show a fixed battery and clock (for tests and screenshots).
     sim: bool,
@@ -79,6 +81,7 @@ fn args() -> Args {
         frames: None,
         input: Vec::new(),
         sim: false,
+        ingame: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -121,6 +124,7 @@ fn args() -> Args {
                     }
                 }
             }
+            "--ingame" => a.ingame = true,
             "--version" => {
                 println!("slot-mini {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
@@ -189,6 +193,16 @@ fn main() {
         libc::signal(libc::SIGINT, on_signal as *const () as libc::sighandler_t);
     }
     let paths = Paths::new(a.sd, a.tmp);
+    #[cfg(target_os = "linux")]
+    if a.ingame {
+        let fb = std::env::var("SLOT_MINI_FB").unwrap_or_else(|_| "/dev/fb0".into());
+        let ev = std::env::var("SLOT_MINI_INPUT").unwrap_or_else(|_| "/dev/input/event0".into());
+        slot_mini::ingame::run(&paths, fb.as_ref(), ev.as_ref());
+        std::process::exit(0);
+    }
+    // No game is running while slot-mini is: a helper left from the last one
+    // (or its flag) would keep MENU away from Onion.
+    slot_mini::ingame::clear_leftovers(&paths);
     let status: Box<dyn slot_mini::status::Status> = match a.sim {
         true => Box::new(slot_mini::status::FixedStatus {
             battery: Some(76),
@@ -277,6 +291,10 @@ fn main() {
             match launch::hand_off(&paths, a.mode, &app.shelf_key(), &cart, fresh) {
                 Ok(cmd) => {
                     eprintln!("slot-mini: launching: {}", cmd.trim_end());
+                    // slot's in-game MENU, on the device only.
+                    if app.settings.ingame_menu && a.backend == "device" && !a.sim {
+                        slot_mini::ingame::spawn(&paths);
+                    }
                     0
                 }
                 Err(e) => {

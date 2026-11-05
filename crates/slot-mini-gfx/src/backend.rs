@@ -120,10 +120,7 @@ impl Device {
     /// A regular file in place of the framebuffer is mapped with the Mini
     /// Plus's geometry (for testing the device path off the device).
     pub fn open(fb: &Path, input: &Path) -> std::io::Result<Device> {
-        let fb = match std::fs::metadata(fb).map(|m| m.is_file()).unwrap_or(false) {
-            true => crate::fbdev::Fbdev::from_file(fb, crate::fbdev::Geometry::MINI)?,
-            false => crate::fbdev::Fbdev::open(fb)?,
-        };
+        let fb = crate::fbdev::Fbdev::open_any(fb)?;
         let input = match crate::evdev::Evdev::open(input) {
             Ok(i) => Some(i),
             Err(e) => {

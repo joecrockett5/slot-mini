@@ -84,8 +84,8 @@ Calls made without asking, and why. Newest last.
     logo label needs the logo image, which only exists while the studio has
     fetched it; outside that the Label Color row is slot's but has no effect
     once closed.
-23. **MENU opens About** with three rows: Sounds, Boot launcher and Exit to
-    Onion. Exit to Onion returns to MainUI as an app, and asks the boot shim
+23. **MENU opens About** with four rows: Sounds, In-game menu, Boot launcher
+    and Exit to Onion. Exit to Onion returns to MainUI as an app, and asks the boot shim
     for Onion's MainUI (exit code 10) as the boot launcher.
 24. **The shim falls back on L2 held**, not MENU: Onion already uses MENU
     held at boot to skip auto-resume, and MENU is pressed in games to leave
@@ -107,3 +107,17 @@ Calls made without asking, and why. Newest last.
     `yoffset = 0`), and its in-game Game Switcher draws there. 0.1.0 exited
     on whichever page its last frame used, which could leave the Game
     Switcher drawing to a hidden page: a black screen that still took input.
+29. **slot's in-game MENU only for games slot-mini launches** (0.2.0, the
+    maintainer's choice). A helper started with the game takes MENU through
+    Onion's `/tmp/disable_menu_button` flag; nothing of Onion's is replaced,
+    and games started elsewhere keep Onion's MENU. "In-game menu: Off" in
+    About turns it off.
+30. **First version: menu and eject; the polaroid save-state switcher
+    later** (also the maintainer's choice). Save and Load State use
+    RetroArch's current slot, and RetroArch's own message confirms them.
+31. **The game is paused with `PAUSE_TOGGLE` and then frozen with
+    `SIGSTOP`.** Pausing alone may let RetroArch redraw over the menu;
+    freezing alone may leave audio running. A panic hook, the signal handler
+    and the main loop all thaw RetroArch before the helper exits, and
+    slot-mini clears any helper or flag left behind each time it starts, so
+    MENU can never stay taken from Onion.

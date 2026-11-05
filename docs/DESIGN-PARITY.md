@@ -36,7 +36,8 @@ slot-mini renders.
 | Label printer and slips | yes, simplified | Two choices (scanned label, logo label) shown as flat slips; no print/tear animation. |
 | About (MENU) | yes | slot's sticker on the menu ground, plus slot-mini's own rows: boot launcher switch, sounds, exit to Onion. |
 | Settings (quick menu) | partly | Folded into the About screen: only settings slot-mini needs. |
-| Core picker, save-state switcher, in-game menu, link, RomM, Wi-Fi setup, clock setting, brightness, update | no | Out of scope (RetroArch and Onion own these). |
+| In-game menu (tap MENU) and eject (hold MENU) | yes, for games slot-mini launches (0.2.0) | slot's quick-menu type, pointer and layout over the frozen game; rows Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game. See below. |
+| Core picker, save-state switcher (double-tap MENU), link, RomM, Wi-Fi setup, clock setting, brightness, update | no | Out of scope (RetroArch and Onion own these). |
 
 ## Shelf details
 
@@ -132,6 +133,17 @@ the two slips flat and applies the chosen one directly.
 slot's MENU opens its settings; slot-mini's opens About on slot's menu ground
 (wallpaper under slot's scrim) with Sounds, Boot launcher and Exit to Onion.
 Golden: `about.png`.
+
+### In-game menu (tap MENU)
+
+![In-game menu](parity/ingame-menu.png)
+
+slot-mini: `ingame_menu.png` over a frame of slot's own game footage. slot's
+in-game page shares its settings pages' type, pointer and spacing (left:
+slot's Screen settings). slot's rows are Resume, States, Screenshots,
+Settings and Exit Game; slot-mini's are Resume, Save State, Load State,
+Settings (RetroArch's menu), Game Switcher (Onion's) and Exit Game. slot's
+polaroid save-state switcher (double-tap MENU) is the next step.
 
 ### Other shelf goldens
 

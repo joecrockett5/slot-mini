@@ -107,6 +107,33 @@ impl Geometry {
     }
 }
 
+/// Read one page back as an upright frame (undoing the 180° turn and taking
+/// the centred 640x480 region of a larger panel). The inverse of `write_page`.
+pub fn read_page(mem: &[u32], g: &Geometry, page: u32, w: u32, h: u32) -> Canvas {
+    let row_px = (g.stride / 4) as usize;
+    let page_px = row_px * g.height as usize;
+    let mem = &mem[page as usize * page_px..][..page_px];
+    let mut out = Canvas::new(w, h);
+    let (fw, fh) = (w.min(g.width), h.min(g.height));
+    let (ox, oy) = ((g.width - fw) / 2, (g.height - fh) / 2);
+    for y in 0..fh {
+        let dst = &mut out.px[(y * w) as usize..][..fw as usize];
+        let sy = oy + y;
+        match g.rotate180 {
+            false => dst.copy_from_slice(&mem[sy as usize * row_px + ox as usize..][..fw as usize]),
+            true => {
+                let dy = g.height - 1 - sy;
+                let dx_end = g.width - ox;
+                let src = &mem[dy as usize * row_px + (dx_end - fw) as usize..][..fw as usize];
+                for (d, s) in dst.iter_mut().zip(src.iter().rev()) {
+                    *d = *s | 0xFF00_0000;
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Copy a frame into one page of framebuffer memory: rotated 180° if the
 /// panel is upside down, centred if the screen is larger than the frame
 /// (752x560 panels), black around it.
@@ -197,6 +224,18 @@ impl Fbdev {
         Ok(fb)
     }
 
+    /// The device, or a regular file standing in for it (mapped with the
+    /// Mini Plus's geometry), for testing the device path off the device.
+    pub fn open_any(path: &Path) -> std::io::Result<Fbdev> {
+        match std::fs::metadata(path)
+            .map(|m| m.is_file())
+            .unwrap_or(false)
+        {
+            true => Fbdev::from_file(path, Geometry::MINI),
+            false => Fbdev::open(path),
+        }
+    }
+
     /// Map a plain file laid out like a framebuffer, for tests: no ioctls,
     /// and the "pan" only records which page would be shown.
     pub fn from_file(path: &Path, geometry: Geometry) -> std::io::Result<Fbdev> {
@@ -285,6 +324,31 @@ impl Fbdev {
             return;
         }
         self.shown = page;
+    }
+
+    /// The page on screen now, as the driver reports it (another program,
+    /// RetroArch, may have flipped since).
+    pub fn displayed_page(&mut self) -> u32 {
+        let mut var = VarInfo::default();
+        let fd = self.file.as_raw_fd();
+        // SAFETY: FBIOGET_VSCREENINFO fills a fb_var_screeninfo.
+        if unsafe { libc::ioctl(fd, FBIOGET_VSCREENINFO as _, &mut var) } == 0 && var.yres > 0 {
+            return (var.yoffset / var.yres).min(self.geometry.pages - 1);
+        }
+        self.shown
+    }
+
+    /// What is on `page`, upright, as a 640x480 frame.
+    pub fn capture(&mut self, page: u32) -> Canvas {
+        let g = self.geometry;
+        read_page(self.mem(), &g, page, 640, 480)
+    }
+
+    /// Draw straight onto `page` without flipping: for drawing over a paused
+    /// game that owns the page flipping.
+    pub fn draw_on(&mut self, page: u32, frame: &Canvas) {
+        let g = self.geometry;
+        write_page(frame, self.mem(), &g, page);
     }
 
     /// Before exiting: leave the last frame on page 0 and show page 0.
@@ -401,6 +465,25 @@ mod tests {
             "page 0 holds the last frame, rotated"
         );
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn a_page_reads_back_as_it_was_drawn() {
+        let g = Geometry::MINI;
+        let mut mem = vec![0u32; g.bytes() / 4];
+        let f = frame();
+        write_page(&f, &mut mem, &g, 1);
+        assert_eq!(read_page(&mem, &g, 1, 640, 480).px, f.px);
+        let big = Geometry {
+            width: 752,
+            height: 560,
+            stride: 752 * 4,
+            pages: 2,
+            rotate180: true,
+        };
+        let mut mem = vec![0u32; big.bytes() / 4];
+        write_page(&f, &mut mem, &big, 0);
+        assert_eq!(read_page(&mem, &big, 0, 640, 480).px, f.px);
     }
 
     fn tempfile_dir() -> std::path::PathBuf {

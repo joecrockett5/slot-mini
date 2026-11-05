@@ -23,6 +23,9 @@ pub struct Settings {
     pub label_service: bool,
     pub art_host: String,
     pub clock_24h: bool,
+    /// slot's in-game MENU (tap: menu, hold: eject) for games slot-mini
+    /// launches. Off gives MENU back to Onion.
+    pub ingame_menu: bool,
 }
 
 impl Default for Settings {
@@ -32,6 +35,7 @@ impl Default for Settings {
             label_service: false,
             art_host: ART_HOST.to_string(),
             clock_24h: true,
+            ingame_menu: true,
         }
     }
 }
@@ -57,6 +61,7 @@ impl Settings {
                 .cloned()
                 .unwrap_or(d.art_host),
             clock_24h: m.get("clock").is_none_or(|c| c != "12h"),
+            ingame_menu: on(m.get("ingame_menu"), d.ingame_menu),
         }
     }
 
