@@ -245,6 +245,12 @@ Save and Load State worked on the device. Fixed:
   POWER resumes), `launch_cycle.rs` (eject starts on the first frame),
   `extras.rs` (eject sound with the first frame).
 
+## 0.2.2: app icon
+
+- The icon in Onion's Apps list is now a Game Boy cartridge in the style of
+  Onion's own icons (white outline, dark line, flat colours), with a blank
+  label. `cargo run --example icon -p slot-mini` draws it from shapes.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
