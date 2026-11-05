@@ -166,6 +166,18 @@ it starts with sound **off** (`sounds = off` in its settings) until someone
 confirms on a device that it plays promptly and does not hold the audio
 device when RetroArch starts. See `DEVICE-TESTING.md`.
 
+**Timing (0.4.7).** slot plays the insert clip `lead` (0.097 s) before the
+cart seats (`SEATED_AT`, 0.45 s), so its click lands on the seat, and the
+eject clip as the cart starts out; slot-mini now does the same (it used to
+play the insert clip as the cart started moving). `ffplay` takes a while to
+load its libraries from the card, so a player is started ahead of time and
+parked on a FIFO in `/tmp/slot-mini-sfx/` (`-f wav <fifo>`): it loads, then
+blocks opening the FIFO, using nothing. A clip is written into it and plays
+at once. One is kept ready only while sounds are on and nothing is moving
+(shelf, MENU, studio; and at start, for the eject); it runs in its own
+process group, is stopped with it when sounds go off or slot-mini exits,
+and players left by a crash are stopped the next time one is started.
+
 **Found on a device (0.4.4): `ffplay` could not load its libraries.** The
 on-screen sound test read `exit 127: /mnt/SDCARD/.tmp_update/bin/ffplay:
 err...`, the dynamic loader's "error while loading shared libraries". In
@@ -378,6 +390,16 @@ platform whose `Emu/<sys>/launch.sh` is missing gets no shelf.
 - **Taking MENU over.** keymon skips its MENU handling while
   `/tmp/disable_menu_button` exists (`keymon.c`). Its MENU combinations are
   tracked before that check, so they keep working.
+- **Hotkeys.** MENU is RetroArch's and Onion's hotkey button in games (MENU
+  + SELECT RetroArch's menu, + L rewind, + R fast forward, + L2 load state,
+  + R2 save state, + Left/Right save slot, + X FPS, + POWER screenshot;
+  Onion's "Global Shortcuts"). The helper treats MENU as a combination when
+  any other button (the volume keys included) is down when MENU goes down
+  or is pressed before it comes up; on the device it reads which buttons
+  are down from the kernel (`EVIOCGKEY`) at the start of each batch of
+  events. Tap and hold are both decided when MENU is released (0.4.7; the
+  hold used to fire at 0.7 s while MENU was still down, which ejected a
+  game when MENU was held a moment before the rest of a hotkey).
 - **RetroArch's network commands** are on in Onion's default config
   (`network_cmd_enable = "true"`, UDP port 55355). Standard RetroArch
   commands are used: `GET_STATUS`, `PAUSE_TOGGLE`, `SAVE_STATE`,

@@ -182,6 +182,8 @@ pub struct App {
     sound_given: bool,
     /// A sound test is running from MENU; its outcome goes on MENU's note.
     sound_test: bool,
+    /// The insert's sound has played for the insert under way.
+    insert_sounded: bool,
     /// Labels arriving from slot's art service, when it is switched on.
     fetched: Option<std::sync::mpsc::Receiver<(Cart, std::path::PathBuf)>>,
     fetch_started: bool,
@@ -215,10 +217,10 @@ impl App {
         let sound_given = opts.sound.is_some();
         let sound: Box<dyn crate::sound::Sound> = match opts.sound {
             Some(s) => s,
-            None => Box::new(crate::sound::Player::onion(
-                &paths.sd,
-                paths.cache().join("sounds"),
-            )),
+            None => Box::new(
+                crate::sound::Player::onion(&paths.sd, paths.cache().join("sounds"))
+                    .warm(paths.tmp.join("slot-mini-sfx")),
+            ),
         };
         let mut app = App {
             paths,
@@ -255,6 +257,7 @@ impl App {
             sound,
             sound_given,
             sound_test: false,
+            insert_sounded: false,
             fetched: None,
             fetch_started: false,
             restock_pending: false,
@@ -266,6 +269,10 @@ impl App {
         };
         app.restock();
         app.restore(&state);
+        // Ready a player now, while the eject (if any) has not started.
+        if app.settings.sounds {
+            app.sound.prepare();
+        }
         app
     }
 
@@ -600,6 +607,9 @@ impl App {
         };
         let sounds = self.settings.sounds;
         let outcome = about.press(b, &mut self.settings, &self.paths, &mut self.updater);
+        if sounds && !self.settings.sounds {
+            self.sound.close();
+        }
         // Turning sounds on plays one at once: a quick test on the device,
         // whose outcome MENU then shows.
         if self.settings.sounds && !sounds {
@@ -682,7 +692,8 @@ impl App {
         if let Some(s) = self.shelf_mut() {
             s.release_hold();
         }
-        self.play(crate::sound::Clip::Insert);
+        // The sound comes later, as the cart seats (see `tick`).
+        self.insert_sounded = false;
         self.phase = Phase::Inserting {
             at: self.now,
             stem,
@@ -729,6 +740,24 @@ impl App {
             if now.saturating_sub(at) >= RESTART_MS && self.exit.is_none() {
                 self.exit = Some(Exit::Restart);
             }
+        }
+        // A player kept ready makes the next sound prompt. Only while
+        // nothing is moving, so starting one never competes with an insert.
+        if self.settings.sounds && matches!(self.phase, Phase::Shelf | Phase::About | Phase::Studio)
+        {
+            self.sound.prepare();
+        }
+        // slot: the insert's click lands as the cart seats.
+        let insert_due = match &self.phase {
+            Phase::Inserting { at, .. } => {
+                !self.insert_sounded
+                    && self.secs_since(*at) >= SEATED_AT - crate::sound::Clip::Insert.lead()
+            }
+            _ => false,
+        };
+        if insert_due {
+            self.insert_sounded = true;
+            self.play(crate::sound::Clip::Insert);
         }
         match &self.phase {
             Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => {
@@ -808,6 +837,11 @@ impl App {
         for c in self.carts.iter_mut().filter(|c| c.rom == cart.rom) {
             c.label = Some(path.clone());
         }
+    }
+
+    /// Let go of a player kept ready (before exiting).
+    pub fn close_sound(&mut self) {
+        self.sound.close();
     }
 
     fn play(&mut self, clip: crate::sound::Clip) {
