@@ -272,6 +272,12 @@ Save and Load State worked on the device. Fixed:
 - Needs the device: TLS to GitHub (clock, roots), download speed, renaming
   over the running binary on the card's FAT. DEVICE-TESTING.md section 11.
 
+## 0.3.1: icon at Onion's size
+
+- The app icon is now 74x74 like Onion's default app icons (it was
+  128x128, and Onion's Game Info screen draws icons at their own size), with
+  Onion's outline widths and colours (3.5 px `#f2f2f2`, 2 px `#40396e`).
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
