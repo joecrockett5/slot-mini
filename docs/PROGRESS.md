@@ -365,6 +365,16 @@ Save and Load State worked on the device. Fixed:
   player's error (`the_sound_test_shows_how_the_player_ended`, golden
   `about_sound_test`).
 
+## 0.4.5: sounds play in boot-launcher mode
+
+- The 0.4.4 sound test on the device read `exit 127: .../ffplay: err...`:
+  the loader could not find `ffplay`'s libraries. As the boot launcher,
+  slot-mini runs as MainUI, whose library path (`miyoo/lib:/config/lib:/lib`)
+  leaves out `.tmp_update/lib/parasyte`, where Onion keeps `ffplay`'s ffmpeg
+  libraries. The player is now started with the library path Onion's
+  runtime exports for apps and games.
+- Test: `onions_player_gets_onions_library_path`.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
