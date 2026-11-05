@@ -248,6 +248,27 @@ impl Fbdev {
         self.shown
     }
 
+    /// Show `page`. Returns false if the driver takes neither pan ioctl.
+    fn pan(&mut self, page: u32) -> bool {
+        if !self.can_pan {
+            return true;
+        }
+        let mut var = self.var;
+        var.yoffset = page * self.geometry.height;
+        var.xoffset = 0;
+        let fd = self.file.as_raw_fd();
+        // SAFETY: both ioctls read a fb_var_screeninfo.
+        if unsafe { libc::ioctl(fd, FBIOPAN_DISPLAY as _, &var) } != 0
+            // Some drivers only take the offset through PUT_VSCREENINFO
+            // (Onion's display.h does it that way).
+            && unsafe { libc::ioctl(fd, FBIOPUT_VSCREENINFO as _, &var) } != 0
+        {
+            return false;
+        }
+        self.var = var;
+        true
+    }
+
     /// Draw a frame into the hidden page and flip to it.
     pub fn present(&mut self, frame: &Canvas) {
         let g = self.geometry;
@@ -256,26 +277,29 @@ impl Fbdev {
             false => 0,
         };
         write_page(frame, self.mem(), &g, page);
-        if self.can_pan {
-            let mut var = self.var;
-            var.yoffset = page * g.height;
-            var.xoffset = 0;
-            let fd = self.file.as_raw_fd();
-            // SAFETY: FBIOPAN_DISPLAY reads a fb_var_screeninfo.
-            if unsafe { libc::ioctl(fd, FBIOPAN_DISPLAY as _, &var) } != 0 {
-                // Some drivers only take the offset through PUT_VSCREENINFO
-                // (Onion's display.h does it that way).
-                if unsafe { libc::ioctl(fd, FBIOPUT_VSCREENINFO as _, &var) } != 0 {
-                    // Neither: draw into the visible page from now on.
-                    self.can_pan = false;
-                    let shown = self.shown;
-                    write_page(frame, self.mem(), &g, shown);
-                    return;
-                }
-            }
-            self.var = var;
+        if !self.pan(page) {
+            // Neither ioctl: draw into the visible page from now on.
+            self.can_pan = false;
+            let shown = self.shown;
+            write_page(frame, self.mem(), &g, shown);
+            return;
         }
         self.shown = page;
+    }
+
+    /// Before exiting: leave the last frame on page 0 and show page 0.
+    ///
+    /// Onion's own programs assume the first page. `display_reset()` in
+    /// Onion's display.h sets `yoffset = 0` after MainUI, and the in-game
+    /// Game Switcher overlay draws through Onion's SDL into that page.
+    /// Leaving the panel on page 1 makes the overlay draw where nobody
+    /// can see it: a black screen that still takes input.
+    pub fn hand_back(&mut self, last: &Canvas) {
+        let g = self.geometry;
+        write_page(last, self.mem(), &g, 0);
+        if self.shown != 0 && self.pan(0) {
+            self.shown = 0;
+        }
     }
 }
 
@@ -354,6 +378,28 @@ mod tests {
         fb.shown = 1;
         fb.present(&frame());
         assert_eq!(fb.shown_page(), 0);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn hand_back_leaves_the_last_frame_on_page_zero() {
+        let d = tempfile_dir();
+        let path = d.join("fb0");
+        let mut fb = Fbdev::from_file(&path, Geometry::MINI).unwrap();
+        fb.present(&frame());
+        assert_eq!(fb.shown_page(), 1, "an odd number of frames ends on page 1");
+        let mut last = frame();
+        last.px[1] = 0xFF12_3456;
+        fb.hand_back(&last);
+        assert_eq!(fb.shown_page(), 0);
+        drop(fb);
+        let bytes = std::fs::read(&path).unwrap();
+        let px = |i: usize| u32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap());
+        assert_eq!(
+            px(640 * 480 - 2),
+            0xFF12_3456,
+            "page 0 holds the last frame, rotated"
+        );
         let _ = std::fs::remove_dir_all(d);
     }
 

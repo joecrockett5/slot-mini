@@ -84,7 +84,7 @@ fn main() {
         };
         let opts = Options {
             sound: None,
-            face_wait: Some(Duration::from_millis(250)),
+            face_wait: Some(slot_mini::app::FACE_WAIT),
             seed: 1,
         };
         let mut app = App::new(paths.clone(), Box::new(status), opts, 0);
@@ -118,6 +118,35 @@ fn main() {
             }
         }
         app.handle(Event::Release(Button::Right));
+        // Letter jumps and shelf switches: each lands where nothing is built.
+        let mut jump_worst = Duration::ZERO;
+        for b in [
+            Button::Up,
+            Button::Up,
+            Button::Up,
+            Button::R1,
+            Button::L1,
+            Button::Up,
+            Button::R1,
+            Button::R1,
+        ] {
+            app.handle(Event::Press(b));
+            now += 16;
+            let t = Instant::now();
+            app.tick(now);
+            app.render(&mut frame);
+            jump_worst = jump_worst.max(t.elapsed());
+            app.handle(Event::Release(b));
+            for _ in 0..30 {
+                now += 16;
+                app.tick(now);
+                app.render(&mut frame);
+            }
+        }
+        println!(
+            "{pass}: worst frame after a letter jump or shelf switch {:.1} ms",
+            jump_worst.as_secs_f64() * 1000.0
+        );
         println!(
             "{pass}: {games} extra carts, first frame {:.0} ms, scroll {} frames, avg {:.2} ms, worst {:.2} ms, textures {:.1} MB",
             first.as_secs_f64() * 1000.0,

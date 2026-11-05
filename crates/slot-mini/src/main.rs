@@ -255,6 +255,8 @@ fn main() {
             }
         }
     }
+    // Leave the screen on the framebuffer page Onion's programs expect.
+    out.close(&frame);
     if let Some(p) = &a.shot {
         if let Err(e) = slot_mini_gfx::save_png(&frame, p) {
             eprintln!("slot-mini: {}: {e}", p.display());

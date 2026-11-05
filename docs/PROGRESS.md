@@ -175,6 +175,36 @@ Nothing has run on a real Mini Plus. `DEVICE-TESTING.md` is the next step.
   interplay, the ffplay sound path, first-start time with many labels).
 - Roadmap items in the README.
 
+## 0.1.1 (first device feedback)
+
+Tested on a Mini Plus by the maintainer: it works. Three fixes:
+
+- MENU in a game (app mode) showed a black screen with the Game Switcher
+  invisible but working. slot-mini now hands the framebuffer back on page 0
+  when it exits (`Fbdev::hand_back`), where Onion's programs draw.
+- Big jumps (letter skips, shelf switches) flashed every cart as its label
+  colour. Every frame now waits up to 500 ms for the faces it shows, as slot
+  does. Regression test: `big_jumps_never_flash_placeholders` in
+  `tests/shelf.rs`. Under qemu-armv7: worst frame after a jump about 50 ms
+  (cold) / 34 ms (warm); held scrolling worst frame 30 ms cold, 13 ms warm.
+  Prefetching one more cart each side only shaved the scroll worst case to
+  22 ms and raised peak memory to 37 MB, so it stays at four.
+
+- Hold A loaded the auto state anyway. slot-mini 0.1.0 used the
+  development branch's `/tmp/reset_game` flag, which released Onion
+  (4.3.1-1) does not have. Hold A now writes released Onion's "Reset game"
+  command (RetroArch with `.tmp_update/reset.cfg` appended and the core Game
+  List Options would pick), keeping the flag only as a fallback where the
+  core is chosen at run time. Tests: `launch.rs` unit tests and
+  `hold_a_starts_fresh_for_one_run` / `hold_a_falls_back_to_the_dev_runtime_flag`.
+  The in-game MENU problem seen after a Hold A launch is the framebuffer page
+  issue above (it depended on which page the last frame used).
+
+Also reported: in boot-launcher mode the in-game menu appears after a delay.
+That menu is Onion's Game Switcher, which pauses RetroArch and takes a
+screenshot first; it is not slot-mini's code. Worth comparing with Onion's
+own MainUI on the same game.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips

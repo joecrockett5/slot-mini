@@ -159,6 +159,13 @@ pub fn build(sd: &Path, labels: bool) -> std::io::Result<()> {
         let path = sd.join("Roms").join(p.dir_name()).join(name);
         std::fs::write(path, rom_bytes(*p, title, code, *cgb))?;
     }
+    // RetroArch's cores, as placeholders: Hold A reads which one a system
+    // uses, as Onion's Game List Options does.
+    let cores = sd.join("RetroArch/.retroarch/cores");
+    std::fs::create_dir_all(&cores)?;
+    for core in ["gpsp_libretro", "gambatte_libretro"] {
+        std::fs::write(cores.join(format!("{core}.so")), b"not a real core")?;
+    }
     std::fs::create_dir_all(sd.join(".tmp_update/config"))?;
     std::fs::write(
         sd.join("system.json"),

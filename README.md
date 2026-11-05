@@ -68,7 +68,7 @@ when slot-mini is missing). To remove the shim by hand, with the card in a compu
 | SELECT | Cart studio for this cart |
 | MENU | About: sounds, boot launcher, exit to Onion |
 
-Hold A uses Onion's own "Reset game" switch for that one run. As with Onion's Reset game, RetroArch still
+Hold A starts the game the way Onion's own "Reset game" (Game List Options) does, for that one run. As with Onion's Reset game, RetroArch still
 writes its auto state when you quit the game.
 
 In the cart studio: Up / Down pick a row, A opens it, Left / Right change a finish or shape, B goes back and
