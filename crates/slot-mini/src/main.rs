@@ -180,6 +180,13 @@ fn backend(name: &str) -> Box<dyn Backend> {
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
+/// Unchanged frames (about half a second) before the loop starts sleeping.
+const IDLE_AFTER_FRAMES: u32 = 30;
+/// How long an idle loop sleeps on the button device. Anything that changes
+/// without a press (the clock, the battery, a face arriving) shows within
+/// this; a press wakes it at once.
+const IDLE_WAIT_MS: u32 = 100;
+
 extern "C" fn on_signal(_: libc::c_int) {
     STOP.store(true, Ordering::Release);
 }
@@ -237,25 +244,49 @@ fn main() {
     let mut script = script.into_iter().peekable();
     let mut n = 0u64;
     let frame_time = Duration::from_micros(16_667);
+    // On the device an unchanged screen is neither drawn nor shown, and once
+    // it has been still for a while (no button held) the loop sleeps on the
+    // button device instead of running at 60 fps: an idle shelf otherwise
+    // keeps the CPU busy and the handheld warm.
+    let pace = a.backend == "device" && !a.sim;
+    let mut still = 0u32;
+    let mut held = 0usize;
     loop {
         let t = Instant::now();
+        let idle = pace && still >= IDLE_AFTER_FRAMES && held == 0;
+        let mut events = match idle {
+            true => out.wait(IDLE_WAIT_MS),
+            false => out.poll(),
+        };
         let now = match a.sim {
             true => n * 16,
             false => started.elapsed().as_millis() as u64,
         };
-        let mut events = out.poll();
         while script.peek().is_some_and(|(at, _)| *at <= now) {
             events.push(script.next().unwrap().1);
         }
         if STOP.load(Ordering::Acquire) {
             events.push(Event::Quit);
         }
+        if !events.is_empty() {
+            still = 0;
+        }
         for ev in events {
+            match ev {
+                Event::Press(_) => held += 1,
+                Event::Release(_) => held = held.saturating_sub(1),
+                Event::Quit => {}
+            }
             app.handle(ev);
         }
         app.tick(now);
-        app.render(&mut frame);
-        out.present(&frame);
+        let changed = app.render(&mut frame);
+        if changed || !pace || n == 0 {
+            out.present(&frame);
+            still = 0;
+        } else {
+            still = still.saturating_add(1);
+        }
         if n == 0 {
             eprintln!(
                 "slot-mini: first frame at {} ms",
@@ -266,8 +297,9 @@ fn main() {
         if app.exit.is_some() || a.frames.is_some_and(|f| n >= f) {
             break;
         }
-        // The desktop window paces itself; everything else sleeps to 60 fps.
-        if !a.sim && a.backend != "desktop" {
+        // The desktop window paces itself; everything else sleeps to 60 fps
+        // (an idle device already waited for input above).
+        if !a.sim && a.backend != "desktop" && !idle {
             if let Some(left) = frame_time.checked_sub(t.elapsed()) {
                 std::thread::sleep(left);
             }

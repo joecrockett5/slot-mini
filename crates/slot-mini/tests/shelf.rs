@@ -170,6 +170,33 @@ fn charging_shows_a_bolt_and_a_green_gauge() {
     assert!(green > 20, "{green} green pixels");
 }
 
+/// An idle shelf is not drawn again (the device then shows nothing new and
+/// sleeps), and what stays on screen is exactly a full redraw.
+#[test]
+fn an_idle_shelf_is_not_drawn_again() {
+    let rig = Rig::new();
+    let mut d = rig.app();
+    d.run(2500);
+    let frame = |d: &mut common::Driver| {
+        d.now += common::FRAME_MS;
+        d.app.tick(d.now);
+        d.app.render(&mut d.frame)
+    };
+    assert!(!frame(&mut d), "a settled shelf is unchanged");
+    assert!(!frame(&mut d));
+    d.press(Button::Right);
+    assert!(frame(&mut d), "a press moves the shelf");
+    d.release(Button::Right);
+    let moving = (0..10).filter(|_| frame(&mut d)).count();
+    assert!(moving > 5, "the scroll animates ({moving} of 10 frames)");
+    d.run(2500);
+    assert!(!frame(&mut d), "settled again");
+    // The kept frame is what a full redraw gives.
+    let mut fresh = slot_mini_gfx::Canvas::new(d.frame.w, d.frame.h);
+    assert!(d.app.render(&mut fresh), "another canvas is always drawn");
+    assert!(fresh.px == d.frame.px);
+}
+
 /// Jumping far along a shelf, or to another shelf, must not show carts as
 /// flat label colour while their faces are built (seen on the device). Uses
 /// the device's real wait, not the tests' unlimited one.

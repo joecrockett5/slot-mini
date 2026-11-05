@@ -19,17 +19,35 @@ fn cfg(rig: &Rig) -> std::path::PathBuf {
         .join(format!("{GAME}.cfg"))
 }
 
+/// START, then wait for the picker to open: its faces are built on a thread
+/// in real time while the test's clock is simulated, so wait for the scene
+/// to start rather than for a fixed stretch of simulated time.
+fn open(d: &mut common::Driver) {
+    d.tap(Button::Start);
+    assert!(d.app.core.is_some(), "the picker opens");
+    for _ in 0..500 {
+        if d.app.core.as_ref().is_some_and(|c| c.shown()) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        d.run(common::FRAME_MS);
+    }
+    assert!(d.app.core.as_ref().unwrap().shown());
+    // slot's 420 ms opening.
+    d.run(500);
+}
+
 #[test]
 fn start_opens_the_cart_and_a_keeps_gpsp_in_onions_file() {
     let rig = Rig::new();
     let mut d = rig.app();
     d.go_to(GAME);
-    d.tap(Button::Start);
-    let scene = d.app.core.as_ref().expect("the picker opens");
-    assert_eq!(scene.picker.seat(), Core::Mgba, "mGBA by default");
-    // Faces are built, then the cart opens (slot's 420 ms).
-    d.run(800);
-    assert!(d.app.core.as_ref().unwrap().shown());
+    open(&mut d);
+    assert_eq!(
+        d.app.core.as_ref().unwrap().picker.seat(),
+        Core::Mgba,
+        "mGBA by default"
+    );
     golden("core_picker", &d.frame);
 
     // Other buttons do nothing while it is open.
@@ -64,8 +82,7 @@ fn start_opens_the_cart_and_a_keeps_gpsp_in_onions_file() {
 
     // Back to mGBA, the default: Onion's file goes, as "Restore default
     // core" removes it.
-    d.tap(Button::Start);
-    d.run(800);
+    open(&mut d);
     assert_eq!(d.app.core.as_ref().unwrap().picker.seat(), Core::Gpsp);
     d.tap(Button::Left);
     d.run(300);
@@ -78,8 +95,7 @@ fn start_opens_the_cart_and_a_keeps_gpsp_in_onions_file() {
 
 /// Switch with the picker: START, a direction, A.
 fn switch(d: &mut common::Driver, to: Button) {
-    d.tap(Button::Start);
-    d.run(800);
+    open(d);
     d.tap(to);
     d.run(300);
     d.tap(Button::A);
@@ -130,8 +146,7 @@ fn b_leaves_the_core_as_it_was() {
     let rig = Rig::new();
     let mut d = rig.app();
     d.go_to(GAME);
-    d.tap(Button::Start);
-    d.run(800);
+    open(&mut d);
     d.tap(Button::Right);
     d.run(300);
     d.tap(Button::B);

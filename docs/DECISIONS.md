@@ -170,3 +170,10 @@ Calls made without asking, and why. Newest last.
     transfer does, touches no Onion or RetroArch settings, and keeps every
     replaced save and auto state as a backup. It only happens when the
     switch is made in slot-mini.
+44. **An unchanged screen is not drawn, and an idle launcher sleeps**
+    (0.4.2, after the device ran warm idling on the shelf). Each frame's draw
+    list and texture generation are compared with the last; an identical
+    frame is neither rasterised nor shown. After half a second of that with
+    no button held, the loop blocks on the button device for up to 100 ms
+    instead of running at 60 fps. Measured with the release build on the
+    device backend: 0.65 s of CPU per 10 s idle before, 0.01 s after.

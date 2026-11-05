@@ -40,6 +40,13 @@ pub trait Backend {
     fn present(&mut self, frame: &Canvas);
     /// Events since the last call, oldest first. Never blocks.
     fn poll(&mut self) -> Vec<Event>;
+    /// Wait up to `ms` for input, then return what arrived. Lets an idle
+    /// screen sleep instead of drawing at 60 fps; a button press ends the
+    /// wait at once where the backend can block on its input.
+    fn wait(&mut self, ms: u32) -> Vec<Event> {
+        std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+        self.poll()
+    }
     /// Called once before the process exits, with the last frame shown.
     fn close(&mut self, _last: &Canvas) {}
 }
@@ -150,6 +157,16 @@ impl Backend for Device {
 
     fn poll(&mut self) -> Vec<Event> {
         self.input.as_mut().map(|i| i.poll()).unwrap_or_default()
+    }
+
+    fn wait(&mut self, ms: u32) -> Vec<Event> {
+        match self.input.as_mut() {
+            Some(i) => i.wait(ms as i32),
+            None => {
+                std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+                Vec::new()
+            }
+        }
     }
 
     fn close(&mut self, last: &Canvas) {

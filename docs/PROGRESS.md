@@ -319,6 +319,25 @@ Save and Load State worked on the device. Fixed:
 - Tests: `cores.rs` (carry, backups, empty and missing saves), and the
   picker carrying a save there and back (`tests/cores.rs`).
 
+## 0.4.2: idle power
+
+- Reported on the device: idling on the shelf warmed the handheld and ran
+  the battery down. Every frame was drawn and shown at 60 fps even when
+  nothing moved.
+- `App::render` returns whether the frame changed (draw list and the
+  renderer's texture generation compared with the last frame drawn into
+  that canvas); unchanged frames are not rasterised.
+- `main.rs`: on the device, unchanged frames are not presented, and after 30
+  of them with no button held the loop waits on the button device
+  (`Backend::wait`, `Evdev::wait`) for up to 100 ms per tick.
+- Idle CPU, release build, device backend on a file framebuffer, 10 s:
+  0.65 s before, 0.01 s after (x86; the Mini Plus is many times slower, so
+  the saving there is larger in proportion of its CPU).
+- Tests: `an_idle_shelf_is_not_drawn_again` (unchanged frames skipped, a
+  press redraws, the kept frame equals a full redraw). The core picker
+  tests now wait for its faces thread in real time instead of relying on
+  slow frames.
+
 ## Open questions
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
