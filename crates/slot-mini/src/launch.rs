@@ -206,12 +206,20 @@ pub fn hand_off(
         eprintln!("slot-mini: recents: {e}");
     }
     let reset = paths.tmp.join("reset_game");
+    let mut cmd = cmd;
     match fresh {
-        true => std::fs::write(&reset, b"")?,
-        false => match std::fs::remove_file(&reset) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
-            _ => {}
+        true => match fresh_command(paths, cart)? {
+            // Stable Onion: Game List Options' "Reset game" command.
+            Some(direct) => {
+                atomic_write(&paths.sysdir().join("reset.cfg"), RESET_CFG.as_bytes())?;
+                remove_if_there(&reset)?;
+                cmd = direct;
+            }
+            // A launch script whose core cannot be read (Onion's development
+            // branch picks it at run time): that runtime's own flag.
+            None => std::fs::write(&reset, b"")?,
         },
+        false => remove_if_there(&reset)?,
     }
     match mode {
         // MainUI's hand-off: the runtime moves it into .tmp_update.
@@ -223,6 +231,75 @@ pub fn hand_off(
         }
     }
     Ok(cmd)
+}
+
+fn remove_if_there(p: &Path) -> std::io::Result<()> {
+    match std::fs::remove_file(p) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
+    }
+}
+
+/// What Onion's Game List Options writes to `.tmp_update/reset.cfg` for
+/// "Reset game" (`reset_game()` in game_list_options.sh, Onion 4.3.1-1):
+/// no auto-load for this run, and do not save RetroArch's config on exit.
+pub const RESET_CFG: &str = "savestate_auto_load = \"false\"\nconfig_save_on_exit = \"false\"\n";
+
+/// The RetroArch core a cart runs on, the way Onion's Game List Options
+/// works it out (`get_core_info`): a per-game override in
+/// `<rom folder>/.game_config/<rom name>.cfg` (`core = "..."`), else the core
+/// named in the system's `launch.sh`. `None` when the script picks it at run
+/// time (`${default_core}`) or the core file is not on the card.
+pub fn core_for(paths: &Paths, cart: &Cart) -> Option<String> {
+    let dir = cart.rom.parent()?;
+    let stem = cart.rom.file_stem()?.to_str()?;
+    let per_game = std::fs::read_to_string(dir.join(".game_config").join(format!("{stem}.cfg")))
+        .ok()
+        .and_then(|text| {
+            text.lines().find_map(|l| {
+                let (k, v) = l.split_once('=')?;
+                (k.trim() == "core").then(|| v.trim().trim_matches('"').to_string())
+            })
+        })
+        .filter(|c| !c.is_empty());
+    let core = per_game.or_else(|| {
+        let script = std::fs::read_to_string(paths.launch_script(cart.platform)).ok()?;
+        const AT: &str = ".retroarch/cores/";
+        let after = &script[script.find(AT)? + AT.len()..];
+        Some(after[..after.find(".so")?].to_string())
+    })?;
+    let plain = core
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    let on_card = paths
+        .sd
+        .join("RetroArch/.retroarch/cores")
+        .join(format!("{core}.so"));
+    (plain && on_card.is_file()).then_some(core)
+}
+
+/// Hold A on stable Onion: the command Game List Options' "Reset game"
+/// writes, RetroArch run directly with Onion's `reset.cfg` appended. Stable
+/// Onion's runtime has no `/tmp/reset_game` flag (only its development
+/// branch does), so this is what works on released Onion.
+pub fn fresh_command(paths: &Paths, cart: &Cart) -> Result<Option<String>, LaunchError> {
+    let Some(core) = core_for(paths, cart) else {
+        return Ok(None);
+    };
+    let rel = cart
+        .rom
+        .strip_prefix(&paths.sd)
+        .map_err(|_| LaunchError::NotOnCard)?
+        .to_str()
+        .ok_or(LaunchError::NotOnCard)?
+        .to_string();
+    let rom = format!("/mnt/SDCARD/{rel}");
+    if !command_safe(&rom, true) {
+        return Err(LaunchError::UnsafePath(rom));
+    }
+    Ok(Some(format!(
+        "LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so ./retroarch -v --appendconfig \"/mnt/SDCARD/.tmp_update/reset.cfg\" -L \"/mnt/SDCARD/RetroArch/.retroarch/cores/{core}.so\" \"{rom}\"\n"
+    )))
 }
 
 /// Which emulator folder a Recents `launch` path names, if one of ours.
@@ -342,6 +419,79 @@ mod tests {
         add_recent(&p, &record(&p, &cart(&p, "A.gba")).unwrap()).unwrap();
         let text = std::fs::read_to_string(p.sd.join("Roms/recentlist.json")).unwrap();
         assert_eq!(text.lines().count(), RECENTS_MAX);
+    }
+
+    fn with_core(p: &Paths, script_core: &str, file: &str) {
+        let emu = p.sd.join("Emu/GBA");
+        std::fs::create_dir_all(&emu).unwrap();
+        std::fs::write(
+            emu.join("launch.sh"),
+            format!("#!/bin/sh\ncd /mnt/SDCARD/RetroArch/\nHOME=/mnt/SDCARD/RetroArch/ ./retroarch -v -L .retroarch/cores/{script_core}.so \"$1\"\n"),
+        )
+        .unwrap();
+        let cores = p.sd.join("RetroArch/.retroarch/cores");
+        std::fs::create_dir_all(&cores).unwrap();
+        std::fs::write(cores.join(format!("{file}.so")), b"core").unwrap();
+    }
+
+    #[test]
+    fn the_core_comes_from_the_launch_script_or_a_per_game_override() {
+        let (_d, p) = rig();
+        with_core(&p, "mgba_libretro", "mgba_libretro");
+        let c = cart(&p, "A.gba");
+        assert_eq!(core_for(&p, &c).as_deref(), Some("mgba_libretro"));
+        // Game List Options' per-game core wins, if that core is installed.
+        std::fs::create_dir_all(p.sd.join("Roms/GBA/.game_config")).unwrap();
+        std::fs::write(
+            p.sd.join("Roms/GBA/.game_config/A.cfg"),
+            "core = \"gpsp_libretro\"\n",
+        )
+        .unwrap();
+        assert_eq!(core_for(&p, &c), None, "gpsp is not on the card");
+        std::fs::write(
+            p.sd.join("RetroArch/.retroarch/cores/gpsp_libretro.so"),
+            b"core",
+        )
+        .unwrap();
+        assert_eq!(core_for(&p, &c).as_deref(), Some("gpsp_libretro"));
+    }
+
+    #[test]
+    fn a_core_picked_at_run_time_cannot_be_read() {
+        let (_d, p) = rig();
+        // Onion's development branch: `-L .retroarch/cores/${default_core}_libretro.so`.
+        with_core(&p, "${default_core}_libretro", "gpsp_libretro");
+        assert_eq!(core_for(&p, &cart(&p, "A.gba")), None);
+    }
+
+    #[test]
+    fn hold_a_writes_onions_reset_game_command() {
+        let (_d, p) = rig();
+        with_core(&p, "mgba_libretro", "mgba_libretro");
+        std::fs::write(p.tmp.join("reset_game"), b"").unwrap();
+        let cmd = hand_off(&p, Mode::Launcher, "GBA", &cart(&p, "Sub/Game.gba"), true).unwrap();
+        assert_eq!(
+            cmd,
+            "LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so ./retroarch -v --appendconfig \"/mnt/SDCARD/.tmp_update/reset.cfg\" -L \"/mnt/SDCARD/RetroArch/.retroarch/cores/mgba_libretro.so\" \"/mnt/SDCARD/Roms/GBA/Sub/Game.gba\"\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(p.tmp.join("cmd_to_run.sh")).unwrap(),
+            cmd
+        );
+        assert_eq!(
+            std::fs::read_to_string(p.sysdir().join("reset.cfg")).unwrap(),
+            RESET_CFG
+        );
+        assert!(
+            !p.tmp.join("reset_game").exists(),
+            "no stray flag for a later launch"
+        );
+        // Recents still names the emulator's launch script, as Onion's does.
+        let recents = std::fs::read_to_string(p.sd.join("Roms/recentlist.json")).unwrap();
+        assert!(
+            recents.contains("\"launch\":\"/mnt/SDCARD/Emu/GBA/launch.sh\""),
+            "{recents}"
+        );
     }
 
     #[test]

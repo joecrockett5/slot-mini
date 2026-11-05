@@ -135,8 +135,51 @@ fn tap_a_launches_through_the_runtime_and_returns_to_the_cart() {
 
 #[test]
 fn hold_a_starts_fresh_for_one_run() {
+    // Stable Onion (4.3.1-1): Hold A writes Game List Options' "Reset game"
+    // command, RetroArch with Onion's reset.cfg appended.
+    let rig = Rig::new();
+    let retroarch = rig.paths.sd.join("RetroArch/retroarch");
+    std::fs::write(
+        &retroarch,
+        format!(
+            "#!/bin/sh\necho \"$*\" >> \"{}/retroarch.log\"\n",
+            rig.paths.tmp.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&retroarch, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mainui = launcher(&rig, "launcher");
+    input(&rig, 1, "200:press:A,1000:release:A");
+    run(&rig, 1, &["sh", mainui.to_str().unwrap()]);
+    let log = read(rig.paths.tmp.join("runtime.log"));
+    assert!(
+        log.contains("turn 1: run LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so ./retroarch -v --appendconfig \"/mnt/SDCARD/.tmp_update/reset.cfg\" -L \"/mnt/SDCARD/RetroArch/.retroarch/cores/gpsp_libretro.so\" \"/mnt/SDCARD/Roms/GBA/2 Games in 1 (Europe).gba\""),
+        "{log}"
+    );
+    let ran = read(rig.paths.tmp.join("retroarch.log"));
+    let sd = rig.paths.sd.display();
+    assert_eq!(
+        ran.trim(),
+        format!("-v --appendconfig {sd}/.tmp_update/reset.cfg -L {sd}/RetroArch/.retroarch/cores/gpsp_libretro.so {sd}/Roms/GBA/2 Games in 1 (Europe).gba")
+    );
+    assert_eq!(
+        read(rig.paths.sysdir().join("reset.cfg")),
+        "savestate_auto_load = \"false\"\nconfig_save_on_exit = \"false\"\n"
+    );
+    assert!(!rig.paths.tmp.join("reset_game").exists(), "no stray flag");
+}
+
+#[test]
+fn hold_a_falls_back_to_the_dev_runtime_flag() {
+    // Onion's development branch picks the GBA core at run time; there the
+    // runtime's /tmp/reset_game flag does the job.
     let rig = Rig::new();
     fake_emulator(&rig);
+    let script = rig.paths.sd.join("Emu/GBA/launch.sh");
+    let text =
+        read(&script) + "# ./retroarch -v -L .retroarch/cores/${default_core}_libretro.so \"$1\"\n";
+    std::fs::write(&script, text).unwrap();
     let mainui = launcher(&rig, "launcher");
     input(&rig, 1, "200:press:A,1000:release:A");
     run(&rig, 1, &["sh", mainui.to_str().unwrap()]);

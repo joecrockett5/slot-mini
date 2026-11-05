@@ -35,7 +35,7 @@ from source; what slot-mini does about it is given).
 | Launch flow: MainUI writes `/tmp/cmd_to_run.sh` and exits | confirmed; **corrected**: the loop moves it to `/mnt/SDCARD/.tmp_update/cmd_to_run.sh` and runs that |
 | Recents and Game Switcher | confirmed: the launcher must write the line itself; format below |
 | Paths: Roms, Emu launch scripts, RetroArch, saves | confirmed |
-| Resume vs fresh start | **corrected**: Onion already has a one-run "no auto-load" switch, `/tmp/reset_game`; slot-mini uses it instead of its own `--appendconfig` file |
+| Resume vs fresh start | **corrected** (on a device): released Onion has no `/tmp/reset_game`; slot-mini writes the same direct RetroArch command as Onion's "Reset game", with Onion's `reset.cfg` |
 | Toolchain: static musl armv7 | confirmed feasible; see phase 2 notes in `PROGRESS.md` |
 | App manifest | confirmed: `App/<name>/config.json` with `label`, `icon`, `launch`, `description` |
 | Boot launcher binaries | confirmed: `.tmp_update/bin/MainUI-{283,354,285}-{clean,expert}` |
@@ -279,19 +279,36 @@ platform whose `Emu/<sys>/launch.sh` is missing gets no shelf.
 
 ## Resume and fresh start
 
-**Corrected.** Onion's launch scripts load and write the auto state through
-RetroArch's own settings. For a one-off fresh start the runtime already has a
-switch: if `/tmp/reset_game` exists when a game launches, `override_game_core`
-writes `/tmp/reset.cfg` with `savestate_auto_load = "false"` and
-`config_save_on_exit = "false"`, injects `--appendconfig "/tmp/reset.cfg"`
-into the command, deletes the flag, and `cleanup_appendconfig` removes the
-injection after the game (`runtime.sh`). Game List Options' "Reset game" uses
-exactly this (`Onion:static/build/.tmp_update/script/game_list_options.sh#L398-L400`).
+**Corrected twice; the second time on a device.** Onion's launch scripts load
+and write the auto state through RetroArch's own settings. A one-off fresh
+start works differently in Onion's releases and on its development branch:
 
-slot-mini touches `/tmp/reset_game` for **Hold A** and nothing for **Tap A**.
-It never touches save files or states. Note that RetroArch's auto-save on exit
-is not disabled by `reset.cfg`, so after a fresh start, quitting the game
-writes a new auto state, just as Onion's own "Reset game" does.
+- **Released Onion (4.3.1-1, checked against tag `v4.3.1-1`):** Game List
+  Options' "Reset game" writes `savestate_auto_load = "false"` and
+  `config_save_on_exit = "false"` to `.tmp_update/reset.cfg`, then replaces
+  the command with RetroArch run directly:
+  `LD_PRELOAD=/mnt/SDCARD/miyoo/lib/libpadsp.so ./retroarch -v --appendconfig "/mnt/SDCARD/.tmp_update/reset.cfg" -L "<core>" "<rom>"`.
+  The core is the per-game override in `<rom folder>/.game_config/<rom name>.cfg`
+  (`core = "..."`), else the one named after `.retroarch/cores/` in the
+  system's `launch.sh` (`get_core_info`). The runtime has **no**
+  `/tmp/reset_game` flag.
+- **Development branch (`07505ea`, read first):** `/tmp/reset_game` makes
+  `override_game_core` inject `--appendconfig "/tmp/reset.cfg"` into the
+  launch script for one run, and its GBA script picks the core at run time
+  (`${default_core}`).
+
+slot-mini 0.1.0 used only the development branch's flag, so **Hold A started
+from the auto state on released Onion** (reported on a device). Since 0.1.1,
+Hold A writes the released "Reset game" command whenever the core can be read
+from the launch script and its `.so` is on the card, and falls back to
+`/tmp/reset_game` otherwise. Tap A writes the normal command and clears any
+stray flag.
+
+slot-mini never touches save files or states. RetroArch's auto-save on exit
+is not turned off by `reset.cfg`, so quitting a fresh start writes a new auto
+state, just as Onion's own "Reset game" does. The fresh-start command runs
+RetroArch directly, so like Onion's "Reset game" it skips anything else the
+system's `launch.sh` does (for example the mGBA save-import prompt).
 
 ## Apps and the boot launcher
 

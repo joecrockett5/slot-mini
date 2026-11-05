@@ -8,10 +8,13 @@ Calls made without asking, and why. Newest last.
    treats such a process as MainUI and steals MENU, SELECT, Y and L1 (see
    `PLATFORM.md`, Input). The boot shim re-executes itself through `/bin/sh`
    before starting slot-mini.
-3. **Fresh start uses Onion's `/tmp/reset_game` flag** rather than a private
-   `--appendconfig` file. It is the same mechanism as Game List Options'
-   "Reset game", already handles injection and cleanup in the launch script,
-   and keeps slot-mini out of RetroArch's config.
+3. **Hold A does what Onion's own "Reset game" does.** On released Onion
+   that is RetroArch run directly with `--appendconfig .tmp_update/reset.cfg`
+   and the core Game List Options would pick; where the core is chosen at
+   run time (Onion's development branch) the runtime's `/tmp/reset_game`
+   flag is used instead. (0.1.0 used only the flag, which released Onion
+   does not have; found on a device.) Either way slot-mini stays out of
+   RetroArch's own config.
 4. **In app mode a game returns to MainUI, not slot-mini.** Onion has no hook
    to bring an app back after a game. slot-mini remembers the cart and opens on
    it next time. As the boot launcher it returns straight to the cart.
