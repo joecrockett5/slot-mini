@@ -131,3 +131,14 @@ Calls made without asking, and why. Newest last.
 34. **The eject starts on the first frame shown** (0.2.1). Its clock and
     sound used to start when slot-mini started, so the time spent loading the
     shelf ate the animation and only the last frames, or none, were seen.
+35. **Updates only when asked, only numbered releases** (0.3.0). No
+    background traffic, and the rolling `main-latest` build is for people
+    who unzip it on purpose.
+36. **An update must prove itself before it replaces anything.** SHA-256
+    against GitHub's digest, CRCs, then the new binary has to run on the
+    device and report the promised version. The replaced files are kept in
+    `update/previous/`, and a failed swap puts them back. `data/`, `cache/`
+    and `update/` can never come from a zip.
+37. **Restart by `exec`, not by exiting.** Exiting would drop to Onion's
+    menu in app mode and run the shim's fallbacks in launcher mode; `exec`
+    keeps the PID and the arguments, so either mode carries on.

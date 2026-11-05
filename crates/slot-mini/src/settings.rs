@@ -26,6 +26,8 @@ pub struct Settings {
     /// slot's in-game MENU (tap: menu, hold: eject) for games slot-mini
     /// launches. Off gives MENU back to Onion.
     pub ingame_menu: bool,
+    /// Where MENU -> "Check for updates" looks: `owner/repo` on GitHub.
+    pub update_repo: String,
 }
 
 impl Default for Settings {
@@ -36,6 +38,7 @@ impl Default for Settings {
             art_host: ART_HOST.to_string(),
             clock_24h: true,
             ingame_menu: true,
+            update_repo: crate::update::REPO.to_string(),
         }
     }
 }
@@ -62,6 +65,11 @@ impl Settings {
                 .unwrap_or(d.art_host),
             clock_24h: m.get("clock").is_none_or(|c| c != "12h"),
             ingame_menu: on(m.get("ingame_menu"), d.ingame_menu),
+            update_repo: m
+                .get("update_repo")
+                .filter(|r| !r.is_empty())
+                .cloned()
+                .unwrap_or(d.update_repo),
         }
     }
 

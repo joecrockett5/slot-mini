@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! A tiny HTTP/1.1 server for label service tests: fixed files, an ETag on
 //! index.json, and a log of what was asked. Never touches the internet.
 

@@ -203,6 +203,9 @@ fn main() {
     // No game is running while slot-mini is: a helper left from the last one
     // (or its flag) would keep MENU away from Onion.
     slot_mini::ingame::clear_leftovers(&paths);
+    if let Some(v) = slot_mini::update::after_restart(&paths) {
+        eprintln!("slot-mini: now running {v}");
+    }
     let status: Box<dyn slot_mini::status::Status> = match a.sim {
         true => Box::new(slot_mini::status::FixedStatus {
             battery: Some(76),
@@ -303,6 +306,10 @@ fn main() {
                 }
             }
         }
+        Some(Exit::Restart) => {
+            save(&app, &paths);
+            restart(&paths)
+        }
         Some(Exit::ToOnion) if a.mode == Mode::Launcher => {
             save(&app, &paths);
             EXIT_TO_ONION
@@ -313,6 +320,18 @@ fn main() {
         }
     };
     std::process::exit(code);
+}
+
+/// Replace this process with the newly installed binary, same arguments.
+/// Only returns (with an exit code) if that fails.
+fn restart(paths: &Paths) -> i32 {
+    use std::os::unix::process::CommandExt;
+    let bin = paths.app().join("slot-mini");
+    let err = std::process::Command::new(&bin)
+        .args(std::env::args_os().skip(1))
+        .exec();
+    eprintln!("slot-mini: restart {}: {err}", bin.display());
+    0
 }
 
 fn save(app: &App, paths: &Paths) {

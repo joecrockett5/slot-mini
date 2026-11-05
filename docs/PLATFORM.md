@@ -188,6 +188,35 @@ interface is `wlan0` (`Onion:src/tweaks/tweaks.c`, network scripts under
 `.tmp_update/script/network/`). slot-mini shows the Wi-Fi icon when `wifi` is 1
 and `/sys/class/net/wlan0/operstate` reads `up`.
 
+## Updates over Wi-Fi
+
+**Written without a device; the end-to-end path is tested against a local
+stand-in for GitHub, with the real binary.**
+
+- **Where from.** `GET https://api.github.com/repos/<repo>/releases/latest`,
+  which only ever answers the newest full release (never drafts or the
+  `main-latest` pre-release). No token: the repo is public, and the
+  unauthenticated limit (60 requests an hour per IP) is far more than
+  manual checks need. The asset's `browser_download_url` redirects to
+  GitHub's asset host; ureq follows it.
+- **Trust.** HTTPS with rustls and the bundled webpki roots (as the label
+  service), so the device's clock must be roughly right; a certificate
+  "expired" or "not yet valid" error is reported as a wrong clock. The zip
+  must match the `sha256:` digest GitHub publishes for the asset, and each
+  file its zip CRC.
+- **Replacing a running binary.** The card is FAT. Renaming a new file over
+  the running `slot-mini` drops the old name; the kernel keeps the old file
+  alive until the process ends, so nothing breaks. If a rename is refused,
+  the old name is removed first. The swap happens on the card, so nothing
+  is copied through RAM twice; the zip and its unpacked files (about 10 MB)
+  are held in memory once.
+- **Restart.** `execv` of `App/slot-mini/slot-mini` with the same arguments:
+  same PID, so the boot shim or `launch.sh` waiting on it is none the wiser.
+  Descriptors are close-on-exec; the framebuffer is handed back first.
+- **The boot shim** lives in the binary. The restarted binary re-installs it
+  over `.tmp_update/bin/MainUI-*` if (and only if) the boot launcher is on,
+  with the same backup rules as turning it on.
+
 ## Launch flow
 
 **Confirmed, with one correction.** `runtime.sh` runs a loop forever
