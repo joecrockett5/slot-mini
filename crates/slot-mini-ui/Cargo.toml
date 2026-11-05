@@ -1,0 +1,20 @@
+[package]
+name = "slot-mini-ui"
+description = "slot's shelf, cart faces, slot chrome and footer, copied from slot-ui and drawn in software."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+fontdue = { workspace = true }
+png = { workspace = true }
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd", "png-format"] }
+slot-mini-gfx = { path = "../slot-mini-gfx" }
+slot-mini-store = { path = "../slot-mini-store" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

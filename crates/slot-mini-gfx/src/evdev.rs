@@ -1,0 +1,194 @@
+//! Buttons from the Mini Plus's evdev device, `/dev/input/event0`, with the
+//! key codes from Onion's `keymap_hw.h` (docs/PLATFORM.md, "Input").
+
+use std::fs::File;
+use std::io::Read;
+use std::os::fd::AsRawFd;
+use std::path::Path;
+
+use crate::backend::{Button, Event};
+
+const EV_KEY: u16 = 1;
+
+/// Onion's hardware key map: Linux key code to button.
+pub const KEYMAP: &[(u16, Button)] = &[
+    (103, Button::Up),    // KEY_UP
+    (108, Button::Down),  // KEY_DOWN
+    (105, Button::Left),  // KEY_LEFT
+    (106, Button::Right), // KEY_RIGHT
+    (57, Button::A),      // KEY_SPACE
+    (29, Button::B),      // KEY_LEFTCTRL
+    (42, Button::X),      // KEY_LEFTSHIFT
+    (56, Button::Y),      // KEY_LEFTALT
+    (18, Button::L1),     // KEY_E
+    (20, Button::R1),     // KEY_T
+    (15, Button::L2),     // KEY_TAB
+    (14, Button::R2),     // KEY_BACKSPACE
+    (97, Button::Select), // KEY_RIGHTCTRL
+    (28, Button::Start),  // KEY_ENTER
+    (1, Button::Menu),    // KEY_ESC
+    (116, Button::Power), // KEY_POWER
+];
+
+pub fn button(code: u16) -> Option<Button> {
+    KEYMAP.iter().find(|(c, _)| *c == code).map(|(_, b)| *b)
+}
+
+/// Size of `struct input_event` on the device: a 32-bit ARM `timeval` (two
+/// 32-bit fields), then type, code and value.
+pub const EVENT_SIZE_32: usize = 16;
+/// The same struct on a 64-bit host (64-bit `timeval`).
+pub const EVENT_SIZE_64: usize = 24;
+
+/// The size the running kernel uses.
+pub const EVENT_SIZE: usize = std::mem::size_of::<libc::input_event>();
+
+/// Turn raw event records into button events. Repeats (value 2) and other
+/// event types are dropped: the shelf does its own key repeat, as slot does.
+/// A trailing partial record is left in `buf` for the next read.
+pub fn parse(buf: &mut Vec<u8>, size: usize) -> Vec<Event> {
+    let mut out = Vec::new();
+    let whole = buf.len() / size * size;
+    for rec in buf[..whole].chunks_exact(size) {
+        let t = size - 8;
+        let kind = u16::from_le_bytes([rec[t], rec[t + 1]]);
+        let code = u16::from_le_bytes([rec[t + 2], rec[t + 3]]);
+        let value = i32::from_le_bytes(rec[t + 4..t + 8].try_into().unwrap());
+        if kind != EV_KEY {
+            continue;
+        }
+        let Some(b) = button(code) else {
+            continue;
+        };
+        match value {
+            1 => out.push(Event::Press(b)),
+            0 => out.push(Event::Release(b)),
+            _ => {}
+        }
+    }
+    buf.drain(..whole);
+    out
+}
+
+pub struct Evdev {
+    file: File,
+    buf: Vec<u8>,
+}
+
+impl Evdev {
+    pub fn open(path: &Path) -> std::io::Result<Evdev> {
+        let file = File::open(path)?;
+        // SAFETY: setting O_NONBLOCK on our own descriptor.
+        unsafe {
+            let fd = file.as_raw_fd();
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
+        Ok(Evdev {
+            file,
+            buf: Vec::new(),
+        })
+    }
+
+    /// Everything pressed or released since the last call. Never blocks.
+    pub fn poll(&mut self) -> Vec<Event> {
+        let mut chunk = [0u8; EVENT_SIZE * 32];
+        loop {
+            match self.file.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => self.buf.extend_from_slice(&chunk[..n]),
+                Err(_) => break,
+            }
+        }
+        parse(&mut self.buf, EVENT_SIZE)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One record as the 32-bit device writes it.
+    fn rec32(kind: u16, code: u16, value: i32) -> Vec<u8> {
+        let mut r = vec![0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x08];
+        r.extend_from_slice(&kind.to_le_bytes());
+        r.extend_from_slice(&code.to_le_bytes());
+        r.extend_from_slice(&value.to_le_bytes());
+        r
+    }
+
+    #[test]
+    fn recorded_device_bytes_become_buttons() {
+        // A tap of A, a held Right with a repeat, a SYN, and an unknown key.
+        let mut bytes = Vec::new();
+        for (k, c, v) in [
+            (1, 57, 1),
+            (0, 0, 0),
+            (1, 57, 0),
+            (1, 106, 1),
+            (1, 106, 2),
+            (1, 106, 0),
+            (1, 999, 1),
+            (1, 1, 1),
+        ] {
+            bytes.extend(rec32(k, c, v));
+        }
+        let out = parse(&mut bytes, EVENT_SIZE_32);
+        assert_eq!(
+            out,
+            vec![
+                Event::Press(Button::A),
+                Event::Release(Button::A),
+                Event::Press(Button::Right),
+                Event::Release(Button::Right),
+                Event::Press(Button::Menu),
+            ]
+        );
+        assert!(bytes.is_empty());
+    }
+
+    #[test]
+    fn a_partial_record_waits_for_the_rest() {
+        let full = rec32(1, 97, 1);
+        let mut bytes = full[..10].to_vec();
+        assert!(parse(&mut bytes, EVENT_SIZE_32).is_empty());
+        bytes.extend_from_slice(&full[10..]);
+        assert_eq!(
+            parse(&mut bytes, EVENT_SIZE_32),
+            vec![Event::Press(Button::Select)]
+        );
+    }
+
+    #[test]
+    fn every_onion_key_is_mapped_once() {
+        let mut codes: Vec<u16> = KEYMAP.iter().map(|k| k.0).collect();
+        codes.sort();
+        codes.dedup();
+        assert_eq!(codes.len(), KEYMAP.len());
+        assert_eq!(button(15), Some(Button::L2));
+        assert_eq!(button(14), Some(Button::R2));
+        assert_eq!(button(116), Some(Button::Power));
+    }
+
+    #[test]
+    fn reads_from_a_device_file() {
+        let path = std::env::temp_dir().join(format!("slot-mini-ev-{}", std::process::id()));
+        let mut bytes = Vec::new();
+        // Records in the running kernel's layout.
+        for (c, v) in [(18u16, 1i32), (18, 0)] {
+            let mut r = vec![0u8; EVENT_SIZE - 8];
+            r.extend_from_slice(&EV_KEY.to_le_bytes());
+            r.extend_from_slice(&c.to_le_bytes());
+            r.extend_from_slice(&v.to_le_bytes());
+            bytes.extend(r);
+        }
+        std::fs::write(&path, bytes).unwrap();
+        let mut ev = Evdev::open(&path).unwrap();
+        assert_eq!(
+            ev.poll(),
+            vec![Event::Press(Button::L1), Event::Release(Button::L1)]
+        );
+        assert!(ev.poll().is_empty());
+        let _ = std::fs::remove_file(path);
+    }
+}

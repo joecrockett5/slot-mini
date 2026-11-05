@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  desktop:
+    name: Desktop build and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --features slot-mini/desktop -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: Boot shim tests
+        run: |
+          sudo apt-get install -y busybox
+          cargo build -p slot-mini
+          SLOT_MINI_BIN=target/debug/slot-mini sh package/tests/test-shim.sh
+      - name: Upload failed golden images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures
+          path: target/golden-failures/
+          if-no-files-found: ignore
+
+  device:
+    name: armv7 musl build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm qemu-user-static file
+          command -v llvm-ar || sudo ln -s "$(ls /usr/bin/llvm-ar-* | sort -V | tail -1)" /usr/local/bin/llvm-ar
+      - name: Toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --target armv7-unknown-linux-musleabihf -p slot-mini
+      - name: Check binary
+        run: scripts/check-device-binary.sh target/armv7-unknown-linux-musleabihf/release/slot-mini
+      - name: Test under qemu
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER: qemu-arm-static
+        run: cargo test --release --target armv7-unknown-linux-musleabihf --workspace
+      - name: Release zip
+        run: scripts/package.sh
+      - name: Check the release zip
+        run: |
+          cargo build -p slot-mini
+          SLOT_MINI_BIN=target/debug/slot-mini sh package/tests/test-zip.sh dist/slot-mini-*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slot-mini-release
+          path: dist/slot-mini-*.zip
+
+  release:
+    name: Publish release
+    # Only for pushes to main, and only once both builds and all tests pass.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [desktop, device]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: slot-mini-release
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release.sh
