@@ -166,8 +166,18 @@ it starts with sound **off** (`sounds = off` in its settings) until someone
 confirms on a device that it plays promptly and does not hold the audio
 device when RetroArch starts. See `DEVICE-TESTING.md`.
 
-**Reported on a device (0.4.2, again on 0.4.3): no sound with Sounds on,
-while games' sound works.** Not yet explained. 4.3.1-1's `ffplay` is an old
+**Found on a device (0.4.4): `ffplay` could not load its libraries.** The
+on-screen sound test read `exit 127: /mnt/SDCARD/.tmp_update/bin/ffplay:
+err...`, the dynamic loader's "error while loading shared libraries". In
+boot-launcher mode slot-mini runs as MainUI, which `runtime.sh` starts with
+`LD_LIBRARY_PATH="$miyoodir/lib:/config/lib:/lib"`; `ffplay`'s ffmpeg
+libraries (`libavcodec.so.56` and the rest) are in `.tmp_update/lib/parasyte`,
+on the path the runtime exports for everything else
+(`/lib:/config/lib:$miyoodir/lib:$sysdir/lib:$sysdir/lib/parasyte`). Since
+0.4.5 the player is started with that path (`sound::onion_library_path`).
+
+Earlier notes (0.4.2, 0.4.3: no sound with Sounds on, while games' sound
+works): 4.3.1-1's `ffplay` is an old
 ffmpeg build (libav*.so.56), dynamically linked against glibc and
 `libSDL-1.2.so.0`, so its sound goes through that SDL's audio driver; with
 `libpadsp.so` preloaded an OSS (`dsp`) driver would reach `audioserver`.

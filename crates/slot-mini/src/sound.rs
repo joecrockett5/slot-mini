@@ -81,11 +81,24 @@ pub fn wav(pcm: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The library path Onion's runtime exports for every app and game
+/// (`runtime.sh`, 4.3.1-1). `ffplay`'s ffmpeg libraries are in
+/// `.tmp_update/lib/parasyte`, which the narrower path Onion starts MainUI
+/// with (`miyoo/lib:/config/lib:/lib`) leaves out: as the boot launcher,
+/// slot-mini runs as MainUI, and `ffplay` then failed to load (exit 127,
+/// seen on a device with 0.4.4).
+pub fn onion_library_path(sd: &Path) -> String {
+    let sd = sd.display();
+    format!("/lib:/config/lib:{sd}/miyoo/lib:{sd}/.tmp_update/lib:{sd}/.tmp_update/lib/parasyte")
+}
+
 /// Plays a clip by running an external player on a WAV file.
 pub struct Player {
     program: PathBuf,
     args: Vec<String>,
     preload: Option<PathBuf>,
+    /// The library path the player needs (see `onion_library_path`).
+    libraries: Option<String>,
     /// Where the player runs (Onion's video player runs it from
     /// `.tmp_update`).
     cwd: Option<PathBuf>,
@@ -107,6 +120,7 @@ impl Player {
                 .to_vec(),
             preload: Some(sd.join("miyoo/lib/libpadsp.so")),
             cwd: Some(sd.join(".tmp_update")),
+            libraries: Some(onion_library_path(sd)),
             dir,
             playing: Vec::new(),
             last: Default::default(),
@@ -119,6 +133,7 @@ impl Player {
             args,
             preload: None,
             cwd: None,
+            libraries: None,
             dir,
             playing: Vec::new(),
             last: Default::default(),
@@ -173,6 +188,9 @@ impl Sound for Player {
             .stderr(Stdio::piped());
         if let Some(p) = self.preload.as_ref().filter(|p| p.is_file()) {
             cmd.env("LD_PRELOAD", p);
+        }
+        if let Some(l) = &self.libraries {
+            cmd.env("LD_LIBRARY_PATH", l);
         }
         if let Some(d) = self.cwd.as_ref().filter(|d| d.is_dir()) {
             cmd.current_dir(d);
@@ -275,6 +293,37 @@ mod tests {
             wav(INSERT)
         );
         assert!(p.report().unwrap().starts_with("player finished ("));
+    }
+
+    #[test]
+    fn onions_player_gets_onions_library_path() {
+        assert_eq!(
+            onion_library_path(Path::new("/mnt/SDCARD")),
+            "/lib:/config/lib:/mnt/SDCARD/miyoo/lib:/mnt/SDCARD/.tmp_update/lib:/mnt/SDCARD/.tmp_update/lib/parasyte"
+        );
+        // The player is started with it, whatever slot-mini was given.
+        let d = tempfile::tempdir().unwrap();
+        let sd = d.path().join("sd");
+        let bin = sd.join(".tmp_update/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let log = d.path().join("env");
+        let script = bin.join("ffplay");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\necho \"$LD_LIBRARY_PATH\" > {}\n", log.display()),
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut p = Player::onion(&sd, d.path().join("clips"));
+        p.play(Clip::Insert);
+        for w in p.playing.drain(..) {
+            w.join().unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap().trim(),
+            onion_library_path(&sd)
+        );
     }
 
     #[test]
