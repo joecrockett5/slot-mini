@@ -378,10 +378,20 @@ platform whose `Emu/<sys>/launch.sh` is missing gets no shelf.
   (Game Switcher resumes), it is replaced by RetroArch run directly with that
   core. slot-mini's commands go through `launch.sh`, so the override applies
   to them; Hold A names the core itself (`core_for`).
-- **Saves are per core.** RetroArch sorts saves and states into folders by
-  core (`Saves/CurrentProfile/saves/mGBA/`, `.../gpSP/`), so switching a
-  game's core switches which save it sees. slot-mini says so when the core
-  changes ("gpSP keeps its own saves") and moves nothing.
+- **Saves are per core.** 4.3.1-1's `retroarch.cfg` has
+  `sort_savefiles_enable` and `sort_savestates_enable`, so saves and states
+  go into a folder per core, named after the core
+  (`Saves/CurrentProfile/saves/mGBA/<rom>.srm`, `.../gpSP/`, and the same
+  under `states/`), `<rom>` being the file name without its extension.
+- **Carrying a save.** In-game saves are the same format in both cores:
+  4.3.1-1's mGBA `launch.sh` imported gpSP saves by copying them (renaming
+  `.sav` to `.srm`), and the development branch's `transfer_mgba_save.sh`
+  copies an mGBA `.srm` to gpSP unchanged. That script treats an all-`00`
+  or all-`ff` file as empty, keeps a non-empty save it replaces as
+  `.bak_<YYYYmmddHHMMSS>`, and sets the target core's `.state.auto` aside,
+  because states do not carry over and an old auto state would resume an
+  older session. slot-mini does exactly this when its core picker changes a
+  game's core (`cores::carry_save`), before writing the new core.
 
 ## Resume and fresh start
 

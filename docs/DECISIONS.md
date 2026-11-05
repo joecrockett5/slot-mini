@@ -160,7 +160,13 @@ Calls made without asking, and why. Newest last.
 41. **GBA only, START opens it** (0.4.0, the maintainer's request). slot
     also offers mGBA or Gambatte for Game Boy carts; that is a small step
     later. START was free on slot-mini's shelf and is slot's button for it.
-42. **Say that saves are per core, move nothing.** RetroArch keeps mGBA and
+42. **(0.4.0, replaced by 43) Say that saves are per core, move nothing.** RetroArch keeps mGBA and
     gpSP saves apart; copying or converting them is Onion's business (its
     development branch has a transfer script), so slot-mini only tells the
     player when the core changes.
+43. **Carry the save when the core changes** (0.4.1, the maintainer's choice
+    among: carry on switch, point gpSP at mGBA's folder with a RetroArch
+    override, or stop sorting saves by core). It is what Onion's own
+    transfer does, touches no Onion or RetroArch settings, and keeps every
+    replaced save and auto state as a backup. It only happens when the
+    switch is made in slot-mini.

@@ -88,8 +88,13 @@ Onion's Reset game, RetroArch still writes its auto state when you quit the game
 **Cores (GBA).** START opens the cart, as slot does: the chip sits in the socket of the core the game runs on.
 Left and right move it between **mGBA** and **gpSP**, A keeps it, B leaves it as it was. mGBA is the default
 (Onion 4.3.1-1's). The choice is Onion's own per-game setting (`Roms/GBA/.game_config/<game>.cfg`), so Onion's
-Game List Options ("Game core") shows the same core, and choosing mGBA again removes the file. RetroArch keeps
-saves and states per core, so a game moved to gpSP starts without its mGBA save until you move it back.
+Game List Options ("Game core") shows the same core, and choosing mGBA again removes the file.
+
+RetroArch keeps saves per core, so when the core changes slot-mini carries the game's in-game save to the new
+core, the way Onion's own "Transfer mGBA save" does: a different save already there is kept as
+`<game>.srm.bak_<time>`, and the new core's old resume point (auto state) is set aside the same way, so the game
+starts from the save you just carried. Save states can't move between cores (each has its own format) and stay
+with their core. Switching in Onion's Game List Options instead does not carry the save.
 
 **In a game** started from slot-mini, MENU is slot's:
 
