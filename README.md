@@ -43,6 +43,21 @@ you ask. To follow a fork, set `update_repo = owner/repo` in `App/slot-mini/data
 
 Unzipping a release over `App/slot-mini/` by hand still works too.
 
+### Onion versions
+
+slot-mini runs on Onion **4.3.1-1** (stable) and on Onion's **development build** (the beta channel of Onion's
+updater), and works out which one is installed by itself. To move from 4.3.1-1 to the development build:
+
+1. Update slot-mini first (**MENU -> Check for updates**), so it is 0.5.0 or later.
+2. Update Onion with its own updater on the beta channel. The device reboots.
+3. If slot-mini was your boot launcher, Onion's menu is back after the update (Onion replaces its own files). Open
+   **Apps -> slot-mini** once: it notices, puts the boot launcher back and says so. From then on it starts at boot
+   again. If you had turned it off, it stays off.
+
+On the development build GBA games without their own core run on gpSP, Onion's new default; Onion copies each
+game's mGBA save to gpSP the first time it runs there. Hold A (fresh start) and the in-game menu work the same on
+both.
+
 ### Use it as the boot launcher (optional)
 
 In slot-mini press **MENU** and turn **Boot launcher** on. From then on slot-mini starts where Onion's
@@ -86,9 +101,10 @@ Hold A starts the game the way Onion's own "Reset game" (Game List Options) does
 Onion's Reset game, RetroArch still writes its auto state when you quit the game.
 
 **Cores (GBA).** START opens the cart, as slot does: the chip sits in the socket of the core the game runs on.
-Left and right move it between **mGBA** and **gpSP**, A keeps it, B leaves it as it was. mGBA is the default
-(Onion 4.3.1-1's). The choice is Onion's own per-game setting (`Roms/GBA/.game_config/<game>.cfg`), so Onion's
-Game List Options ("Game core") shows the same core, and choosing mGBA again removes the file.
+Left and right move it between **mGBA** and **gpSP**, A keeps it, B leaves it as it was. The default is Onion's:
+mGBA on 4.3.1-1, gpSP on the development build. The choice is Onion's own per-game setting
+(`Roms/GBA/.game_config/<game>.cfg`), so Onion's Game List Options ("Game core") shows the same core, and choosing
+the default again removes the file.
 
 RetroArch keeps saves per core, so when the core changes slot-mini carries the game's in-game save to the new
 core, the way Onion's own "Transfer mGBA save" does: a different save already there is kept as
@@ -103,6 +119,9 @@ with their core. Switching in Onion's Game List Options instead does not carry t
 | Tap MENU | The game freezes behind slot's in-game menu: Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game |
 | Hold MENU (about a second, then let go) | Eject: RetroArch saves its auto state and quits, back to the shelf |
 | MENU + another button | Hotkeys (Onion's and RetroArch's: MENU + R2 save state, MENU + L2 load, MENU + R fast forward, ...): never opens the menu or ejects |
+
+On Onion's development build, **Game Switcher** opens Onion's Game Switcher over the paused game, as Onion's own
+MENU does there; on 4.3.1-1 it quits the game first, as Onion does.
 
 It opens straight away: a small helper is already waiting beside the game, instead of Onion starting its Game Switcher. MENU combinations with other buttons are still Onion's and RetroArch's hotkeys: any other button pressed with MENU, before or after it, in any order and however long MENU is held, makes it a hotkey and slot-mini stays out of the way. Games started from Onion's own menu keep Onion's MENU. To give MENU back to Onion in slot-mini's games too, turn **MENU -> In-game menu** off. While the menu is open the buttons are its own: nothing you press reaches the game, and POWER resumes it.
 

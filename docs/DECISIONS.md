@@ -197,3 +197,23 @@ Calls made without asking, and why. Newest last.
     which put the clip well after the moment it belongs to. A parked player
     costs a few megabytes of memory and no CPU, and is only kept while
     sounds are on.
+49. **Support Onion's development build by feature, not by version** (0.5.0,
+    the maintainer's request; 4.3.1-1 stays supported). The development
+    build's version string changes with each build, and a feature may land
+    on stable later; looking for the runtime's `/tmp/reset_game` and the
+    Game Switcher's `--overlay` keeps working either way. Without them
+    slot-mini does what it did on 4.3.1-1.
+50. **Follow Onion's GBA default** (0.5.0, the maintainer's choice). On the
+    development build that is gpSP; slot-mini reads it from Onion's
+    `launch.sh` as before, so a game's own core (Onion's per-game file) is
+    the only core setting there is.
+51. **The Game Switcher row opens Onion's overlay where Onion has one**
+    (0.5.0, the maintainer's choice). slot-mini runs it as keymon does
+    (flag, `gameSwitcher --overlay` over the paused RetroArch) instead of
+    quitting the game, so switching is as quick as Onion's own.
+52. **Put the boot launcher back after an Onion update** (0.5.0, the
+    maintainer's choice). Onion's updater replaces its MainUI binaries; the
+    setting is now stored, and slot-mini re-installs the shim at its next
+    start, keeping Onion's new binaries as the backups. The shim's
+    `DISABLED` file (turned off at boot) is respected. The same release
+    stores **In-game menu: Off**, which was not saved before.

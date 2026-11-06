@@ -35,7 +35,8 @@ from source; what slot-mini does about it is given).
 | Launch flow: MainUI writes `/tmp/cmd_to_run.sh` and exits | confirmed; **corrected**: the loop moves it to `/mnt/SDCARD/.tmp_update/cmd_to_run.sh` and runs that |
 | Recents and Game Switcher | confirmed: the launcher must write the line itself; format below |
 | Paths: Roms, Emu launch scripts, RetroArch, saves | confirmed |
-| Resume vs fresh start | **corrected** (on a device): released Onion has no `/tmp/reset_game`; slot-mini writes the same direct RetroArch command as Onion's "Reset game", with Onion's `reset.cfg` |
+| Resume vs fresh start | **corrected** (on a device): released Onion has no `/tmp/reset_game`; slot-mini writes the same direct RetroArch command as Onion's "Reset game", with Onion's `reset.cfg`; on the development build it uses the runtime's `/tmp/reset_game` (0.5.0) |
+| Onion versions | 4.3.1-1 and the development build both supported, told apart by feature (Onion versions) |
 | Toolchain: static musl armv7 | confirmed feasible; see phase 2 notes in `PROGRESS.md` |
 | App manifest | confirmed: `App/<name>/config.json` with `label`, `icon`, `launch`, `description` |
 | Boot launcher binaries | confirmed: `.tmp_update/bin/MainUI-{283,354,285}-{clean,expert}` |
@@ -489,7 +490,8 @@ from the auto state on released Onion** (reported on a device). Since 0.1.1,
 Hold A writes the released "Reset game" command whenever the core can be read
 from the launch script and its `.so` is on the card, and falls back to
 `/tmp/reset_game` otherwise. Tap A writes the normal command and clears any
-stray flag.
+stray flag. Since 0.5.0 slot-mini uses the flag whenever the runtime has it
+(Onion versions), and the released command otherwise.
 
 slot-mini never touches save files or states. RetroArch's auto-save on exit
 is not turned off by `reset.cfg`, so quitting a fresh start writes a new auto
@@ -520,6 +522,60 @@ deleted, so the next turn of the loop mounts the new file.
 an update unpacks over `.tmp_update/` and replaces its own files, including the
 MainUI binaries. So the boot shim can disappear (Onion is back, fine), and
 `App/slot-mini/` can disappear while the shim stays (the shim must cope).
+Since 0.5.0 slot-mini puts the shim back the next time it starts
+(Onion versions).
+
+## Onion versions
+
+**Checked against 4.3.1-1 (tag `v4.3.1-1`) and the development build
+(`main` at `07505ea`).** slot-mini 0.5.0 supports both on the same card.
+
+- **What the development build is.** Onion's updater (Tweaks, "Check for
+  updates") has a stable and a beta channel. Beta installs the GitHub
+  release tagged `latest`, which Onion's CI rebuilds from `main`. The update
+  is a `7z x -aoa` over the card followed by a reboot: Onion's own files are
+  replaced, `App/slot-mini/` and the rest of the card are left alone.
+- **Told apart by what they do, not by number.** The development build's
+  version string changes with every build, so slot-mini looks for the two
+  things it uses (`onion.rs`): `/tmp/reset_game` in `.tmp_update/runtime.sh`
+  (the runtime's fresh-start flag) and `--overlay` in
+  `.tmp_update/bin/gameSwitcher` (the overlay Game Switcher). 4.3.1-1 has
+  neither. The version file is only logged.
+- **Hold A (fresh start).** On the development build slot-mini touches
+  `/tmp/reset_game` and writes the normal command; the runtime's
+  `override_game_core` adds `--appendconfig /tmp/reset.cfg` (auto load off,
+  no config save) to that one run, honouring a per-game core, and removes
+  the flag afterwards. It needs the launch script to name
+  `.retroarch/cores`, which Onion's GBA, GB and GBC scripts do. 4.3.1-1 keeps
+  the direct command with `.tmp_update/reset.cfg` (Resume and fresh start).
+- **Default GBA core.** The development build's GBA package is gpSP
+  (`default_core=gpsp`). slot-mini reads the default from the installed
+  `launch.sh`, so games without their own core run on gpSP there and on mGBA
+  on 4.3.1-1, with no setting of its own. Onion's GBA script copies an mGBA
+  save to gpSP the first time a game runs on gpSP
+  (`transfer_mgba_save.sh`), and the core picker carries saves both ways as
+  before.
+- **In-game Game Switcher.** On the development build keymon's Game
+  Switcher pauses RetroArch, touches `.tmp_update/.runGameSwitcher` and runs
+  `gameSwitcher --overlay`, which draws over the paused game, resumes it with
+  `UNPAUSE`, or quits it to switch games, then removes the flag. slot-mini's
+  "Game Switcher" row does the same: it thaws RetroArch (still paused), hands
+  the screen and buttons over, and stays out of the way until the overlay
+  exits, then touches `/tmp/state_changed` as keymon does. On 4.3.1-1 the row
+  still quits the game and lets the runtime start the Game Switcher.
+- **Unchanged between the two.** `/tmp/disable_menu_button`, keymon's MENU
+  combinations, RetroArch's network commands on port 55355, `batmon`'s
+  `/tmp/percBat` and `/tmp/.axp_result`, the MainUI binary names, the
+  Recents format, the per-game core file and its location, per-core save
+  folders, and the libraries MainUI is started with (which `ffplay` needs).
+- **The boot launcher across an Onion update.** The update replaces
+  `.tmp_update/bin/MainUI-*`, so Onion's menu is back after it. slot-mini
+  records that the boot launcher is on (`boot_launcher` in its settings);
+  the next time it starts (Apps -> slot-mini) it finds Onion's new binaries,
+  keeps them as the backups and puts the shim back, unless the shim's
+  `DISABLED` file says the player turned it off at boot. The old backups are
+  replaced, so turning the launcher off afterwards restores the updated
+  Onion, not the old one.
 
 ## Toolchain
 

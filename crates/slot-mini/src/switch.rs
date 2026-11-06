@@ -162,6 +162,40 @@ pub fn install(paths: &Paths) -> Result<(), SwitchError> {
     Ok(())
 }
 
+/// After an Onion update: Onion puts its own MainUI binaries back, and the
+/// boot launcher the player turned on is gone. Install it again (with
+/// Onion's new binaries as the backups) unless the player disabled it with
+/// `.tmp_update/slot-mini/DISABLED`. Also records that it is on where it
+/// was turned on before `boot_launcher` was kept. Returns what to tell the
+/// player.
+pub fn keep(paths: &Paths, settings: &mut crate::settings::Settings) -> Option<String> {
+    if installed(paths) {
+        if !settings.boot_launcher {
+            settings.boot_launcher = true;
+            if let Err(e) = settings.write(paths) {
+                eprintln!("slot-mini: settings: {e}");
+            }
+        }
+        return None;
+    }
+    if !settings.boot_launcher
+        || present(paths).is_empty()
+        || paths.sysdir().join("slot-mini/DISABLED").exists()
+    {
+        return None;
+    }
+    match install(paths) {
+        Ok(()) => {
+            eprintln!("slot-mini: boot launcher installed again after an Onion update");
+            Some("Boot launcher back on after Onion's update".into())
+        }
+        Err(e) => {
+            eprintln!("slot-mini: boot launcher not restored: {e}");
+            Some(format!("Boot launcher not restored: {e}"))
+        }
+    }
+}
+
 /// Put Onion's originals back wherever the shim is. Files that are not the
 /// shim are left alone.
 pub fn restore(paths: &Paths) -> Result<(), SwitchError> {
@@ -275,6 +309,41 @@ mod tests {
             "left the shim, which still falls back"
         );
         assert!(matches!(install(&p), Err(SwitchError::NoBackup(_))));
+    }
+
+    #[test]
+    fn an_onion_update_is_followed_by_installing_again() {
+        let (_d, p) = card();
+        let mut s = crate::settings::Settings::default();
+        // Not on: nothing happens.
+        assert_eq!(keep(&p, &mut s), None);
+        assert!(!installed(&p));
+        // On, installed: noted in the settings (installs before 0.5.0).
+        install(&p).unwrap();
+        assert_eq!(keep(&p, &mut s), None);
+        assert!(s.boot_launcher);
+        assert!(crate::settings::Settings::read(&p).boot_launcher);
+        // Onion's update writes its new MainUI binaries over the shim.
+        for name in present(&p) {
+            std::fs::write(bin(&p).join(name), format!("new {name}")).unwrap();
+        }
+        assert!(!installed(&p));
+        assert!(keep(&p, &mut s).unwrap().contains("back on"));
+        assert!(installed(&p));
+        // The backups are Onion's new binaries, so turning it off later puts
+        // the updated Onion back, not the old one.
+        restore(&p).unwrap();
+        for name in present(&p) {
+            assert_eq!(
+                std::fs::read_to_string(bin(&p).join(name)).unwrap(),
+                format!("new {name}")
+            );
+        }
+        // DISABLED: left alone.
+        std::fs::create_dir_all(p.sysdir().join("slot-mini")).unwrap();
+        std::fs::write(p.sysdir().join("slot-mini/DISABLED"), b"").unwrap();
+        assert_eq!(keep(&p, &mut s), None);
+        assert!(!installed(&p));
     }
 
     #[test]

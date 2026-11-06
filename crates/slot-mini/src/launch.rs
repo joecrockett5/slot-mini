@@ -208,6 +208,10 @@ pub fn hand_off(
     let reset = paths.tmp.join("reset_game");
     let mut cmd = cmd;
     match fresh {
+        // Onion's development build: its runtime's own flag, as its Game
+        // List Options' "Reset game" sets it. The runtime adds
+        // `/tmp/reset.cfg` for this one launch and takes it out again.
+        true if crate::onion::Onion::detect(paths).reset_flag => std::fs::write(&reset, b"")?,
         true => match fresh_command(paths, cart)? {
             // Stable Onion: Game List Options' "Reset game" command.
             Some(direct) => {
@@ -473,6 +477,35 @@ mod tests {
             recents.contains("\"launch\":\"/mnt/SDCARD/Emu/GBA/launch.sh\""),
             "{recents}"
         );
+    }
+
+    #[test]
+    fn hold_a_on_the_development_build_sets_the_runtimes_flag() {
+        let (_d, p) = rig();
+        // Onion's development build: its GBA script picks the core at run
+        // time, and its runtime knows /tmp/reset_game.
+        with_core(&p, "${default_core}_libretro", "gpsp_libretro");
+        std::fs::write(
+            p.sysdir().join("runtime.sh"),
+            "    if [ -f /tmp/reset_game ]; then\n",
+        )
+        .unwrap();
+        let c = cart(&p, "Sub/Game.gba");
+        let cmd = hand_off(&p, Mode::Launcher, "GBA", &c, true).unwrap();
+        assert_eq!(
+            cmd,
+            command(&record(&p, &c).unwrap()).unwrap(),
+            "the normal command"
+        );
+        assert!(p.tmp.join("reset_game").is_file());
+        assert!(!p.sysdir().join("reset.cfg").exists());
+        // Also when the core could be read: the flag is what this runtime
+        // understands and cleans up after.
+        std::fs::remove_file(p.tmp.join("reset_game")).unwrap();
+        with_core(&p, "mgba_libretro", "mgba_libretro");
+        let cmd = hand_off(&p, Mode::App, "GBA", &c, true).unwrap();
+        assert_eq!(cmd, command(&record(&p, &c).unwrap()).unwrap());
+        assert!(p.tmp.join("reset_game").is_file());
     }
 
     #[test]

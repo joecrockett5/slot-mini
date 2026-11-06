@@ -28,6 +28,10 @@ pub struct Settings {
     pub ingame_menu: bool,
     /// Where MENU -> "Check for updates" looks: `owner/repo` on GitHub.
     pub update_repo: String,
+    /// The player turned the boot launcher on. An Onion update puts Onion's
+    /// own MainUI back; slot-mini then installs itself again
+    /// (`switch::keep`).
+    pub boot_launcher: bool,
 }
 
 impl Default for Settings {
@@ -39,6 +43,7 @@ impl Default for Settings {
             clock_24h: true,
             ingame_menu: true,
             update_repo: crate::update::REPO.to_string(),
+            boot_launcher: false,
         }
     }
 }
@@ -70,6 +75,7 @@ impl Settings {
                 .filter(|r| !r.is_empty())
                 .cloned()
                 .unwrap_or(d.update_repo),
+            boot_launcher: on(m.get("boot_launcher"), d.boot_launcher),
         }
     }
 
@@ -79,6 +85,8 @@ impl Settings {
         let flag = |b: bool| if b { "on" } else { "off" };
         text = ini::set(&text, "sounds", Some(flag(self.sounds)))?;
         text = ini::set(&text, "label_service", Some(flag(self.label_service)))?;
+        text = ini::set(&text, "ingame_menu", Some(flag(self.ingame_menu)))?;
+        text = ini::set(&text, "boot_launcher", Some(flag(self.boot_launcher)))?;
         text = ini::set(
             &text,
             "clock",

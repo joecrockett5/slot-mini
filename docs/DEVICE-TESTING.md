@@ -250,6 +250,25 @@ none, install the previous release's zip by hand first.
 - [ ] START, Right, B: nothing changes.
 - [ ] START on a GB or GBC game does nothing.
 
+## 13. Onion's development build (0.5.0)
+
+Update slot-mini to 0.5.0 on 4.3.1-1 first, then Onion (beta channel).
+
+- [ ] After Onion's update and reboot, Onion's menu shows. Apps -> slot-mini:
+      "Boot launcher back on after Onion's update". Quit to Onion's menu
+      (MENU -> Exit to Onion) and reboot: slot-mini starts.
+- [ ] A GBA game with no core of its own runs on gpSP (RetroArch's menu,
+      Information, Core Information), with its mGBA save. START shows the
+      chip on gpSP.
+- [ ] Hold A: the game starts from the title screen, not where you left it.
+      Tap A next time: it resumes as normal.
+- [ ] In a game, MENU -> Game Switcher: Onion's Game Switcher draws over the
+      game. B (or A on the same game) resumes it where it was; picking
+      another game starts that one. MENU works again after resuming.
+- [ ] MENU hotkeys, sounds and the core picker as in sections 10 to 12.
+- [ ] With Onion's logging on, `.tmp_update/logs/slot-mini.log` has a line
+      `Onion ... (reset flag: yes, switcher overlay: yes)`.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

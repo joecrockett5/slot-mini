@@ -20,6 +20,7 @@ pub mod ingame;
 pub mod label_cache;
 pub mod launch;
 pub mod library;
+pub mod onion;
 pub mod paths;
 pub mod settings;
 pub mod sound;
