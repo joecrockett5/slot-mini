@@ -394,6 +394,12 @@ impl App {
             .unwrap_or_default()
     }
 
+    /// Show a message where the shelf's name goes.
+    pub fn set_notice(&mut self, text: String) {
+        self.notice = Some(text);
+        self.shelf_named = Some(self.now);
+    }
+
     pub fn notice(&self) -> Option<&str> {
         self.notice.as_deref()
     }

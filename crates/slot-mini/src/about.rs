@@ -122,6 +122,11 @@ impl About {
                         Err(e) => format!("Not changed: {e}"),
                     });
                     self.launcher = crate::switch::installed(paths);
+                    // Remembered, so an Onion update does not turn it off.
+                    settings.boot_launcher = self.launcher;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
                 }
                 Row::Update if b == Button::A => {
                     self.note = None;

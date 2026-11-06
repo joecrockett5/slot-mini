@@ -182,6 +182,107 @@ pub trait Game {
     fn send(&mut self, command: &str);
     /// Ask RetroArch to quit; it writes its auto state first.
     fn quit(&mut self);
+    /// Unfreeze it but leave it paused, for another program to resume
+    /// (Onion's overlay Game Switcher). `pause` is not undone later.
+    fn release(&mut self);
+}
+
+/// Onion's Game Switcher run over the paused game (`gameSwitcher
+/// --overlay`, Onion's development build), as keymon runs it for its own
+/// in-game MENU (`action_RA_gameSwitcher`). It resumes or quits the game
+/// itself.
+pub trait Switcher {
+    /// Whether this Onion has one.
+    fn available(&self) -> bool;
+    /// Start it over the game. False if it could not start.
+    fn open(&mut self) -> bool;
+    /// Whether it is still up.
+    fn up(&mut self) -> bool;
+}
+
+/// Stable Onion: no overlay Game Switcher.
+pub struct NoSwitcher;
+
+impl Switcher for NoSwitcher {
+    fn available(&self) -> bool {
+        false
+    }
+    fn open(&mut self) -> bool {
+        false
+    }
+    fn up(&mut self) -> bool {
+        false
+    }
+}
+
+/// `.tmp_update/bin/gameSwitcher --overlay`, started the way keymon does:
+/// `set_gameSwitcher()` first, Onion's runtime environment, and
+/// `/tmp/state_changed` touched when it is done.
+pub struct OnionSwitcher {
+    sysdir: PathBuf,
+    sd: PathBuf,
+    tmp: PathBuf,
+    child: Option<std::process::Child>,
+}
+
+impl OnionSwitcher {
+    pub fn new(paths: &Paths) -> OnionSwitcher {
+        OnionSwitcher {
+            sysdir: paths.sysdir(),
+            sd: paths.sd.clone(),
+            tmp: paths.tmp.clone(),
+            child: None,
+        }
+    }
+}
+
+impl Switcher for OnionSwitcher {
+    fn available(&self) -> bool {
+        true
+    }
+
+    fn open(&mut self) -> bool {
+        let _ = std::fs::write(self.sysdir.join(".runGameSwitcher"), b"");
+        let path = format!(
+            "{}:{}",
+            self.sysdir.join("bin").display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let spawned = std::process::Command::new(self.sysdir.join("bin/gameSwitcher"))
+            .arg("--overlay")
+            .current_dir(&self.sysdir)
+            .env(
+                "LD_LIBRARY_PATH",
+                crate::sound::onion_library_path(&self.sd),
+            )
+            .env("PATH", path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .spawn();
+        match spawned {
+            Ok(c) => {
+                self.child = Some(c);
+                true
+            }
+            Err(e) => {
+                eprintln!("slot-mini: in-game: Game Switcher: {e}");
+                let _ = std::fs::remove_file(self.sysdir.join(".runGameSwitcher"));
+                false
+            }
+        }
+    }
+
+    fn up(&mut self) -> bool {
+        let Some(c) = self.child.as_mut() else {
+            return false;
+        };
+        if matches!(c.try_wait(), Ok(None)) {
+            return true;
+        }
+        self.child = None;
+        let _ = std::fs::write(self.tmp.join("state_changed"), b"");
+        false
+    }
 }
 
 /// Where the menu is drawn.
@@ -351,6 +452,10 @@ pub struct Overlay<G: Game, S: Screen> {
     sysdir: PathBuf,
     /// Set once the game has been asked to quit.
     pub quitting: bool,
+    switcher: Box<dyn Switcher>,
+    /// Onion's overlay Game Switcher has the game; MENU is left alone until
+    /// it is done.
+    handed_over: bool,
 }
 
 impl<G: Game, S: Screen> Overlay<G, S> {
@@ -363,7 +468,23 @@ impl<G: Game, S: Screen> Overlay<G, S> {
             open: None,
             sysdir,
             quitting: false,
+            switcher: Box::new(NoSwitcher),
+            handed_over: false,
         }
+    }
+
+    /// Use Onion's overlay Game Switcher for the Game Switcher row.
+    pub fn with_switcher(mut self, switcher: Box<dyn Switcher>) -> Self {
+        self.switcher = switcher;
+        self
+    }
+
+    /// Whether Onion's overlay Game Switcher has the game.
+    pub fn handed_over(&mut self) -> bool {
+        if self.handed_over && !self.switcher.up() {
+            self.handed_over = false;
+        }
+        self.handed_over
     }
 
     pub fn is_open(&self) -> bool {
@@ -388,7 +509,7 @@ impl<G: Game, S: Screen> Overlay<G, S> {
     }
 
     pub fn handle(&mut self, ev: Event, now: Millis) {
-        if self.quitting {
+        if self.quitting || self.handed_over() {
             return;
         }
         if let Some(open) = self.open.as_mut() {
@@ -486,6 +607,16 @@ impl<G: Game, S: Screen> Overlay<G, S> {
                 self.game.send("MENU_TOGGLE");
             }
             Action::Switcher => {
+                // Onion's development build: its Game Switcher over the
+                // paused game, which it resumes or quits itself. The game's
+                // own picture is back on screen for it to show.
+                if self.switcher.available() {
+                    self.game.release();
+                    if self.switcher.open() {
+                        self.handed_over = true;
+                        return;
+                    }
+                }
                 // Onion 4.3's Game Switcher action: set the flag the runtime
                 // loop checks after the game, and quit the game.
                 let _ = std::fs::write(self.sysdir.join(".runGameSwitcher"), b"");
@@ -672,6 +803,16 @@ impl Game for RetroArch {
         }
         self.signal(libc::SIGTERM);
     }
+
+    fn release(&mut self) {
+        if self.stopped {
+            self.signal(libc::SIGCONT);
+            self.stopped = false;
+            FROZEN.store(0, std::sync::atomic::Ordering::SeqCst);
+        }
+        // Still paused: whoever takes it over unpauses it.
+        self.toggled = false;
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -736,7 +877,11 @@ pub fn run(paths: &Paths, fb: &Path, input: &Path) {
     ) else {
         return cleanup(&flag);
     };
+    let onion = crate::onion::Onion::detect(paths);
     let mut overlay = Overlay::new(RetroArch::attach(pid), screen, paths.sysdir());
+    if onion.switcher_overlay {
+        overlay = overlay.with_switcher(Box::new(OnionSwitcher::new(paths)));
+    }
     let clock = Instant::now();
     while !STOP.load(Ordering::SeqCst) && overlay.game.running() {
         let wait = if overlay.wants_tick() || overlay.is_open() {

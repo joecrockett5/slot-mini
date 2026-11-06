@@ -7,12 +7,11 @@
 | 1. Research | done |
 | 2. Skeleton and toolchain | done |
 | 3. Carousel | done |
-| 4. Launching | next |
-| 4. Launching | |
-| 5. Extras | |
-| 6. Device backends | |
-| 7. Packaging and the switch | |
-| 8. Docs | |
+| 4. Launching | done |
+| 5. Extras | done |
+| 6. Device backends | done |
+| 7. Packaging and the switch | done |
+| 8. Docs | done |
 
 ## Phase 1: Research
 
@@ -407,7 +406,30 @@ Save and Load State worked on the device. Fixed:
   the key bitmap, the warm player (FIFO hand-over, close, stale players),
   `the_insert_sound_lands_as_the_cart_seats`.
 
+## 0.5.0: Onion's development build, alongside 4.3.1-1
+
+- `onion.rs`: what the installed Onion offers (`reset_flag` from
+  `runtime.sh`, `switcher_overlay` from `bin/gameSwitcher`), logged at start.
+- Hold A on the development build touches `/tmp/reset_game` and writes the
+  normal command (the runtime adds `/tmp/reset.cfg`); 4.3.1-1 unchanged.
+- In-game "Game Switcher" row: with the overlay, RetroArch is thawed but left
+  paused, `.tmp_update/.runGameSwitcher` is written and
+  `gameSwitcher --overlay` runs (`OnionSwitcher`); the helper ignores MENU
+  until it exits, then touches `/tmp/state_changed`.
+- GBA default follows Onion's `launch.sh` (gpSP on the development build),
+  through the existing `cores::default_core`.
+- Settings store `boot_launcher` and (fixed) `ingame_menu`. At start on the
+  device, `switch::keep` re-installs the shim after an Onion update and the
+  shelf shows a notice.
+- Tests: `onion.rs` (stable, development, none),
+  `hold_a_on_the_development_build_sets_the_runtimes_flag`,
+  `the_game_switcher_row_hands_over_to_onions_overlay`,
+  `an_onion_update_is_followed_by_installing_again`, settings round trip.
+
 ## Open questions
+
+- On the development build: does the overlay Game Switcher started from
+  slot-mini's menu draw and resume as from Onion's MENU? (Device test.)
 
 - Audio: does spawning Onion's `ffplay` with `libpadsp.so` play the clips
   promptly and release the device before RetroArch starts? (Device test.)

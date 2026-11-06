@@ -39,6 +39,29 @@ impl Game for FakeGame {
     fn quit(&mut self) {
         self.0.push("quit");
     }
+    fn release(&mut self) {
+        self.0.push("release");
+    }
+}
+
+/// Onion's overlay Game Switcher, as far as the helper sees it.
+struct FakeSwitcher {
+    log: Log,
+    up: std::rc::Rc<std::cell::Cell<bool>>,
+}
+
+impl slot_mini::ingame::Switcher for FakeSwitcher {
+    fn available(&self) -> bool {
+        true
+    }
+    fn open(&mut self) -> bool {
+        self.log.push("switcher");
+        self.up.set(true);
+        true
+    }
+    fn up(&mut self) -> bool {
+        self.up.get()
+    }
 }
 
 /// Three framebuffer pages (RetroArch can use more than two); the driver
@@ -153,6 +176,38 @@ fn each_row_does_what_it_says() {
     tap(&mut o, Button::A, 1000);
     assert_eq!(log.take(), vec!["quit"]);
     assert!(dir.path().join(".runGameSwitcher").is_file());
+}
+
+/// Onion's development build: the Game Switcher row hands the paused game
+/// to Onion's overlay Game Switcher (no quit), and MENU is left alone until
+/// it is done.
+#[test]
+fn the_game_switcher_row_hands_over_to_onions_overlay() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = Log::default();
+    let up = std::rc::Rc::new(std::cell::Cell::new(false));
+    let mut o = overlay(&log, dir.path()).with_switcher(Box::new(FakeSwitcher {
+        log: log.clone(),
+        up: up.clone(),
+    }));
+    tap(&mut o, Button::Menu, 0);
+    log.take();
+    for i in 0..4 {
+        tap(&mut o, Button::Down, 100 + i * 100);
+    }
+    tap(&mut o, Button::A, 1000);
+    assert_eq!(log.take(), vec!["release", "switcher"], "paused, not quit");
+    assert!(!o.is_open());
+    assert!(!o.quitting);
+    // The game's picture is back on every page for the switcher to show.
+    // While it is up, MENU is the switcher's.
+    tap(&mut o, Button::Menu, 2000);
+    assert!(!o.is_open());
+    assert!(log.take().is_empty());
+    // Done (it resumed the game): slot's MENU again.
+    up.set(false);
+    tap(&mut o, Button::Menu, 3000);
+    assert!(o.is_open());
 }
 
 #[test]

@@ -218,6 +218,18 @@ fn main() {
     // Let the CPU slow down while the shelf idles (as Onion's runtime does
     // after a game): a governor left at performance or userspace keeps it
     // at full clock.
+    // After an Onion update, put the boot launcher back if it was on.
+    let kept = match a.backend == "device" && !a.sim {
+        true => {
+            eprintln!(
+                "slot-mini: {}",
+                slot_mini::onion::Onion::detect(&paths).describe()
+            );
+            let mut settings = slot_mini::settings::Settings::read(&paths);
+            slot_mini::switch::keep(&paths, &mut settings)
+        }
+        false => None,
+    };
     if a.backend == "device" && !a.sim {
         let cpufreq = std::path::Path::new(slot_mini::cpufreq::CPUFREQ);
         if let Some(was) = slot_mini::cpufreq::settle(cpufreq) {
@@ -254,6 +266,9 @@ fn main() {
         },
     };
     let mut app = App::new(paths.clone(), status, opts, 0);
+    if let Some(n) = kept {
+        app.set_notice(n);
+    }
     let mut out = backend(&a.backend);
     let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
     let mut script = a.input.clone();
