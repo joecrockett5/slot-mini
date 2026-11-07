@@ -70,10 +70,20 @@ main menu would, and you come straight back to the cart you just played after ea
 Turning it on replaces Onion's `MainUI` binaries in `.tmp_update/bin/` with a small shell script, after
 saving each original to `.tmp_update/slot-mini/stock/`. See [how the switch works](#how-the-boot-switch-works).
 
+### slot's boot screen (optional)
+
+**MENU -> Boot screen: slot** shows slot's boot screen while Onion starts: the word **slot.** on slot's near-black,
+as on the RG SP. **Boot screen: Onion** puts Onion's (or your theme's) back. It goes into Onion's theme
+overrides (`Saves/CurrentProfile/theme/skin/extra/bootScreen.png`), so it shows whichever theme you pick, on
+4.3.1-1 and the development build. A boot screen you had put there yourself is kept and comes back when you turn
+slot's off. Onion still writes its version number in the bottom-left corner, as it does on every boot screen.
+If Tweaks' "Reset theme overrides" removes it, slot-mini puts it back the next time it starts.
+
 ## Uninstall
 
 1. If you turned the boot launcher on, turn it off first (**MENU -> Boot launcher: Off**).
-2. Delete `App/slot-mini/`.
+2. If you turned slot's boot screen on, turn it off too (**MENU -> Boot screen: Onion**).
+3. Delete `App/slot-mini/`.
 
 If you deleted the app before turning the boot launcher off, Onion's menu still starts (the shim falls back
 when slot-mini is missing). To remove the shim by hand, with the card in a computer, copy each
@@ -95,7 +105,7 @@ when slot-mini is missing). To remove the shim by hand, with the card in a compu
 | Y | Heart or un-heart the cart (hearted carts get a Favorites shelf) |
 | SELECT | Cart studio for this cart |
 | START | GBA carts: open the cart and choose its core, mGBA or gpSP |
-| MENU | About: sounds, in-game menu, boot launcher, check for updates, exit to Onion |
+| MENU | About: sounds, in-game menu, boot launcher, boot screen, check for updates, exit to Onion |
 
 Hold A starts the game the way Onion's own "Reset game" (Game List Options) does, for that one run. As with
 Onion's Reset game, RetroArch still writes its auto state when you quit the game.
@@ -179,7 +189,7 @@ layout, either:
 
 | File | What |
 | --- | --- |
-| `App/slot-mini/data/settings.txt` | Sounds, label service, clock format |
+| `App/slot-mini/data/settings.txt` | Sounds, in-game menu, boot launcher and boot screen, label service, clock format |
 | `App/slot-mini/data/state.txt` | The shelf and cart you were on |
 | `App/slot-mini/data/favorites.txt` | Hearted carts, in slot's format |
 | `App/slot-mini/cache/` | Scaled labels, ROM headers, the art index, sound clips |
@@ -187,6 +197,7 @@ layout, either:
 | `Labels/cart_shell.txt`, `Labels/<sys>/*.png` | Only when you change a cart in the studio or fetch labels |
 | `Roms/recentlist.json` | Each launch, as Onion's MainUI does, so the Game Switcher and resume work |
 | `.tmp_update/slot-mini/stock/`, `.tmp_update/bin/MainUI-*` | Only when you turn the boot launcher on |
+| `Saves/CurrentProfile/theme/skin/extra/bootScreen.png`, `.tmp_update/slot-mini/bootScreen.png` | Only when you turn slot's boot screen on: slot's screen, and the one you had there before |
 
 ## How the boot switch works
 

@@ -217,3 +217,11 @@ Calls made without asking, and why. Newest last.
     start, keeping Onion's new binaries as the backups. The shim's
     `DISABLED` file (turned off at boot) is respected. The same release
     stores **In-game menu: Off**, which was not saved before.
+53. **slot's boot screen through Onion's theme overrides** (0.5.1, the
+    maintainer's request: minimal, black, the word "slot." as on the RG SP).
+    The override wins over every theme and survives Onion updates, without
+    touching Onion's or a theme's files; the player's own override is kept.
+    It is slot's own boot logo, unscaled on slot's near-black, so it matches
+    the original pixel for pixel. Onion's version text cannot be hidden from
+    there. The firmware's Miyoo logo is left alone (it needs flashing). Off
+    by default. MENU's rows moved closer together to fit the sixth row.

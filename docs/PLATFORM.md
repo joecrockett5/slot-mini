@@ -577,6 +577,33 @@ Since 0.5.0 slot-mini puts the shim back the next time it starts
   replaced, so turning the launcher off afterwards restores the updated
   Onion, not the old one.
 
+## Boot screen
+
+**Checked against 4.3.1-1 and the development build (`07505ea`); the same on
+both.** The runtime runs `bootScreen Boot` at start (and again with messages
+such as "Syncing time..."), which draws `skin/extra/bootScreen.png` full screen
+and keeps it up until the launcher draws. `theme_getImagePath` takes the first
+of `Saves/CurrentProfile/theme/skin/extra/bootScreen.png` (the profile's theme
+overrides), `<theme>/skin/extra/bootScreen.png` and
+`.tmp_update/res/bootScreen.png`. The image is 640x480 (the development build
+scales it on larger panels). Over it Onion always writes
+`onionVersion/version.txt` bottom left, and any message bottom right, in the
+theme's font and colour.
+
+- **Who touches the overrides.** Tweaks' "Reset theme overrides" runs
+  `rm -rf Saves/CurrentProfile/theme/*`; Guest Mode swaps the whole profile.
+  Onion's updates do not: its default configs (`configs.pak`) are only
+  unpacked on a fresh install or a reset.
+- **The Miyoo logo before it** is the bootloader's, in the device's flash.
+  Changing it means flashing; slot-mini does not.
+- **slot-mini** (0.5.1, `bootscreen.rs`) writes slot's RG SP boot logo
+  composed as slot composes it (`bootlogo::compose`: the 196x75 wordmark,
+  unscaled, centred on its own corner colour `#0b0e11`) as a PNG marked with a
+  `tEXt` chunk, to the overrides. A file there that is not its own is copied
+  to `.tmp_update/slot-mini/bootScreen.png` first and put back when it is
+  turned off; another file there is never removed. With the setting on, a
+  missing file is written again at start.
+
 ## Toolchain
 
 **Confirmed feasible.** The Rust target `armv7-unknown-linux-musleabihf`

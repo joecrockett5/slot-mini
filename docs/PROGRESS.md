@@ -426,6 +426,18 @@ Save and Load State worked on the device. Fixed:
   `the_game_switcher_row_hands_over_to_onions_overlay`,
   `an_onion_update_is_followed_by_installing_again`, settings round trip.
 
+## 0.5.1: slot's boot screen
+
+- MENU -> Boot screen: slot / Onion (`bootscreen.rs`, `Row::BootScreen`,
+  `boot_screen` setting). slot's wordmark (`assets/bootlogo.bmp`, slot's
+  `card/System/bootlogo.bmp`) on its ground at 640x480, written to Onion's
+  theme overrides; the player's own override kept and restored; put back at
+  start after "Reset theme overrides".
+- MENU rows 36 px apart (were 42) so six rows and the note line fit.
+- Tests: `bootscreen.rs` (image, on/off, the player's screen, reset),
+  `menu_puts_slots_boot_screen_in_onions_overrides` (golden
+  `about_boot_screen`).
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from

@@ -32,6 +32,9 @@ pub struct Settings {
     /// own MainUI back; slot-mini then installs itself again
     /// (`switch::keep`).
     pub boot_launcher: bool,
+    /// The player turned slot's boot screen on. Put back at start if
+    /// Onion's theme overrides were reset (`bootscreen::keep`).
+    pub boot_screen: bool,
 }
 
 impl Default for Settings {
@@ -44,6 +47,7 @@ impl Default for Settings {
             ingame_menu: true,
             update_repo: crate::update::REPO.to_string(),
             boot_launcher: false,
+            boot_screen: false,
         }
     }
 }
@@ -76,6 +80,7 @@ impl Settings {
                 .cloned()
                 .unwrap_or(d.update_repo),
             boot_launcher: on(m.get("boot_launcher"), d.boot_launcher),
+            boot_screen: on(m.get("boot_screen"), d.boot_screen),
         }
     }
 
@@ -87,6 +92,7 @@ impl Settings {
         text = ini::set(&text, "label_service", Some(flag(self.label_service)))?;
         text = ini::set(&text, "ingame_menu", Some(flag(self.ingame_menu)))?;
         text = ini::set(&text, "boot_launcher", Some(flag(self.boot_launcher)))?;
+        text = ini::set(&text, "boot_screen", Some(flag(self.boot_screen)))?;
         text = ini::set(
             &text,
             "clock",

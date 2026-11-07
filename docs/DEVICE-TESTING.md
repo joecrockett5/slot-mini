@@ -269,6 +269,13 @@ Update slot-mini to 0.5.0 on 4.3.1-1 first, then Onion (beta channel).
 - [ ] With Onion's logging on, `.tmp_update/logs/slot-mini.log` has a line
       `Onion ... (reset flag: yes, switcher overlay: yes)`.
 
+## 14. slot's boot screen (0.5.1)
+
+- [ ] MENU -> Boot screen: slot. Reboot: "slot." in the middle of a dark
+      screen while Onion starts, with Onion's version bottom left.
+- [ ] Change theme in Onion: the boot screen stays slot's.
+- [ ] MENU -> Boot screen: Onion. Reboot: the theme's boot screen is back.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

@@ -15,6 +15,7 @@ pub enum Row {
     Sounds,
     IngameMenu,
     BootLauncher,
+    BootScreen,
     Update,
     ExitToOnion,
 }
@@ -31,6 +32,8 @@ pub struct About {
     /// Whether slot-mini is installed as the boot launcher, and a message
     /// from the last attempt to change that.
     pub launcher: bool,
+    /// Whether Onion shows slot's boot screen.
+    pub boot_screen: bool,
     pub note: Option<String>,
     /// Shown on the note line when there is no note: the CPU's state.
     pub diag: Option<String>,
@@ -66,10 +69,12 @@ impl About {
                 Row::Sounds,
                 Row::IngameMenu,
                 Row::BootLauncher,
+                Row::BootScreen,
                 Row::Update,
                 Row::ExitToOnion,
             ],
             launcher: crate::switch::installed(paths),
+            boot_screen: crate::bootscreen::installed(paths),
             note: None,
             diag: None,
             faces: Vec::new(),
@@ -128,6 +133,24 @@ impl About {
                         eprintln!("slot-mini: settings: {e}");
                     }
                 }
+                Row::BootScreen => {
+                    let result = match self.boot_screen {
+                        false => crate::bootscreen::install(paths),
+                        true => crate::bootscreen::restore(paths),
+                    };
+                    self.note = Some(match result {
+                        Ok(()) if !self.boot_screen => {
+                            "slot's boot screen shows from the next start.".into()
+                        }
+                        Ok(()) => "Onion's boot screen is back.".into(),
+                        Err(e) => format!("Not changed: {e}"),
+                    });
+                    self.boot_screen = crate::bootscreen::installed(paths);
+                    settings.boot_screen = self.boot_screen;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
+                }
                 Row::Update if b == Button::A => {
                     self.note = None;
                     updater.press(paths, &settings.update_repo);
@@ -178,6 +201,10 @@ impl About {
             Row::Sounds => format!("Sounds: {}", on(settings.sounds)),
             Row::IngameMenu => format!("In-game menu: {}", on(settings.ingame_menu)),
             Row::BootLauncher => format!("Boot launcher: {}", on(self.launcher)),
+            Row::BootScreen => format!(
+                "Boot screen: {}",
+                if self.boot_screen { "slot" } else { "Onion" }
+            ),
             Row::ExitToOnion => "Exit to Onion".into(),
         }
     }
@@ -209,12 +236,13 @@ impl About {
             put(out, f, y, if i == 0 { 1.0 } else { 0.8 });
             y += if i == 0 { 42.0 } else { 26.0 };
         }
-        y += 16.0;
+        y += 12.0;
         for (i, row) in self.rows.clone().into_iter().enumerate() {
             let text = self.label(row, settings, update);
             let f = self.face(gfx, &text, Style::Title);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
-            y += 42.0;
+            // Six rows and the note line fit above slot's footer.
+            y += 36.0;
         }
         let update_note = match update {
             Status::UpToDate => Some(format!(
