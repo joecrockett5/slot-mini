@@ -1,14 +1,18 @@
-//! slot's boot screen for Onion: the "slot." wordmark slot puts on the
-//! RG SP's boot logo, centred on its own near-black, full screen.
+//! slot's boot and shutdown screens for Onion. At boot, the "slot." wordmark
+//! slot puts on the RG SP's boot logo, centred on its own near-black. At
+//! power off, slot's own shutdown screen: "Powering Down" in slot's menu
+//! type, centred on black.
 //!
-//! Onion's runtime shows `skin/extra/bootScreen.png` while it boots, looking
-//! first in the profile's theme overrides
-//! (`Saves/CurrentProfile/theme/skin/extra/`), then in the theme, then in
-//! `.tmp_update/res/` (`theme_getImagePath`, on 4.3.1-1 and the development
-//! build alike). slot-mini writes its screen to the overrides, so it wins
-//! over every theme and is left alone by Onion's updates. A screen already
-//! there (the player's own) is kept in `.tmp_update/slot-mini/` and put back
-//! when slot's is turned off. See docs/PLATFORM.md, "Boot screen".
+//! Onion's runtime shows `skin/extra/bootScreen.png` while it boots, and
+//! `skin/extra/Screen_Off.png` as it powers off (`Screen_Off_Save.png` when
+//! it powers off from a game). It looks for each first in the profile's
+//! theme overrides (`Saves/CurrentProfile/theme/skin/extra/`), then in the
+//! theme, then in `.tmp_update/res/` (`theme_getImagePath`, on 4.3.1-1 and
+//! the development build alike). slot-mini writes its screens to the
+//! overrides, so they win over every theme and are left alone by Onion's
+//! updates. A screen already there (the player's own) is kept in
+//! `.tmp_update/slot-mini/` and put back when slot's are turned off. See
+//! docs/PLATFORM.md, "Boot and shutdown screens".
 
 use std::path::{Path, PathBuf};
 
@@ -17,23 +21,61 @@ use crate::paths::Paths;
 /// slot's wordmark (slot `card/System/bootlogo.bmp`), 196x75, 24-bit.
 const WORDMARK: &[u8] = include_bytes!("../../../assets/bootlogo.bmp");
 
-/// Onion draws its boot screen at 640x480 (and scales it on larger panels).
+/// Onion draws these screens at 640x480 (and scales them on larger panels).
 pub const SIZE: (usize, usize) = (640, 480);
 
-/// The text chunk that marks a boot screen as slot-mini's.
+/// The text chunk that marks a screen as slot-mini's.
 const KEYWORD: &str = "Software";
 const MARKER: &str = "slot-mini boot screen";
 
-/// Onion's override for the boot screen.
-pub fn target(paths: &Paths) -> PathBuf {
+/// What slot says while it powers off (slot `frontend.rs`, `PowerChoice`).
+const POWERING_DOWN: &str = "Powering Down";
+
+/// The screens slot-mini replaces, all under the one setting.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Screen {
+    /// `bootScreen Boot`: while Onion starts.
+    Boot,
+    /// `bootScreen End`: powering off from Onion's menu or an app.
+    Off,
+    /// `bootScreen End_Save`: powering off from a game.
+    OffSave,
+}
+
+impl Screen {
+    pub const ALL: [Screen; 3] = [Screen::Boot, Screen::Off, Screen::OffSave];
+
+    fn file(self) -> &'static str {
+        match self {
+            Screen::Boot => "bootScreen.png",
+            Screen::Off => "Screen_Off.png",
+            Screen::OffSave => "Screen_Off_Save.png",
+        }
+    }
+
+    /// The screen as a PNG, marked as slot-mini's. Both shutdown screens are
+    /// the same: slot says "Powering Down" from a game too, its save already
+    /// made.
+    pub fn png(self) -> Vec<u8> {
+        let img = match self {
+            Screen::Boot => compose(SIZE.0, SIZE.1),
+            Screen::Off | Screen::OffSave => powering_down(SIZE.0, SIZE.1),
+        };
+        encode(&img)
+    }
+}
+
+/// Onion's override for a screen.
+pub fn target(paths: &Paths, screen: Screen) -> PathBuf {
     paths
         .sd
-        .join("Saves/CurrentProfile/theme/skin/extra/bootScreen.png")
+        .join("Saves/CurrentProfile/theme/skin/extra")
+        .join(screen.file())
 }
 
 /// Where the player's own override is kept while slot's is in its place.
-fn backup(paths: &Paths) -> PathBuf {
-    paths.sysdir().join("slot-mini/bootScreen.png")
+fn backup(paths: &Paths, screen: Screen) -> PathBuf {
+    paths.sysdir().join("slot-mini").join(screen.file())
 }
 
 struct Rgb {
@@ -82,9 +124,25 @@ fn compose(w: usize, h: usize) -> Rgb {
     Rgb { w, h, px }
 }
 
-/// The boot screen as a PNG, marked as slot-mini's.
-pub fn png() -> Vec<u8> {
-    let img = compose(SIZE.0, SIZE.1);
+/// slot's shutdown screen at `w`x`h`: black, and "Powering Down" in slot's
+/// menu type in the middle, placed as slot places it (`draw_app` while
+/// shutting down).
+fn powering_down(w: usize, h: usize) -> Rgb {
+    let mut px = vec![[0u8; 3]; w * h];
+    let face = slot_mini_ui::quick::menu_face(POWERING_DOWN);
+    let (fw, fh) = (face.w as usize, face.h as usize);
+    let (x0, y0) = ((w.saturating_sub(fw)) / 2, (h.saturating_sub(fh)) / 2);
+    for y in 0..fh.min(h) {
+        for x in 0..fw.min(w) {
+            let s = &face.rgba[(y * fw + x) * 4..][..4];
+            let a = s[3] as u32;
+            px[(y0 + y) * w + x0 + x] = [0, 1, 2].map(|c| ((s[c] as u32 * a + 127) / 255) as u8);
+        }
+    }
+    Rgb { w, h, px }
+}
+
+fn encode(img: &Rgb) -> Vec<u8> {
     let mut out = Vec::new();
     {
         let mut enc = png::Encoder::new(&mut out, img.w as u32, img.h as u32);
@@ -99,8 +157,8 @@ pub fn png() -> Vec<u8> {
     out
 }
 
-/// Whether the file is a boot screen slot-mini wrote (by its marker, so an
-/// older version of the image still counts).
+/// Whether the file is a screen slot-mini wrote (by its marker, so an older
+/// version of the image still counts).
 fn is_ours(path: &Path) -> bool {
     let Ok(b) = std::fs::read(path) else {
         return false;
@@ -109,9 +167,9 @@ fn is_ours(path: &Path) -> bool {
     b.windows(marker.len()).any(|w| w == marker)
 }
 
-/// Whether Onion will show slot's boot screen.
+/// Whether Onion will show any of slot's screens.
 pub fn installed(paths: &Paths) -> bool {
-    is_ours(&target(paths))
+    Screen::ALL.iter().any(|&s| is_ours(&target(paths, s)))
 }
 
 fn copy_checked(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -129,14 +187,14 @@ fn copy_checked(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Put slot's boot screen in Onion's overrides, keeping any screen that was
-/// there first. Running it again rewrites the image only if it differs.
-pub fn install(paths: &Paths) -> std::io::Result<()> {
-    let target = target(paths);
+/// Put one of slot's screens in Onion's overrides, keeping any screen that
+/// was there first. Running it again rewrites the image only if it differs.
+fn install_one(paths: &Paths, screen: Screen) -> std::io::Result<()> {
+    let target = target(paths, screen);
     if target.is_file() && !is_ours(&target) {
-        copy_checked(&target, &backup(paths))?;
+        copy_checked(&target, &backup(paths, screen))?;
     }
-    let image = png();
+    let image = screen.png();
     if std::fs::read(&target).ok().as_deref() != Some(&image[..]) {
         if let Some(dir) = target.parent() {
             std::fs::create_dir_all(dir)?;
@@ -146,15 +204,20 @@ pub fn install(paths: &Paths) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Take slot's boot screen away: the player's own goes back if there was
+/// Put slot's boot and shutdown screens in Onion's overrides.
+pub fn install(paths: &Paths) -> std::io::Result<()> {
+    Screen::ALL.iter().try_for_each(|&s| install_one(paths, s))
+}
+
+/// Take one of slot's screens away: the player's own goes back if there was
 /// one, else Onion's theme shows its own again. A screen that is not
 /// slot-mini's is never touched.
-pub fn restore(paths: &Paths) -> std::io::Result<()> {
-    let target = target(paths);
+fn restore_one(paths: &Paths, screen: Screen) -> std::io::Result<()> {
+    let target = target(paths, screen);
     if !is_ours(&target) {
         return Ok(());
     }
-    let kept = backup(paths);
+    let kept = backup(paths, screen);
     match kept.is_file() {
         true => {
             copy_checked(&kept, &target)?;
@@ -165,14 +228,33 @@ pub fn restore(paths: &Paths) -> std::io::Result<()> {
     Ok(())
 }
 
-/// At start: if the player turned slot's boot screen on and it has gone
-/// (Tweaks' "Reset theme overrides" empties the folder), put it back. A
-/// screen someone put there since is left alone.
+/// Take slot's boot and shutdown screens away. Every screen is tried even
+/// if one fails; the first error is reported.
+pub fn restore(paths: &Paths) -> std::io::Result<()> {
+    let mut result = Ok(());
+    for s in Screen::ALL {
+        let r = restore_one(paths, s);
+        if result.is_ok() {
+            result = r;
+        }
+    }
+    result
+}
+
+/// At start: if the player turned slot's screens on and one has gone
+/// (Tweaks' "Reset theme overrides" empties the folder), or is new in this
+/// version, put it in. A screen someone put there since is left alone.
 pub fn keep(paths: &Paths, settings: &crate::settings::Settings) {
-    if settings.boot_screen && !target(paths).exists() {
-        match install(paths) {
-            Ok(()) => eprintln!("slot-mini: slot's boot screen put back"),
-            Err(e) => eprintln!("slot-mini: boot screen not put back: {e}"),
+    if !settings.boot_screen {
+        return;
+    }
+    for s in Screen::ALL {
+        if target(paths, s).exists() {
+            continue;
+        }
+        match install_one(paths, s) {
+            Ok(()) => eprintln!("slot-mini: slot's {} put back", s.file()),
+            Err(e) => eprintln!("slot-mini: {} not put back: {e}", s.file()),
         }
     }
 }
@@ -196,9 +278,13 @@ mod tests {
         (info.width, info.height, buf)
     }
 
+    fn all_ours(paths: &Paths) -> bool {
+        Screen::ALL.iter().all(|&s| is_ours(&target(paths, s)))
+    }
+
     #[test]
     fn the_screen_is_slots_wordmark_in_the_middle() {
-        let (w, h, px) = pixels(&png());
+        let (w, h, px) = pixels(&Screen::Boot.png());
         assert_eq!((w, h), (640, 480));
         let at = |x: usize, y: usize| {
             let i = (y * 640 + x) * 3;
@@ -220,61 +306,123 @@ mod tests {
     }
 
     #[test]
-    fn on_and_off_with_no_screen_of_the_players_own() {
+    fn the_shutdown_screen_is_slots_powering_down_on_black() {
+        let image = Screen::Off.png();
+        assert_eq!(image, Screen::OffSave.png());
+        assert!(is_ours_bytes(&image));
+        let (w, h, px) = pixels(&image);
+        assert_eq!((w, h), (640, 480));
+        let lit: Vec<(usize, usize)> = (0..640 * 480)
+            .filter(|i| px[i * 3..i * 3 + 3].iter().any(|&c| c > 0))
+            .map(|i| (i % 640, i / 640))
+            .collect();
+        assert!(!lit.is_empty(), "the words are drawn");
+        // Black everywhere but one line of type across the middle.
+        let (x0, x1) = (
+            lit.iter().map(|p| p.0).min().unwrap(),
+            lit.iter().map(|p| p.0).max().unwrap(),
+        );
+        let (y0, y1) = (
+            lit.iter().map(|p| p.1).min().unwrap(),
+            lit.iter().map(|p| p.1).max().unwrap(),
+        );
+        assert!(y0 >= 220 && y1 <= 260, "rows {y0}..{y1}");
+        assert!(((x0 + x1) as i32 - 639).abs() <= 4, "centred: {x0}..{x1}");
+        assert!(x1 - x0 > 150, "a line of words: {x0}..{x1}");
+        // At full strength the ink is slot's menu ink.
+        let ink = slot_mini_ui::quick::MENU_INK;
+        assert!((0..640 * 480).any(|i| px[i * 3..i * 3 + 3] == ink));
+    }
+
+    fn is_ours_bytes(b: &[u8]) -> bool {
+        b.windows(MARKER.len()).any(|w| w == MARKER.as_bytes())
+    }
+
+    #[test]
+    fn on_and_off_with_no_screens_of_the_players_own() {
         let (_d, paths) = card();
         assert!(!installed(&paths));
         install(&paths).unwrap();
-        assert!(installed(&paths));
-        assert_eq!(std::fs::read(target(&paths)).unwrap(), png());
+        assert!(installed(&paths) && all_ours(&paths));
+        for s in Screen::ALL {
+            assert_eq!(std::fs::read(target(&paths, s)).unwrap(), s.png());
+        }
         install(&paths).unwrap();
         restore(&paths).unwrap();
-        assert!(!target(&paths).exists());
-        assert!(!backup(&paths).exists());
+        for s in Screen::ALL {
+            assert!(!target(&paths, s).exists(), "{s:?}");
+            assert!(!backup(&paths, s).exists(), "{s:?}");
+        }
+        assert!(!installed(&paths));
         // Off when already off changes nothing.
         restore(&paths).unwrap();
     }
 
     #[test]
-    fn the_players_own_screen_is_kept_and_comes_back() {
+    fn the_players_own_screens_are_kept_and_come_back() {
         let (_d, paths) = card();
-        let t = target(&paths);
-        std::fs::create_dir_all(t.parent().unwrap()).unwrap();
-        std::fs::write(&t, b"my own boot screen").unwrap();
+        let boot = target(&paths, Screen::Boot);
+        let off = target(&paths, Screen::Off);
+        std::fs::create_dir_all(boot.parent().unwrap()).unwrap();
+        std::fs::write(&boot, b"my own boot screen").unwrap();
+        std::fs::write(&off, b"my own off screen").unwrap();
         install(&paths).unwrap();
-        assert!(installed(&paths));
-        assert_eq!(
-            std::fs::read(backup(&paths)).unwrap(),
-            b"my own boot screen"
-        );
-        // Installing again does not back slot's own screen up over it.
+        assert!(all_ours(&paths));
+        let kept = |s| std::fs::read(backup(&paths, s)).unwrap();
+        assert_eq!(kept(Screen::Boot), b"my own boot screen");
+        assert_eq!(kept(Screen::Off), b"my own off screen");
+        assert!(!backup(&paths, Screen::OffSave).exists());
+        // Installing again does not back slot's own screens up over them.
         install(&paths).unwrap();
-        assert_eq!(
-            std::fs::read(backup(&paths)).unwrap(),
-            b"my own boot screen"
-        );
+        assert_eq!(kept(Screen::Boot), b"my own boot screen");
+        assert_eq!(kept(Screen::Off), b"my own off screen");
         restore(&paths).unwrap();
-        assert_eq!(std::fs::read(&t).unwrap(), b"my own boot screen");
-        assert!(!backup(&paths).exists());
-        // Someone else's screen is never removed.
+        assert_eq!(std::fs::read(&boot).unwrap(), b"my own boot screen");
+        assert_eq!(std::fs::read(&off).unwrap(), b"my own off screen");
+        assert!(!target(&paths, Screen::OffSave).exists());
+        for s in Screen::ALL {
+            assert!(!backup(&paths, s).exists(), "{s:?}");
+        }
+        // Someone else's screens are never removed.
         restore(&paths).unwrap();
-        assert_eq!(std::fs::read(&t).unwrap(), b"my own boot screen");
+        assert_eq!(std::fs::read(&boot).unwrap(), b"my own boot screen");
+        assert_eq!(std::fs::read(&off).unwrap(), b"my own off screen");
     }
 
     #[test]
-    fn it_comes_back_after_onions_overrides_are_reset() {
+    fn they_come_back_after_onions_overrides_are_reset() {
         let (_d, paths) = card();
         let mut settings = crate::settings::Settings::default();
         keep(&paths, &settings);
-        assert!(!target(&paths).exists(), "off: nothing is written");
+        assert!(
+            !target(&paths, Screen::Boot).exists(),
+            "off: nothing is written"
+        );
         settings.boot_screen = true;
         install(&paths).unwrap();
         // Tweaks -> Reset theme overrides: rm -rf Saves/CurrentProfile/theme/*
         std::fs::remove_dir_all(paths.sd.join("Saves/CurrentProfile/theme/skin")).unwrap();
         keep(&paths, &settings);
-        assert!(installed(&paths));
+        assert!(all_ours(&paths));
         // A screen put there since is the player's choice.
-        std::fs::write(target(&paths), b"another").unwrap();
+        std::fs::write(target(&paths, Screen::Boot), b"another").unwrap();
         keep(&paths, &settings);
-        assert_eq!(std::fs::read(target(&paths)).unwrap(), b"another");
+        assert_eq!(
+            std::fs::read(target(&paths, Screen::Boot)).unwrap(),
+            b"another"
+        );
+    }
+
+    #[test]
+    fn turned_on_before_the_shutdown_screens_existed_they_are_added() {
+        // 0.5.1 wrote only the boot screen.
+        let (_d, paths) = card();
+        let settings = crate::settings::Settings {
+            boot_screen: true,
+            ..Default::default()
+        };
+        install_one(&paths, Screen::Boot).unwrap();
+        keep(&paths, &settings);
+        assert!(all_ours(&paths));
     }
 }
