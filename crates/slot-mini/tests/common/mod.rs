@@ -75,6 +75,22 @@ impl Driver {
         }
     }
 
+    /// Run frames until `done`, for up to a minute of real time. Work done
+    /// on threads (faces, prints, downloads) takes real time while the
+    /// test's clock is simulated, and a loaded machine or qemu can take
+    /// many times longer than a desktop: wait for the state, not a count.
+    pub fn wait_until(&mut self, what: &str, done: impl Fn(&Driver) -> bool) {
+        let start = std::time::Instant::now();
+        while !done(self) {
+            assert!(
+                start.elapsed() < std::time::Duration::from_secs(60),
+                "gave up waiting for {what}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            self.run(FRAME_MS);
+        }
+    }
+
     pub fn press(&mut self, b: Button) {
         self.app.handle(Event::Press(b));
     }

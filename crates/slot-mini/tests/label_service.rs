@@ -96,13 +96,7 @@ fn missing_labels_are_fetched_and_local_files_win() {
     let before = std::fs::read(&emerald).unwrap();
     let mut d = rig.app_with(online());
     let metroid = rig.paths.sd.join("Labels/GBA/Metroid Fusion (USA).png");
-    for _ in 0..200 {
-        if metroid.exists() {
-            break;
-        }
-        d.run(50);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    d.wait_until("the background fetch", |_| metroid.exists());
     assert!(
         metroid.is_file(),
         "the service's label was written for the cart without one"
@@ -171,16 +165,12 @@ fn the_label_printer_prints_and_applies() {
     d.go_to("Metroid Fusion (USA)");
     d.tap(Button::Select);
     d.tap(Button::A);
-    for _ in 0..200 {
-        if matches!(
+    d.wait_until("the prints", |d| {
+        matches!(
             d.app.studio.as_ref().unwrap().printer,
             slot_mini::studio_ui::Printer::Ready
-        ) {
-            break;
-        }
-        d.run(20);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+        )
+    });
     d.run(50);
     golden("studio_printer", &d.frame);
     // Pick the logo label and apply it.

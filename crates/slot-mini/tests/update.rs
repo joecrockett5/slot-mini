@@ -233,15 +233,8 @@ fn a_binary_that_is_not_the_promised_version_changes_nothing() {
 }
 
 fn wait_for(d: &mut common::Driver, what: impl Fn(&Status) -> bool) -> Status {
-    for _ in 0..500 {
-        let s = d.app.updater.status();
-        if what(&s) {
-            return s;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        d.run(16);
-    }
-    panic!("gave up waiting; status {:?}", d.app.updater.status());
+    d.wait_until("the updater", |d| what(&d.app.updater.status()));
+    d.app.updater.status()
 }
 
 #[test]

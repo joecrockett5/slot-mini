@@ -245,8 +245,9 @@ The device build is a static 32-bit ARM binary (Cortex-A7, NEON) linked with `ru
 ### Releases
 
 CI (`.github/workflows/ci.yml`) runs the desktop build and every test on each push and pull request.
-The armv7 device build, its tests under qemu and the release zip run only on `main` (or by hand with
-**Actions -> CI -> Run workflow**, on any branch). CI publishes releases from `main` once both builds and all
+Pull requests also run every test on armv7 under qemu, built with the quicker test profile. On `main` (or by
+hand with **Actions -> CI -> Run workflow**, on any branch) the armv7 job builds the release binary, runs the
+tests on that build and makes the release zip. CI publishes releases from `main` once both builds and all
 tests pass (`release` job, script `scripts/release.sh`):
 
 - if `v<version>` from `Cargo.toml` has not been released, it becomes a release tagged at that commit;
@@ -269,7 +270,7 @@ SLOT_MINI_BIN=target/debug/slot-mini sh package/tests/test-shim.sh
 - A stand-in for Onion's runtime loop (`crates/slot-mini/tests/fake-runtime.sh`) runs whole launch cycles.
 - The label service is tested against a local HTTP server, never the internet.
 - The framebuffer and input backends are tested off-device, and the whole suite also runs on armv7 under
-  `qemu-arm-static` in CI on `main`.
+  `qemu-arm-static` in CI, on pull requests and on `main`.
 - `package/tests/test-shim.sh` covers the boot shim and the install and restore switch.
 
 Run the armv7 tests locally with

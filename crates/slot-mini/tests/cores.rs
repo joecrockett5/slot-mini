@@ -25,14 +25,9 @@ fn cfg(rig: &Rig) -> std::path::PathBuf {
 fn open(d: &mut common::Driver) {
     d.tap(Button::Start);
     assert!(d.app.core.is_some(), "the picker opens");
-    for _ in 0..500 {
-        if d.app.core.as_ref().is_some_and(|c| c.shown()) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        d.run(common::FRAME_MS);
-    }
-    assert!(d.app.core.as_ref().unwrap().shown());
+    d.wait_until("the core picker", |d| {
+        d.app.core.as_ref().is_some_and(|c| c.shown())
+    });
     // slot's 420 ms opening.
     d.run(500);
 }
