@@ -10,7 +10,7 @@ slot
     by Brandon Kowalski. GPL-3.0-or-later (licenses/slot-GPL-3.0.txt).
     Shelf, cartridge faces, shells, slot chrome, footer, cart studio,
     label service client, ROM scanning, the cart_shell.txt and label formats,
-    insert and eject sounds.
+    insert and eject sounds, the "slot." boot logo.
 
 slot's skeuomorphic art
     Markus (https://github.com/MarkusMaribu), as credited by slot.

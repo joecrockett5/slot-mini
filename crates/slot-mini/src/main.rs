@@ -215,10 +215,8 @@ fn main() {
     // No game is running while slot-mini is: a helper left from the last one
     // (or its flag) would keep MENU away from Onion.
     slot_mini::ingame::clear_leftovers(&paths);
-    // Let the CPU slow down while the shelf idles (as Onion's runtime does
-    // after a game): a governor left at performance or userspace keeps it
-    // at full clock.
-    // After an Onion update, put the boot launcher back if it was on.
+    // After an Onion update, put the boot launcher back if it was on, and
+    // slot's boot screen after Onion's theme overrides were reset.
     let kept = match a.backend == "device" && !a.sim {
         true => {
             eprintln!(
@@ -226,10 +224,14 @@ fn main() {
                 slot_mini::onion::Onion::detect(&paths).describe()
             );
             let mut settings = slot_mini::settings::Settings::read(&paths);
+            slot_mini::bootscreen::keep(&paths, &settings);
             slot_mini::switch::keep(&paths, &mut settings)
         }
         false => None,
     };
+    // Let the CPU slow down while the shelf idles (as Onion's runtime does
+    // after a game): a governor left at performance or userspace keeps it
+    // at full clock.
     if a.backend == "device" && !a.sim {
         let cpufreq = std::path::Path::new(slot_mini::cpufreq::CPUFREQ);
         if let Some(was) = slot_mini::cpufreq::settle(cpufreq) {

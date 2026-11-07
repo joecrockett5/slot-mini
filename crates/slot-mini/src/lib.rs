@@ -10,6 +10,7 @@ macro_rules! eprintln {
 pub mod about;
 pub mod app;
 pub mod art;
+pub mod bootscreen;
 pub mod core_picker;
 pub mod core_scene;
 pub mod cores;

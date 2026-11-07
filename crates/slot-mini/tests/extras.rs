@@ -73,6 +73,31 @@ fn menu_opens_about_and_settings_stick() {
     assert_eq!(d.app.phase, Phase::Shelf);
 }
 
+/// MENU -> Boot screen: slot's screen goes into Onion's theme overrides and
+/// the choice is kept; again puts Onion's back.
+#[test]
+fn menu_puts_slots_boot_screen_in_onions_overrides() {
+    let rig = Rig::new();
+    let target = slot_mini::bootscreen::target(&rig.paths);
+    let mut d = rig.app();
+    d.tap(Button::Menu);
+    for _ in 0..3 {
+        d.tap(Button::Down);
+    }
+    d.tap(Button::A);
+    assert_eq!(
+        std::fs::read(&target).unwrap(),
+        slot_mini::bootscreen::png()
+    );
+    let text = std::fs::read_to_string(rig.paths.data().join("settings.txt")).unwrap();
+    assert!(text.contains("boot_screen = on"), "{text}");
+    d.run(50);
+    golden("about_boot_screen", &d.frame);
+    d.tap(Button::A);
+    assert!(!target.exists());
+    assert!(!d.app.settings.boot_screen);
+}
+
 #[test]
 fn insert_and_eject_play_slots_clips() {
     let rig = Rig::new();
