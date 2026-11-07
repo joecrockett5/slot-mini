@@ -234,3 +234,13 @@ Calls made without asking, and why. Newest last.
     without the release binary or zip. Tests that wait on work done on
     threads now wait for the state with a one-minute real-time limit, not a
     fixed number of frames (`Driver::wait_until`).
+55. **slot's shutdown screen under the boot screen's setting** (0.5.2, the
+    maintainer's request, design left to us). It is slot's own: slot
+    blacks the panel and centres "Powering Down" in its menu type while it
+    shuts down, so that is drawn at 640x480 with slot-mini's copy of the
+    same face. Onion's two shutdown screens (after the menu or an app, and
+    after a game) get the same image, as slot says the same from a game.
+    The row is now **Splash screens: slot / Onion**; the stored key stays
+    `boot_screen`, so 0.5.1's choice carries over and the new screens are
+    written at the first start. The low-battery screen stays Onion's: it
+    says why the device is turning off.

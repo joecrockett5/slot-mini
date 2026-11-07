@@ -269,12 +269,16 @@ Update slot-mini to 0.5.0 on 4.3.1-1 first, then Onion (beta channel).
 - [ ] With Onion's logging on, `.tmp_update/logs/slot-mini.log` has a line
       `Onion ... (reset flag: yes, switcher overlay: yes)`.
 
-## 14. slot's boot screen (0.5.1)
+## 14. slot's boot and shutdown screens (0.5.1, 0.5.2)
 
-- [ ] MENU -> Boot screen: slot. Reboot: "slot." in the middle of a dark
+- [ ] MENU -> Splash screens: slot. Reboot: "slot." in the middle of a dark
       screen while Onion starts, with Onion's version bottom left.
-- [ ] Change theme in Onion: the boot screen stays slot's.
-- [ ] MENU -> Boot screen: Onion. Reboot: the theme's boot screen is back.
+- [ ] Hold power on the shelf: "POWERING DOWN" in the middle of a black
+      screen, Onion's battery top right, then off.
+- [ ] Start a game, hold power: the same screen.
+- [ ] Change theme in Onion: the screens stay slot's.
+- [ ] MENU -> Splash screens: Onion. Reboot and power off: the theme's
+      screens are back.
 
 ## What to report
 

@@ -32,7 +32,8 @@ pub struct Settings {
     /// own MainUI back; slot-mini then installs itself again
     /// (`switch::keep`).
     pub boot_launcher: bool,
-    /// The player turned slot's boot screen on. Put back at start if
+    /// The player turned slot's boot and shutdown screens on (MENU ->
+    /// Splash screens; the key keeps its 0.5.1 name). Put back at start if
     /// Onion's theme overrides were reset (`bootscreen::keep`).
     pub boot_screen: bool,
 }

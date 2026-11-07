@@ -32,7 +32,7 @@ pub struct About {
     /// Whether slot-mini is installed as the boot launcher, and a message
     /// from the last attempt to change that.
     pub launcher: bool,
-    /// Whether Onion shows slot's boot screen.
+    /// Whether Onion shows slot's boot and shutdown screens.
     pub boot_screen: bool,
     pub note: Option<String>,
     /// Shown on the note line when there is no note: the CPU's state.
@@ -140,9 +140,9 @@ impl About {
                     };
                     self.note = Some(match result {
                         Ok(()) if !self.boot_screen => {
-                            "slot's boot screen shows from the next start.".into()
+                            "slot's boot and shutdown screens are on.".into()
                         }
-                        Ok(()) => "Onion's boot screen is back.".into(),
+                        Ok(()) => "Onion's boot and shutdown screens are back.".into(),
                         Err(e) => format!("Not changed: {e}"),
                     });
                     self.boot_screen = crate::bootscreen::installed(paths);
@@ -202,7 +202,7 @@ impl About {
             Row::IngameMenu => format!("In-game menu: {}", on(settings.ingame_menu)),
             Row::BootLauncher => format!("Boot launcher: {}", on(self.launcher)),
             Row::BootScreen => format!(
-                "Boot screen: {}",
+                "Splash screens: {}",
                 if self.boot_screen { "slot" } else { "Onion" }
             ),
             Row::ExitToOnion => "Exit to Onion".into(),

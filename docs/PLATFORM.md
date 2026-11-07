@@ -577,7 +577,7 @@ Since 0.5.0 slot-mini puts the shim back the next time it starts
   replaced, so turning the launcher off afterwards restores the updated
   Onion, not the old one.
 
-## Boot screen
+## Boot and shutdown screens
 
 **Checked against 4.3.1-1 and the development build (`07505ea`); the same on
 both.** The runtime runs `bootScreen Boot` at start (and again with messages
@@ -590,6 +590,13 @@ scales it on larger panels). Over it Onion always writes
 `onionVersion/version.txt` bottom left, and any message bottom right, in the
 theme's font and colour.
 
+- **Shutdown.** keymon's power off sets `/tmp/.offOrder` and ends what is
+  running; the runtime's `check_off_order` then runs `bootScreen End`
+  (`skin/extra/Screen_Off.png`) after Onion's menu or an app, or
+  `bootScreen End_Save` (`Screen_Off_Save.png`) after a game, waits a
+  second and powers off. Both are found the same way as the boot screen and
+  are 640x480; Onion writes its version bottom left and the battery gauge
+  top right over them. `lowBat` (`lowBat.png`) is the low-battery screen.
 - **Who touches the overrides.** Tweaks' "Reset theme overrides" runs
   `rm -rf Saves/CurrentProfile/theme/*`; Guest Mode swaps the whole profile.
   Onion's updates do not: its default configs (`configs.pak`) are only
@@ -602,7 +609,12 @@ theme's font and colour.
   `tEXt` chunk, to the overrides. A file there that is not its own is copied
   to `.tmp_update/slot-mini/bootScreen.png` first and put back when it is
   turned off; another file there is never removed. With the setting on, a
-  missing file is written again at start.
+  missing file is written again at start. 0.5.2 adds slot's shutdown screen
+  (slot `draw_app` while shutting down: "Powering Down" in slot's 30 px
+  menu type, centred on black) as both `Screen_Off.png` and
+  `Screen_Off_Save.png`, under the same setting, each kept and restored on
+  its own; `.tmp_update/slot-mini/` keeps the player's own under the same
+  names. The low-battery screen stays Onion's.
 
 ## Toolchain
 

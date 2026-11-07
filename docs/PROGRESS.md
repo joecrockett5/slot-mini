@@ -449,6 +449,18 @@ Save and Load State worked on the device. Fixed:
 - `ci.yml`: the armv7 job also runs on pull requests, tests only, in the
   test profile. Failed goldens from the armv7 run are uploaded.
 
+## 0.5.2: slot's shutdown screen
+
+- The boot screen setting also writes slot's shutdown screen ("Powering
+  Down" on black, slot's menu type) as Onion's `Screen_Off.png` and
+  `Screen_Off_Save.png` overrides (`bootscreen::Screen`). Each screen is
+  installed, kept and restored on its own; `keep` adds the new ones at start
+  for 0.5.1 players who had the boot screen on.
+- MENU row renamed **Splash screens: slot / Onion**.
+- Tests: `bootscreen.rs` (both images, on/off with the player's screens,
+  reset, the 0.5.1 upgrade), `menu_puts_slots_screens_in_onions_overrides`
+  (golden `about_splash_screens`).
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from
