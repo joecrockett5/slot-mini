@@ -152,6 +152,7 @@ Calls made without asking, and why. Newest last.
     shim tests); the slow cross build, qemu tests and zip run where a release
     is published. An armv7-only failure therefore shows up after merging, and
     stops that release; **Run workflow** runs the armv7 job on a branch first.
+    *Changed in #54.*
 40. **The core choice is Onion's per-game file, not slot's** (0.4.0). Onion
     applies `.game_config/<rom>.cfg` to every launch through `launch.sh` and
     shows it in Game List Options, so the two can never disagree. mGBA is
@@ -225,3 +226,11 @@ Calls made without asking, and why. Newest last.
     the original pixel for pixel. Onion's version text cannot be hidden from
     there. The firmware's Miyoo logo is left alone (it needs flashing). Off
     by default. MENU's rows moved closer together to fit the sixth row.
+54. **Pull requests run the armv7 tests too** (after 0.5.1, the maintainer's
+    request; replaces the PR half of #39). 0.5.1 failed on `main` in a test
+    that only failed on the slower armv7 run, which held its release back.
+    Pull requests now run every test under qemu with the test profile
+    (about a minute to build; the release profile's fat LTO takes three),
+    without the release binary or zip. Tests that wait on work done on
+    threads now wait for the state with a one-minute real-time limit, not a
+    fixed number of frames (`Driver::wait_until`).

@@ -1,9 +1,12 @@
 name: CI
 
 # Every push and pull request runs the desktop job (format, clippy, tests,
-# boot shim tests). The armv7 device build, its tests under qemu and the
-# release zip run only for pushes to main, which publish a release, or when
-# started by hand (Actions -> CI -> Run workflow) on any branch.
+# boot shim tests). The armv7 job runs the tests on ARM under qemu:
+# - on pull requests, a light version: the test profile (no fat LTO), and no
+#   device binary or release zip, so nothing fails on main that a PR passed;
+# - on pushes to main, which publish a release, and when started by hand
+#   (Actions -> CI -> Run workflow) on any branch: the release build, its
+#   tests, and the release zip.
 on:
   push:
   pull_request:
@@ -44,8 +47,13 @@ jobs:
     name: armv7 musl build
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'pull_request'
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
+    env:
+      # Pull requests test with the test profile (opt-level 2): about a
+      # minute to build instead of three, the same code on the same CPU.
+      FULL: ${{ github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - name: Host tools
@@ -57,20 +65,32 @@ jobs:
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - name: Build
+        if: env.FULL == 'true'
         run: cargo build --release --target armv7-unknown-linux-musleabihf -p slot-mini
       - name: Check binary
+        if: env.FULL == 'true'
         run: scripts/check-device-binary.sh target/armv7-unknown-linux-musleabihf/release/slot-mini
       - name: Test under qemu
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER: qemu-arm-static
-        run: cargo test --release --target armv7-unknown-linux-musleabihf --workspace
+        run: cargo test $([ "$FULL" = true ] && echo --release) --target armv7-unknown-linux-musleabihf --workspace
+      - name: Upload failed golden images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures-armv7
+          path: target/golden-failures/
+          if-no-files-found: ignore
       - name: Release zip
+        if: env.FULL == 'true'
         run: scripts/package.sh
       - name: Check the release zip
+        if: env.FULL == 'true'
         run: |
           cargo build -p slot-mini
           SLOT_MINI_BIN=target/debug/slot-mini sh package/tests/test-zip.sh dist/slot-mini-*.zip
       - uses: actions/upload-artifact@v4
+        if: env.FULL == 'true'
         with:
           name: slot-mini-release
           path: dist/slot-mini-*.zip

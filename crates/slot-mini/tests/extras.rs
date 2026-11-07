@@ -258,10 +258,10 @@ fn the_sound_test_shows_how_the_player_ended() {
     step(&mut app, Some(Button::A));
     let note = |app: &App| app.about.as_ref().and_then(|a| a.note.clone());
     assert_eq!(note(&app).as_deref(), Some("Sound test: playing..."));
-    for _ in 0..300 {
-        if note(&app).as_deref() != Some("Sound test: playing...") {
-            break;
-        }
+    // The player runs in real time: wait for it, however slow the machine.
+    let start = std::time::Instant::now();
+    while note(&app).as_deref() == Some("Sound test: playing...") {
+        assert!(start.elapsed() < std::time::Duration::from_secs(60));
         std::thread::sleep(std::time::Duration::from_millis(10));
         step(&mut app, None);
     }

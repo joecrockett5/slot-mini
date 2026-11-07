@@ -438,6 +438,17 @@ Save and Load State worked on the device. Fixed:
   `menu_puts_slots_boot_screen_in_onions_overrides` (golden
   `about_boot_screen`).
 
+## CI: armv7 tests on pull requests
+
+- 0.5.1's run on `main` failed `the_label_printer_prints_and_applies` on
+  armv7: the printer was still printing when the golden was taken. The
+  test waited a fixed 200 frames (about 2 s of real time); under qemu on a
+  loaded runner the prints took longer. Reproduced locally by loading the
+  CPU, and fixed: `Driver::wait_until` waits for a state for up to a minute
+  of real time (label service, core picker, updater, sound test).
+- `ci.yml`: the armv7 job also runs on pull requests, tests only, in the
+  test profile. Failed goldens from the armv7 run are uploaded.
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from
