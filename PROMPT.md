@@ -6,7 +6,7 @@ Build **slot-mini**: a game launcher for the Miyoo Mini Plus running Onion OS th
 
 ## Context
 
-slot is a bespoke frontend for the Anbernic RG SP (Allwinner H700, aarch64, Mali GPU). It is about 128,000 lines of Rust across eight crates in `crates/`: `slot` (app), `slot-ui` (shelf, carts, labels, menus, HUD), `slot-gfx` (OpenGL ES rendering, bezels, LCD3x mask), `slot-input`, `slot-power`, `slot-retro` (in-process libretro host), `slot-store` and `slot-sfxcut`. Art lives in `assets/` and the user-facing tour in `site/docs/tour.md`. It is pinned as a git submodule at `reference/slot` (run `git submodule update --init` first). Treat it as read-only reference: copy from it, never build it or link to it.
+slot is a bespoke frontend for the Anbernic RG SP (Allwinner H700, aarch64, Mali GPU). It is about 128,000 lines of Rust across eight crates in `crates/`: `slot` (app), `slot-ui` (shelf, carts, labels, menus, HUD), `slot-gfx` (OpenGL ES rendering, bezels, LCD3x mask), `slot-input`, `slot-power`, `slot-retro` (in-process libretro host), `slot-store` and `slot-sfxcut`. Art lives in `assets/` and the user-facing tour in `site/docs/tour.md`. It was pinned as a git submodule at `reference/slot` (slot `e66715d`) during the build-out; it has since been removed, so clone https://github.com/BrandonKowalski/slot outside the repo when you need it. Treat it as read-only reference: copy from it, never build it or link to it.
 
 slot is licensed **GPL-3.0-or-later** (the workspace `Cargo.toml`; the README says MIT, but the code is GPL). Anything you copy or adapt makes slot-mini GPL-3.0-or-later too. Keep slot's copyright notices, credit it in the README, and ship its licence. The Open Sans and Nerd Fonts licences come along with the fonts.
 
@@ -108,7 +108,7 @@ In-process emulation, slot's in-game menu and save-state switcher, rewind and fa
 
 Work in these phases, in order. Finish each phase's exit check before starting the next, commit at every exit, and keep `docs/PROGRESS.md` updated with what is done, what is next and any open questions.
 
-1. **Research.** Initialise the slot submodule, and clone Onion and Open MainUI into a scratch folder outside the repo. Write `docs/PLATFORM.md` (the verified facts above, with source links) and `docs/DESIGN-PARITY.md` (every slot screen and effect in scope, and how you will reproduce it). Get reference images of slot's carousel at 640x480: try slot's own headless render tests first; if slot will not render in your sandbox, use `assets/` and the screenshots and clips under `site/docs/`.
+1. **Research.** Clone slot, Onion and Open MainUI into a scratch folder outside the repo. Write `docs/PLATFORM.md` (the verified facts above, with source links) and `docs/DESIGN-PARITY.md` (every slot screen and effect in scope, and how you will reproduce it). Get reference images of slot's carousel at 640x480: try slot's own headless render tests first; if slot will not render in your sandbox, use `assets/` and the screenshots and clips under `site/docs/`.
    - Exit: both docs exist and every lead in the Device section is marked confirmed, corrected or unresolved.
 2. **Skeleton and toolchain.** Workspace, `Canvas`, desktop and headless backends, and a static armv7 musl release build, also running in GitHub Actions.
    - Exit: CI is green and `file` reports a static 32-bit ARM binary.

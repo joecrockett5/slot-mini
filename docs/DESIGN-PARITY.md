@@ -14,8 +14,8 @@ GL pipeline with a software rasteriser (`crates/slot-mini-gfx`) that understands
 when a screen opens, or dropped, as listed below.
 
 Reference images were taken from slot's own site media
-(`reference/slot/site/docs/media/*.webp` and frames of the `.mp4` clips), copied
-to `docs/reference/`. slot's render tests could not be used: its headless GL
+(`site/docs/media/*.webp` and frames of the `.mp4` clips, at slot `e66715d`),
+copied to `docs/reference/`. slot's render tests could not be used: its headless GL
 surface is macOS-only (`slot-gfx/src/lib.rs`, `#[cfg(target_os = "macos")]`),
 and the brief forbids building slot anyway. The site media is 720x480, the RG
 SP layout; slot's 4:3 layout is the same code with a 640-wide `Canvas`

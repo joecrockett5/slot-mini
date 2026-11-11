@@ -15,7 +15,7 @@
 
 ## Phase 1: Research
 
-- slot submodule at `e66715d`. Onion (`07505ea`) and Open MainUI (`17fe90d`)
+- slot submodule at `e66715d` (removed in 0.5.3; see below). Onion (`07505ea`) and Open MainUI (`17fe90d`)
   were cloned into a scratch folder outside the repo; re-clone them with
   `git clone --depth 1` if needed.
 - `docs/PLATFORM.md`: every lead marked confirmed, corrected or unresolved.
@@ -460,6 +460,22 @@ Save and Load State worked on the device. Fixed:
 - Tests: `bootscreen.rs` (both images, on/off with the player's screens,
   reset, the 0.5.1 upgrade), `menu_puts_slots_screens_in_onions_overrides`
   (golden `about_splash_screens`).
+
+## 0.5.3: README and the slot submodule
+
+- README rewritten for players first: banner, badges, a demo GIF, a
+  highlights list, and credits that say what came from slot and where.
+- `docs/media/demo.gif` and `docs/media/banner.png` are made from the app:
+  `scripts/record-demo.sh` runs the ignored test `tests/demo.rs`, which
+  drives the app headlessly on a card of homebrew titles and writes raw
+  frames for ffmpeg; `scripts/banner.py` composes the banner from a still
+  of the same run, the wood wallpaper and Open Sans.
+- The `reference/slot` submodule is gone. Copied files still name slot's
+  commit (`e66715d`); `scripts/copy-from-slot.sh` now clones slot under
+  `target/slot` (or uses `$SLOT`). CLAUDE.md, PROMPT.md and
+  DESIGN-PARITY.md updated to match.
+- The README no longer says nothing has run on hardware: the maintainer has
+  been testing on a Mini Plus since 0.1.1.
 
 ## Open questions
 

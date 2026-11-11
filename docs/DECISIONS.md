@@ -244,3 +244,9 @@ Calls made without asking, and why. Newest last.
     `boot_screen`, so 0.5.1's choice carries over and the new screens are
     written at the first start. The low-battery screen stays Onion's: it
     says why the device is turning off.
+56. **slot is no longer vendored** (0.5.3, the maintainer's request). The
+    submodule only served the build-out; keeping it made every clone fetch
+    slot. Provenance lives in each copied file's header (slot `e66715d`)
+    and in the README's credits, and `copy-from-slot.sh` clones slot on
+    demand. The README's demo uses homebrew titles rather than the test
+    fixture's commercial ones, and is recorded from the app, not mocked up.
