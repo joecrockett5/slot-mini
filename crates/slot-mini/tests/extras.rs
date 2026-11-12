@@ -226,7 +226,9 @@ fn the_sound_test_shows_how_the_player_ended() {
     let script = rig.dir.path().join("player.sh");
     std::fs::write(
         &script,
-        "#!/bin/sh\necho 'SDL_OpenAudio: No available audio device' >&2\nexit 1\n",
+        // It fails after a second, so "playing..." is seen first however
+        // quickly the machine starts it.
+        "#!/bin/sh\nsleep 1\necho 'SDL_OpenAudio: No available audio device' >&2\nexit 1\n",
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
