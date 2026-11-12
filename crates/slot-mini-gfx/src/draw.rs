@@ -224,10 +224,10 @@ impl Renderer {
     }
 
     /// Draw a list into the canvas. Operations slot only uses for in-game
-    /// and GL-only effects (`Game`, `Shot`, `Capture`, `Paper`, `Quad`) are
-    /// skipped; screens that need them pre-render instead (see
-    /// docs/DESIGN-PARITY.md). `Turned` is drawn in software (the core
-    /// picker's lid and chip).
+    /// and GL-only effects (`Game`, `Shot`, `Capture`, `Paper`) are skipped;
+    /// screens that need them pre-render instead (see
+    /// docs/DESIGN-PARITY.md). `Turned` (the core picker's lid and chip) and
+    /// `Quad` (the studio's curling stickers) are drawn in software.
     pub fn render(&self, draws: &[Draw], canvas: &mut Canvas) {
         for d in draws {
             match *d {
@@ -264,6 +264,17 @@ impl Renderer {
                             true => self.tex(canvas, tex, None, Rect::snap(x, y, w, h), alpha),
                             false => canvas.blit_turned(sprite, x, y, w, h, turn, a),
                         }
+                    }
+                }
+                Draw::Quad {
+                    corners,
+                    tex,
+                    uv,
+                    alpha,
+                } => {
+                    let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u32;
+                    if let Some(sprite) = self.get(tex) {
+                        canvas.blit_quad(sprite, corners, uv, a);
                     }
                 }
                 _ => {}

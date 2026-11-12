@@ -171,11 +171,29 @@ fn the_label_printer_prints_and_applies() {
             slot_mini::studio_ui::Printer::Ready
         )
     });
-    d.run(50);
+    // slot's printer: the bottom slip prints and drops, then the top one.
+    d.run(150);
+    assert_eq!(d.app.studio.as_ref().unwrap().slip_count(), 1);
+    golden("studio_printing", &d.frame);
+    d.run(2000);
+    assert_eq!(d.app.studio.as_ref().unwrap().slip_count(), 2);
     golden("studio_printer", &d.frame);
-    // Pick the logo label and apply it.
+    // Pick the logo label and apply it: the old label peels off, the new
+    // one flies over from its slip, and nothing else answers meanwhile.
     d.tap(Button::Down);
+    d.run(300);
+    golden("studio_slip_picked", &d.frame);
     d.tap(Button::A);
+    assert!(d.app.studio.as_ref().unwrap().applying());
+    d.run(150);
+    golden("studio_peel", &d.frame);
+    d.tap(Button::B);
+    assert!(d.app.studio.is_some(), "B waits for the label to go on");
+    d.run(600);
+    golden("studio_to_cart", &d.frame);
+    d.run(500);
+    assert!(!d.app.studio.as_ref().unwrap().applying());
+    golden("studio_applied", &d.frame);
     d.tap(Button::B);
     d.tap(Button::B);
     let label = rig.paths.sd.join("Labels/GBA/Metroid Fusion (USA).png");
