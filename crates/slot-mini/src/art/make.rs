@@ -102,9 +102,14 @@ pub fn label_path(root: &Path, cart: &Cart) -> PathBuf {
         .join(format!("{}.png", cart.stem))
 }
 
+/// A temporary file beside `path`, its own for each write: the background
+/// fetch and the studio can write the same label at once, and a shared
+/// name let one rename take the other's file away.
 fn part_of(path: &Path) -> PathBuf {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".part");
+    name.push(format!(".{}-{n}.part", std::process::id()));
     path.with_file_name(name)
 }
 
@@ -176,4 +181,29 @@ fn forget_cached(root: &Path, cart: &Cart) {
 pub fn write_replacing(path: &Path, png: &[u8]) -> std::io::Result<()> {
     let part = write_part(path, png)?;
     std::fs::rename(&part, path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The background fetch (`write_new`) and the studio (`write_replacing`)
+    /// writing the same label at once both succeed.
+    #[test]
+    fn concurrent_writes_to_one_label_do_not_collide() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Labels/GBA/Metroid.png");
+        for _ in 0..200 {
+            let _ = std::fs::remove_file(&path);
+            let p = path.clone();
+            let fetch = std::thread::spawn(move || write_new(&p, b"fetched").map(|_| ()));
+            write_replacing(&path, b"applied").unwrap();
+            fetch.join().unwrap().unwrap();
+        }
+        let left: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(left, vec![std::ffi::OsString::from("Metroid.png")]);
+    }
 }
