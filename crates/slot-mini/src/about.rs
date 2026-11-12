@@ -1,10 +1,14 @@
 //! MENU: about slot-mini, its few settings, and the way back to Onion.
-//! Drawn on slot's menu ground: the wallpaper under slot's scrim, rows in
-//! slot's title type, selected row bright and the rest dimmed as in slot's
-//! quick menu.
+//! Drawn on slot's menu ground: the wallpaper under slot's scrim, slot's
+//! About sticker at the top (peeling in as MENU opens), then rows in slot's
+//! title type, selected row bright and the rest dimmed as in slot's quick
+//! menu.
 
-use slot_mini_gfx::{Button, Draw, Renderer, Stage, TexId};
-use slot_mini_ui::{draw_backdrop, hint_face, line_ink, title_line_face, word_ink, FOOTER_Y};
+use slot_mini_gfx::{Button, Draw, Renderer, Sprite, Stage, TexId};
+use slot_mini_ui::curl_runs::{joined, wider};
+use slot_mini_ui::sticker::{sticker_face, StickerFields, STICKER_H, STICKER_W};
+use slot_mini_ui::sticker_curl::{strips, Pose};
+use slot_mini_ui::{draw_backdrop, ease, hint_face, line_ink, title_line_face, FOOTER_Y};
 
 use crate::paths::Paths;
 use crate::settings::Settings;
@@ -39,6 +43,12 @@ pub struct About {
     /// Shown on the note line when there is no note: the CPU's state.
     pub diag: Option<String>,
     faces: Vec<(String, TexId, u32, u32)>,
+    /// When MENU opened, for the sticker's peel-in.
+    opened: Option<u64>,
+    /// The sticker, scaled to [`STICKER_SCALE`], and the battery it shows.
+    sticker: Option<(TexId, Option<u8>)>,
+    /// A 1x1 paper texture for the backs of the curling strips.
+    paper: Option<TexId>,
 }
 
 /// How a line of the About screen is set.
@@ -46,8 +56,6 @@ pub struct About {
 enum Style {
     /// slot's title type: the version and the rows.
     Title,
-    /// Small type in slot's word width: the credits.
-    Small,
     /// Small type up to nearly the screen's width.
     Note,
 }
@@ -55,12 +63,37 @@ enum Style {
 /// The widest MENU's note line may be.
 const NOTE_W: f32 = 600.0;
 
-const INFO: [&str; 4] = [
-    concat!("slot-mini ", env!("CARGO_PKG_VERSION")),
-    "Based on slot by Brandon Kowalski",
-    "Licensed GPL-3.0-or-later",
-    "Not affiliated with slot, Onion or Miyoo",
-];
+/// slot draws its sticker 608 px wide on a screen of its own; MENU shares
+/// the screen with seven rows, so it is drawn at three quarters of its size.
+const STICKER_SCALE: f32 = 0.75;
+const STICKER_Y: f32 = 10.0;
+/// The rows' pitch under the sticker (slot's quick menu uses more).
+const ROW_PITCH: f32 = 28.0;
+/// slot's 8 px strips taken this many at a time: the sticker is large, and
+/// software pays for every strip on every row (decision 60).
+const CURL_GROUP: usize = 2;
+/// How long the sticker takes to peel in.
+pub const PEEL_MS: u64 = 600;
+/// The backs of the strips: slot's sticker paper.
+const PAPER: [u8; 4] = [0xf4, 0xf1, 0xea, 0xff];
+/// The serial printed and barcoded on the sticker: slot prints its git
+/// hash; slot-mini prints its version, so the sticker only changes with a
+/// release.
+fn serial() -> String {
+    let digits: String = env!("CARGO_PKG_VERSION")
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
+    let body = format!("SM{digits}");
+    format!("{body}{}", check39(&body))
+}
+
+/// Code 39's modulo-43 check character.
+fn check39(s: &str) -> char {
+    const SET: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+    let sum: usize = s.chars().filter_map(|c| SET.find(c)).sum();
+    SET.chars().nth(sum % 43).unwrap_or('0')
+}
 
 impl About {
     pub fn new(paths: &Paths) -> About {
@@ -80,6 +113,9 @@ impl About {
             note: None,
             diag: None,
             faces: Vec::new(),
+            opened: None,
+            sticker: None,
+            paper: None,
         }
     }
 
@@ -179,7 +215,6 @@ impl About {
         }
         let f = match style {
             Style::Title => title_line_face(text),
-            Style::Small => word_ink(text, [0xf6, 0xf4, 0xef]),
             // Notes can be a sentence: nearly the screen's width.
             Style::Note => line_ink(text, [0xf6, 0xf4, 0xef], NOTE_W),
         };
@@ -191,6 +226,88 @@ impl About {
     pub fn close(self, gfx: &mut Renderer) {
         for (_, t, ..) in self.faces {
             gfx.free(t);
+        }
+        for t in self.sticker.map(|s| s.0).into_iter().chain(self.paper) {
+            gfx.free(t);
+        }
+    }
+
+    /// Whether the sticker is still peeling in at `now`.
+    pub fn peeling(&self, now: u64) -> bool {
+        self.opened.is_none_or(|t| now.saturating_sub(t) < PEEL_MS)
+    }
+
+    /// The sticker's face, made again when the battery changes (as slot's
+    /// `sync_about` does).
+    fn sticker(&mut self, battery: Option<u8>, gfx: &mut Renderer) -> TexId {
+        match self.sticker {
+            Some((t, b)) if b == battery => return t,
+            Some((t, _)) => gfx.free(t),
+            None => {}
+        }
+        let face = sticker_face(&StickerFields {
+            battery,
+            serial: &serial(),
+            version: env!("CARGO_PKG_VERSION"),
+            baseos: None,
+        });
+        let (w, h) = sticker_size();
+        let sprite = Sprite::from_rgba(face.w, face.h, &face.rgba).resized(w as u32, h as u32);
+        let t = gfx.upload(sprite);
+        self.sticker = Some((t, battery));
+        t
+    }
+
+    fn draw_sticker(
+        &mut self,
+        stage: Stage,
+        now: u64,
+        battery: Option<u8>,
+        gfx: &mut Renderer,
+        out: &mut Vec<Draw>,
+    ) {
+        let tex = self.sticker(battery, gfx);
+        let (w, h) = sticker_size();
+        let x = ((stage.w - w) / 2.0).round();
+        let opened = *self.opened.get_or_insert(now);
+        let t = now.saturating_sub(opened) as f32 / PEEL_MS as f32;
+        if t >= 1.0 {
+            out.push(Draw::Tex {
+                x,
+                y: STICKER_Y,
+                w,
+                h,
+                tex,
+                alpha: 1.0,
+            });
+            return;
+        }
+        // Laid down from the left: the free end starts curled up off the
+        // page and unrolls flat.
+        let p = ease(t);
+        let paper = *self
+            .paper
+            .get_or_insert_with(|| gfx.upload_rgba(1, 1, &PAPER));
+        let pose = Pose {
+            y: -12.0 * (1.0 - p),
+            z: 40.0 * (1.0 - p),
+            ..Pose::REST
+        };
+        let focus = [stage.w / 2.0, 240.0];
+        let alpha = (t * 4.0).min(1.0);
+        let rect = [x, STICKER_Y, w, h];
+        let curl = strips(rect, 0.1 + 0.9 * p, 220.0 * (1.0 - p), &pose, focus);
+        for strip in joined(wider(curl, CURL_GROUP)) {
+            let (tex, uv) = match strip.back {
+                true => (paper, [0.0, 0.0, 1.0, 1.0]),
+                false => (tex, strip.uv),
+            };
+            out.push(Draw::Quad {
+                corners: strip.corners,
+                tex,
+                uv,
+                alpha,
+            });
         }
     }
 
@@ -218,9 +335,12 @@ impl About {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
         stage: Stage,
+        now: u64,
+        battery: Option<u8>,
         ground: Option<(TexId, u32)>,
         settings: &Settings,
         update: &Status,
@@ -228,6 +348,7 @@ impl About {
         out: &mut Vec<Draw>,
     ) {
         draw_backdrop(stage, ground, out);
+        self.draw_sticker(stage, now, battery, gfx, out);
         let put = |out: &mut Vec<Draw>, (tex, w, h): (TexId, u32, u32), y: f32, alpha: f32| {
             out.push(Draw::Tex {
                 x: ((stage.w - w as f32) / 2.0).round(),
@@ -238,20 +359,13 @@ impl About {
                 alpha,
             });
         };
-        let mut y = 30.0;
-        for (i, line) in INFO.iter().enumerate() {
-            let style = if i == 0 { Style::Title } else { Style::Small };
-            let f = self.face(gfx, line, style);
-            put(out, f, y, if i == 0 { 1.0 } else { 0.8 });
-            y += if i == 0 { 42.0 } else { 22.0 };
-        }
-        y += 6.0;
+        let mut y = STICKER_Y + sticker_size().1 + 8.0;
         for (i, row) in self.rows.clone().into_iter().enumerate() {
             let text = self.label(row, settings, update);
             let f = self.face(gfx, &text, Style::Title);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
             // Seven rows and the note line fit above slot's footer.
-            y += 33.0;
+            y += ROW_PITCH;
         }
         let update_note = match update {
             Status::UpToDate => Some(format!(
@@ -298,5 +412,25 @@ impl About {
                 alpha: 1.0,
             });
         }
+    }
+}
+
+/// The sticker's size on MENU.
+fn sticker_size() -> (f32, f32) {
+    (
+        (STICKER_W as f32 * STICKER_SCALE).round(),
+        (STICKER_H as f32 * STICKER_SCALE).round(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_serial_ends_in_its_code39_check() {
+        // "SM062": S=28 M=22 0 6 2, sum 58, 58 mod 43 = 15 = F.
+        assert_eq!(check39("SM062"), 'F');
+        assert!(serial().starts_with("SM"));
     }
 }

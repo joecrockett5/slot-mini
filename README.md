@@ -135,7 +135,7 @@ are removed with the folder.
 | X | On the Recents shelf: take the cart off it (the game is not touched) |
 | SELECT | Open the cart studio |
 | START | GBA carts: open the cart and choose its core (mGBA or gpSP) |
-| MENU | Settings: sounds, in-game menu, the Recents shelf, boot launcher, splash screens, updates, exit to Onion |
+| MENU | slot's About sticker (credits, version, battery) and settings: sounds, in-game menu, the Recents shelf, boot launcher, splash screens, updates, exit to Onion |
 
 Holding A starts the game the way Onion's own **Reset game** does, for that one run. RetroArch still writes its
 auto state when you quit.
@@ -334,7 +334,6 @@ To ship a new version, bump `version` in `Cargo.toml` and merge to `main`.
 Possible next steps, roughly in order of effort:
 
 - Re-tinting **logo labels** after the studio is closed (slot keeps the logo so it can re-tint it).
-- The **sticker curl** on the menu screen.
 
 Not planned: other Onion systems, a core picker for Game Boy carts, and features that belong to RetroArch or to
 slot's own frontend, such as save-state browsing, rewind, shaders, bezels, colour grading, link play, slot's web

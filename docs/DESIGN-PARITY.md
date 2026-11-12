@@ -34,7 +34,7 @@ slot-mini renders.
 | Eject (cart rises out of the slot) | yes, simplified | When slot-mini starts straight after a game it opens on that cart and plays the rise in reverse. |
 | Cart Studio (SELECT) | yes, simplified | Cutting-mat ground, the cart on the left, rows on the right: Label Printer, Shell (GB only), Shell Colour, Finish. See below. |
 | Label printer and slips | yes | slot's printer, paper strip and light; slips print, drop and shuffle, and the chosen label peels and flies onto the cart (0.6.2). Back faces are plain paper. |
-| About (MENU) | yes | slot's sticker on the menu ground, plus slot-mini's own rows: boot launcher switch, sounds, exit to Onion. |
+| About (MENU) | yes | slot's About sticker (slot-mini's wording) peels in at the top of the menu ground, above slot-mini's own rows: sounds, in-game menu, Recents, boot launcher, splash screens, updates, exit to Onion (0.6.3). |
 | Settings (quick menu) | partly | Folded into the About screen: only settings slot-mini needs. |
 | In-game menu (tap MENU) and eject (hold MENU) | yes, for games slot-mini launches (0.2.0) | slot's quick-menu type, pointer and layout over the frozen game; rows Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game. See below. |
 | Core picker (START) | yes, GBA carts (0.4.0) | slot's scene: the other carts recede and dim, the cart's lid lifts and turns off its board, the chip hops between the mGBA and gpSP sockets, slot's Cancel, Swap and Choose legends. Game Boy carts (slot: mGBA or Gambatte) are not offered. See below. |
@@ -64,7 +64,7 @@ slot-mini renders.
 | LCD3x subpixel mask | In-game screen | Dropped: in-game is RetroArch's. |
 | Colour grading (saturation, contrast, blue light, dim) | In-game and the whole frame | Dropped (out of scope). |
 | Background blur | Menu ground behind the quick menu (`background_default_blur.png`) | Baked: slot ships the blurred default as a PNG; slot-mini uses it. Custom wallpapers are box-blurred once on the CPU when a menu first opens. |
-| Sticker paper curl (`Draw::Paper`) | About sticker peel, apply-label scene | The apply scene's curl is slot's `sticker_curl` strips (8 px wide) drawn as software quads; back faces are flat paper rather than slot's paper texture. The About sticker is not drawn yet. |
+| Sticker paper curl (`Draw::Paper`) | About sticker peel, apply-label scene | The apply scene's curl is slot's `sticker_curl` strips (8 px wide) drawn as software quads; back faces are flat paper rather than slot's paper texture. MENU's sticker peels in the same way, with strips taken two at a time (decision 60). |
 | Rotated carts (`Draw::Turned`) | Studio cart tilt, core picker lid and chip, link screen | The studio cart is rotated once in software when the studio opens. The core picker's lid and chip are drawn turned every frame by a bilinear software blit (`Canvas::blit_turned`). |
 | Free quads (`Draw::Quad`) | Unwrap and apply-label animations | `Canvas::blit_quad`: two affine-mapped triangles, bilinear, per frame. Used by the apply scene; unwrap is not drawn. |
 | Bilinear scaling | Everywhere | Pre-scaled sprites; nearest-neighbour only during motion. |
@@ -136,9 +136,14 @@ paper.
 
 ![About](parity/about.png)
 
-slot's MENU opens its settings; slot-mini's opens About on slot's menu ground
-(wallpaper under slot's scrim) with Sounds, Boot launcher and Exit to Onion.
-Golden: `about.png`.
+slot's MENU opens its settings (left), and slot's About page is its sticker
+alone. slot-mini's MENU is both: slot's sticker at three quarters of its size
+on slot's menu ground (wallpaper under slot's scrim), then the rows. The
+sticker is slot's design with slot-mini's words (decision 60): the model rows
+name slot-mini and the Mini Plus, the credits name slot, Markus, Onion's
+RetroArch, the fonts and slot's cart sounds, slot's copyright line stays as
+the original design's, and the Anbernic wordmark is left out. It peels in from
+the left as MENU opens. Goldens: `about.png`, `about_peel.png`.
 
 ### In-game menu (tap MENU)
 

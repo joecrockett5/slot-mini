@@ -607,37 +607,70 @@ impl Canvas {
         };
         let (u, v) = (lin(0), lin(1));
         let (sw, sh) = (s.w as i32, s.h as i32);
+        let (umax, vmax) = ((sw - 1) << 16, (sh - 1) << 16);
         let width = self.w as usize;
+        let inside = |fx: f32, fy: f32| {
+            e.iter().all(|e| {
+                let w = e.dx * fx + e.dy * fy + e.c;
+                w > 0.0 || (w == 0.0 && e.owns)
+            })
+        };
         for py in y0..=y1 {
             let fy = py as f32 + 0.5;
-            for px in x0..=x1 {
-                let fx = px as f32 + 0.5;
-                let inside = e.iter().all(|e| {
-                    let w = e.dx * fx + e.dy * fy + e.c;
-                    w > 0.0 || (w == 0.0 && e.owns)
-                });
-                if !inside {
-                    continue;
+            let row = py as usize * width;
+            // Each edge bounds x on one side along this row: narrow the
+            // bounding box to that span (a pixel wide), then test the
+            // pixels in it exactly, so the fill rule is unchanged.
+            let (mut lo, mut hi) = (x0 as f32, x1 as f32);
+            for e in &e {
+                let rest = e.dy * fy + e.c;
+                if e.dx > 0.0 {
+                    lo = lo.max(-rest / e.dx - 0.5);
+                } else if e.dx < 0.0 {
+                    hi = hi.min(-rest / e.dx - 0.5);
+                } else if rest < 0.0 {
+                    hi = lo - 2.0;
                 }
-                let su = (u.0 * fx + u.1 * fy + u.2).clamp(0.0, (sw - 1) as f32);
-                let sv = (v.0 * fx + v.1 * fy + v.2).clamp(0.0, (sh - 1) as f32);
-                let (ix, iy) = (su as i32, sv as i32);
-                let (wx, wy) = (
-                    ((su - ix as f32) * 256.0) as u32,
-                    ((sv - iy as f32) * 256.0) as u32,
-                );
-                let (ix1, iy1) = ((ix + 1).min(sw - 1), (iy + 1).min(sh - 1));
-                let at = |x: i32, y: i32| s.px[(y * sw + x) as usize];
-                let top = lerp_px(at(ix, iy), at(ix1, iy), wx);
-                let bottom = lerp_px(at(ix, iy1), at(ix1, iy1), wx);
-                let mut c = lerp_px(top, bottom, wy);
+            }
+            let mut xs = (lo.floor() as i32 - 1).max(x0);
+            let mut xe = (hi.ceil() as i32 + 1).min(x1);
+            // A triangle's row is one run: find its ends exactly.
+            while xs <= xe && !inside(xs as f32 + 0.5, fy) {
+                xs += 1;
+            }
+            while xe >= xs && !inside(xe as f32 + 0.5, fy) {
+                xe -= 1;
+            }
+            if xs > xe {
+                continue;
+            }
+            // Texture coordinates step in 16.16 fixed point along the run.
+            let fx = xs as f32 + 0.5;
+            let fixed = |f: f32| (f * 65536.0) as i32;
+            let mut su = fixed(u.0 * fx + u.1 * fy + u.2);
+            let mut sv = fixed(v.0 * fx + v.1 * fy + v.2);
+            let (du, dv) = (fixed(u.0), fixed(v.0));
+            let dst = &mut self.px[row + xs as usize..=row + xe as usize];
+            for d in dst {
+                let (cu, cv) = (su.clamp(0, umax), sv.clamp(0, vmax));
+                su = su.saturating_add(du);
+                sv = sv.saturating_add(dv);
+                let (ix, iy) = (cu >> 16, cv >> 16);
+                let (wx, wy) = ((cu as u32 >> 8) & 255, (cv as u32 >> 8) & 255);
+                let i = (iy * sw + ix) as usize;
+                let dx = (ix + 1 < sw) as usize;
+                let dy = if iy + 1 < sh { sw as usize } else { 0 };
+                let top = lerp_px(s.px[i], s.px[i + dx], wx);
+                let mut c = match wy {
+                    0 => top,
+                    _ => lerp_px(top, lerp_px(s.px[i + dy], s.px[i + dy + dx], wx), wy),
+                };
                 if c >> 24 == 0 {
                     continue;
                 }
                 if alpha < 255 {
                     c = scale_px(c, alpha);
                 }
-                let d = &mut self.px[py as usize * width + px as usize];
                 *d = over(*d, c);
             }
         }

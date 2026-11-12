@@ -260,7 +260,7 @@ fn menu_check_install_and_restart() {
         matches!(&found, Status::Available(r) if r.version == "9.9.9"),
         "{found:?}"
     );
-    d.run(16);
+    d.run(650);
     common::golden("about_update", &d.frame);
     d.tap(Button::A);
     wait_for(&mut d, |s| matches!(s, Status::Installed(_)));

@@ -62,7 +62,10 @@ fn menu_opens_about_and_settings_stick() {
     let mut d = rig.app();
     d.tap(Button::Menu);
     assert_eq!(d.app.phase, Phase::About);
-    d.run(50);
+    // slot's About sticker peels in at the top, then lies flat.
+    d.run(250);
+    golden("about_peel", &d.frame);
+    d.run(400);
     golden("about", &d.frame);
     // Sounds: Off -> On.
     d.tap(Button::A);
@@ -90,7 +93,7 @@ fn menu_puts_slots_screens_in_onions_overrides() {
     }
     let text = std::fs::read_to_string(rig.paths.data().join("settings.txt")).unwrap();
     assert!(text.contains("boot_screen = on"), "{text}");
-    d.run(50);
+    d.run(650);
     golden("about_splash_screens", &d.frame);
     d.tap(Button::A);
     for s in Screen::ALL {
@@ -272,6 +275,10 @@ fn the_sound_test_shows_how_the_player_ended() {
         note(&app).as_deref(),
         Some("Sound test: exit 1: SDL_OpenAudio: No available audio device")
     );
+    // However long the player took, let the sticker finish peeling in.
+    for _ in 0..40 {
+        step(&mut app, None);
+    }
     common::golden("about_sound_test", &frame);
 }
 
@@ -307,6 +314,9 @@ fn menu_shows_the_cpu_state() {
     app.handle(slot_mini_gfx::Event::Press(Button::Menu));
     app.handle(slot_mini_gfx::Event::Release(Button::Menu));
     app.tick(32);
+    app.render(&mut frame);
+    // Past the sticker's peel-in.
+    app.tick(700);
     app.render(&mut frame);
     assert_eq!(
         app.about.as_ref().and_then(|a| a.diag.as_deref()),

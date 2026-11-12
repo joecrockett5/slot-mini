@@ -1134,6 +1134,8 @@ impl App {
             }
             (_, Some(about)) if self.phase == Phase::About => about.draw(
                 self.stage,
+                self.now,
+                self.battery,
                 ground,
                 &self.settings,
                 &self.updater.status(),

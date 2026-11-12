@@ -92,7 +92,7 @@ fn menu_hides_the_shelf_and_keeps_the_list() {
     d.tap(Button::Menu);
     d.tap(Button::Down);
     d.tap(Button::Down);
-    d.run(50);
+    d.run(650);
     golden("about_recents", &d.frame);
     d.tap(Button::A);
     let text = std::fs::read_to_string(rig.paths.data().join("settings.txt")).unwrap();

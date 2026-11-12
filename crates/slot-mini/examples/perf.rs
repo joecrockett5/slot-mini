@@ -158,6 +158,7 @@ fn main() {
         );
     }
     studio(&paths);
+    menu(&paths);
 }
 
 /// The cart studio: a whole frame redrawn, and the apply scene's curling
@@ -210,7 +211,13 @@ fn studio(paths: &Paths) {
             turn_deg: -7.0,
             ..slot_mini_ui::sticker_curl::Pose::REST
         };
-        let strips = slot_mini_ui::sticker_curl::strips(rect, flat, curl, &pose, [320.0, 240.0]);
+        let strips = slot_mini_ui::curl_runs::joined(slot_mini_ui::sticker_curl::strips(
+            rect,
+            flat,
+            curl,
+            &pose,
+            [320.0, 240.0],
+        ));
         let t = Instant::now();
         for _ in 0..100 {
             for s in &strips {
@@ -223,4 +230,55 @@ fn studio(paths: &Paths) {
             t.elapsed().as_secs_f64() * 1000.0 / 100.0
         );
     }
+}
+
+/// MENU while the sticker peels in, then lying flat.
+fn menu(paths: &Paths) {
+    let status = FixedStatus {
+        battery: Some(80),
+        wifi: true,
+        clock: (12, 0),
+        charging: false,
+    };
+    let opts = Options {
+        sound: None,
+        face_wait: None,
+        seed: 1,
+    };
+    let mut app = App::new(paths.clone(), Box::new(status), opts, 0);
+    let mut frames = [
+        Canvas::new(SCREEN_W, SCREEN_H),
+        Canvas::new(SCREEN_W, SCREEN_H),
+    ];
+    let mut now = 16;
+    app.tick(now);
+    app.handle(Event::Press(Button::Menu));
+    app.handle(Event::Release(Button::Menu));
+    // The first frame makes the sticker's face; time the rest.
+    now += 16;
+    app.tick(now);
+    app.render(&mut frames[1]);
+    let (mut peel, mut peel_worst, mut peels, mut flat, mut flats) =
+        (Duration::ZERO, Duration::ZERO, 0u32, Duration::ZERO, 0u32);
+    for i in 0..80 {
+        now += 16;
+        let t = Instant::now();
+        app.tick(now);
+        app.render(&mut frames[i % 2]);
+        let took = t.elapsed();
+        if now < 16 + slot_mini::about::PEEL_MS {
+            peel += took;
+            peel_worst = peel_worst.max(took);
+            peels += 1;
+        } else {
+            flat += took;
+            flats += 1;
+        }
+    }
+    println!(
+        "menu: peel-in frame avg {:.2} ms, worst {:.2} ms; flat frame avg {:.2} ms",
+        peel.as_secs_f64() * 1000.0 / peels as f64,
+        peel_worst.as_secs_f64() * 1000.0,
+        flat.as_secs_f64() * 1000.0 / flats as f64
+    );
 }
