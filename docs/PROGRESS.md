@@ -477,6 +477,27 @@ Save and Load State worked on the device. Fixed:
 - The README no longer says nothing has run on hardware: the maintainer has
   been testing on a Mini Plus since 0.1.1.
 
+## 0.6.0: the Recents shelf
+
+- slot's Recents shelf (roadmap item 1 of 5). `settings::Recents` keeps the
+  last ten games launched from slot-mini in `data/recents.txt`, in slot's
+  format, newest first; `launch::hand_off` records every launch, shown or
+  not. `ShelfKind::Recents` is first in the shelf order and keeps the played
+  order instead of sorting.
+- **X** on the Recents shelf takes the cart off it (slot's `forget_recent`):
+  the next cart is selected, and when the last one goes the cart's own
+  system shelf comes up.
+- **MENU → Recents: On / Off** (`recents` in settings.txt, on by default;
+  the maintainer's choice, slot's is opt-in). Off hides the shelf and keeps
+  the list. A shelf that goes away leaves its cart selected on its system's
+  shelf (`App::restock`).
+- MENU now has seven rows: the credits and rows sit a little closer (22 and
+  33 px pitch) so the note line still clears the footer. The `about*`
+  goldens were redrawn.
+- Tests: `tests/recents.rs` (order, X, the MENU row, a launch; goldens
+  `shelf_recents_named`, `about_recents`), unit tests for the list and the
+  shelf order.
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from

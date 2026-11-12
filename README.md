@@ -128,16 +128,21 @@ are removed with the folder.
 | --- | --- |
 | Left / Right | Browse the shelf (hold to scroll) |
 | Up / Down | Jump to the previous or next letter |
-| L1 / R1 | Switch shelves: Favorites, GBA, GBC, GB |
+| L1 / R1 | Switch shelves: Recents, Favorites, GBA, GBC, GB |
 | A (tap) | Insert the cart and resume from its auto save state |
 | A (hold) | Insert the cart and start fresh, without loading the state |
 | Y | Heart or un-heart the cart (hearted carts get a Favorites shelf) |
+| X | On the Recents shelf: take the cart off it (the game is not touched) |
 | SELECT | Open the cart studio |
 | START | GBA carts: open the cart and choose its core (mGBA or gpSP) |
-| MENU | Settings: sounds, in-game menu, boot launcher, splash screens, updates, exit to Onion |
+| MENU | Settings: sounds, in-game menu, the Recents shelf, boot launcher, splash screens, updates, exit to Onion |
 
 Holding A starts the game the way Onion's own **Reset game** does, for that one run. RetroArch still writes its
 auto state when you quit.
+
+The **Recents** shelf holds the last ten games you started from slot-mini, newest first, and appears once you
+have played something. **MENU → Recents: Off** hides it; the list is still kept. Games started from Onion's menu
+are not on it.
 
 ### In a game
 
@@ -215,13 +220,14 @@ these:
 
 | File | Contents |
 | --- | --- |
-| `App/slot-mini/data/settings.txt` | Sounds, in-game menu, boot launcher, splash screens, label service, clock format |
+| `App/slot-mini/data/settings.txt` | Sounds, in-game menu, the Recents shelf, boot launcher, splash screens, label service, clock format |
 | `App/slot-mini/data/state.txt` | The shelf and cart you were on |
 | `App/slot-mini/data/favorites.txt` | Hearted carts, in slot's format |
+| `App/slot-mini/data/recents.txt` | The last ten games started from slot-mini, in slot's format |
 | `App/slot-mini/cache/` | Scaled labels, ROM headers, the art index, sound clips |
 | `App/slot-mini/*`, `App/slot-mini/update/` | Only when installing an update: the new files, and the replaced ones in `update/previous/` |
 | `Labels/cart_shell.txt`, `Labels/<sys>/*.png` | Only when you change a cart in the studio or fetch labels |
-| `Roms/recentlist.json` | On each launch, as Onion's MainUI does, so Recents and the Game Switcher work |
+| `Roms/recentlist.json` | On each launch, as Onion's MainUI does, so Onion's Recents and the Game Switcher work |
 | `.tmp_update/slot-mini/stock/`, `.tmp_update/bin/MainUI-*` | Only when the boot launcher is turned on |
 | `bootScreen.png`, `Screen_Off.png`, `Screen_Off_Save.png` in `Saves/CurrentProfile/theme/skin/extra/` and `.tmp_update/slot-mini/` | Only when slot's splash screens are turned on: slot's screens, and backups of any you had |
 
@@ -325,7 +331,6 @@ To ship a new version, bump `version` in `Cargo.toml` and merge to `main`.
 
 Possible next steps, roughly in order of effort:
 
-- A **Recents** shelf (slot has one; Onion's Game Switcher covers it for now).
 - Re-tinting **logo labels** after the studio is closed (slot keeps the logo so it can re-tint it).
 - The label printer's **print and tear** animation, and the studio cart's apply animation.
 - The **sticker curl** on the menu screen.

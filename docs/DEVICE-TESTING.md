@@ -82,6 +82,9 @@ Start **Apps -> slot-mini**.
 - [ ] Quit the game (MENU in RetroArch, or Onion's MENU shortcut). Onion
       returns to its own menu (expected in app mode). Open slot-mini again:
       it opens on the same cart.
+- [ ] A **Recents** shelf is now first (L1 from Favorites or GBA), with the
+      game you played at the front; X takes a cart off it; **MENU →
+      Recents: Off** hides the shelf and **On** brings it back as it was.
 - [ ] Onion's **Game Switcher** and **Recents** list the game you launched,
       with the right name, and resuming it from there works.
 - [ ] **Hold A** (half a second) on a game with an auto save: it starts from

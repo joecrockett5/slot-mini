@@ -7,6 +7,7 @@ use crate::settings::Favourites;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShelfKind {
+    Recents,
     Favourites,
     System(Platform),
 }
@@ -15,6 +16,7 @@ impl ShelfKind {
     /// How the shelf is named in `state.txt`.
     pub fn key(self) -> String {
         match self {
+            ShelfKind::Recents => "recents".into(),
             ShelfKind::Favourites => "favorites".into(),
             ShelfKind::System(p) => p.dir_name().into(),
         }
@@ -23,6 +25,7 @@ impl ShelfKind {
     /// The title shown above the slot when switching shelves.
     pub fn title(self) -> &'static str {
         match self {
+            ShelfKind::Recents => "Recents",
             ShelfKind::Favourites => "Favorites",
             ShelfKind::System(p) => p.name(),
         }
@@ -45,10 +48,23 @@ pub fn scan(paths: &Paths) -> Vec<Cart> {
     carts
 }
 
-/// slot's shelf order: Favorites, then GBA, GBC, GB. Empty shelves are left
-/// out, as slot does.
-pub fn shelves(carts: &[Cart], favourites: &Favourites) -> Vec<(ShelfKind, Vec<Cart>)> {
+/// slot's shelf order: Recents, Favorites, then GBA, GBC, GB. Empty shelves
+/// are left out, as slot does. `recents` is newest first and keeps that
+/// order; games no longer on the card are skipped.
+pub fn shelves(
+    carts: &[Cart],
+    favourites: &Favourites,
+    recents: &[(Platform, String)],
+) -> Vec<(ShelfKind, Vec<Cart>)> {
     let mut out = Vec::new();
+    let recent: Vec<Cart> = recents
+        .iter()
+        .filter_map(|(p, stem)| carts.iter().find(|c| c.platform == *p && c.stem == *stem))
+        .cloned()
+        .collect();
+    if !recent.is_empty() {
+        out.push((ShelfKind::Recents, recent));
+    }
     let mut fav: Vec<Cart> = carts
         .iter()
         .filter(|c| favourites.contains(c.platform, &c.stem))
@@ -98,7 +114,12 @@ mod tests {
             cart(Platform::Gb, "Z"),
         ];
         let mut f = Favourites::default();
-        let kinds = |f: &Favourites| shelves(&carts, f).iter().map(|s| s.0).collect::<Vec<_>>();
+        let kinds = |f: &Favourites| {
+            shelves(&carts, f, &[])
+                .iter()
+                .map(|s| s.0)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(
             kinds(&f),
             vec![
@@ -108,9 +129,28 @@ mod tests {
         );
         f.toggle(Platform::Gb, "Z");
         f.toggle(Platform::Gba, "B");
-        let s = shelves(&carts, &f);
+        let s = shelves(&carts, &f, &[]);
         assert_eq!(s[0].0, ShelfKind::Favourites);
         let stems: Vec<_> = s[0].1.iter().map(|c| c.stem.as_str()).collect();
         assert_eq!(stems, vec!["B", "Z"]);
+    }
+
+    #[test]
+    fn recents_come_first_in_the_order_played() {
+        let carts = vec![
+            cart(Platform::Gba, "B"),
+            cart(Platform::Gb, "A"),
+            cart(Platform::Gb, "Z"),
+        ];
+        let played = [
+            (Platform::Gb, "Z".to_string()),
+            (Platform::Gba, "Gone".to_string()),
+            (Platform::Gba, "B".to_string()),
+        ];
+        let s = shelves(&carts, &Favourites::default(), &played);
+        assert_eq!(s[0].0, ShelfKind::Recents);
+        let stems: Vec<_> = s[0].1.iter().map(|c| c.stem.as_str()).collect();
+        assert_eq!(stems, vec!["Z", "B"], "newest first, missing games skipped");
+        assert_eq!(s.len(), 3);
     }
 }

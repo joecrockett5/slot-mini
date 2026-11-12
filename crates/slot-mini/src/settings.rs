@@ -10,6 +10,9 @@ use crate::paths::Paths;
 pub const SETTINGS_FILE: &str = "settings.txt";
 pub const STATE_FILE: &str = "state.txt";
 pub const FAVOURITES_FILE: &str = "favorites.txt";
+pub const RECENTS_FILE: &str = "recents.txt";
+/// slot: `RECENTS_MAX`. The Recents shelf holds the last ten games played.
+pub const RECENTS_MAX: usize = 10;
 
 /// The default label service, slot's art host. Off unless `label_service = on`.
 pub const ART_HOST: &str = "https://art.slot-cfw.fyi";
@@ -36,6 +39,9 @@ pub struct Settings {
     /// Splash screens; the key keeps its 0.5.1 name). Put back at start if
     /// Onion's theme overrides were reset (`bootscreen::keep`).
     pub boot_screen: bool,
+    /// Show slot's Recents shelf: the last games launched from slot-mini.
+    /// (slot's is off until switched on; slot-mini's is on.)
+    pub recents: bool,
 }
 
 impl Default for Settings {
@@ -49,6 +55,7 @@ impl Default for Settings {
             update_repo: crate::update::REPO.to_string(),
             boot_launcher: false,
             boot_screen: false,
+            recents: true,
         }
     }
 }
@@ -82,6 +89,7 @@ impl Settings {
                 .unwrap_or(d.update_repo),
             boot_launcher: on(m.get("boot_launcher"), d.boot_launcher),
             boot_screen: on(m.get("boot_screen"), d.boot_screen),
+            recents: on(m.get("recents"), d.recents),
         }
     }
 
@@ -94,6 +102,7 @@ impl Settings {
         text = ini::set(&text, "ingame_menu", Some(flag(self.ingame_menu)))?;
         text = ini::set(&text, "boot_launcher", Some(flag(self.boot_launcher)))?;
         text = ini::set(&text, "boot_screen", Some(flag(self.boot_screen)))?;
+        text = ini::set(&text, "recents", Some(flag(self.recents)))?;
         text = ini::set(
             &text,
             "clock",
@@ -203,6 +212,48 @@ impl Favourites {
     }
 }
 
+/// The games last launched from slot-mini, newest first, in slot's list
+/// format (`recents.txt`, slot-store/src/slot_state.rs).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Recents {
+    pub list: Vec<(Platform, String)>,
+}
+
+impl Recents {
+    pub fn read(paths: &Paths) -> Recents {
+        let text = std::fs::read_to_string(paths.data().join(RECENTS_FILE)).unwrap_or_default();
+        let mut list = Vec::new();
+        for e in text.lines().filter_map(entry_value) {
+            if !list.contains(&e) {
+                list.push(e);
+            }
+        }
+        list.truncate(RECENTS_MAX);
+        Recents { list }
+    }
+
+    pub fn write(&self, paths: &Paths) -> std::io::Result<()> {
+        let text: String = self
+            .list
+            .iter()
+            .map(|(p, s)| entry_key(*p, s) + "\n")
+            .collect();
+        write(&paths.data().join(RECENTS_FILE), &text)
+    }
+
+    /// slot's `played`: the game goes to the front; the eleventh drops off.
+    pub fn played(&mut self, platform: Platform, stem: &str) {
+        self.forget(platform, stem);
+        self.list.insert(0, (platform, stem.to_string()));
+        self.list.truncate(RECENTS_MAX);
+    }
+
+    /// slot's `forget`: take a game off the list.
+    pub fn forget(&mut self, platform: Platform, stem: &str) {
+        self.list.retain(|(p, s)| !(*p == platform && s == stem));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,6 +301,31 @@ mod tests {
             f.list,
             vec![(Platform::Gba, "A".into()), (Platform::Gbc, "C".into())]
         );
+    }
+
+    #[test]
+    fn recents_keep_the_last_ten_newest_first() {
+        let (_d, p) = tmp();
+        let mut r = Recents::read(&p);
+        for i in 0..12 {
+            r.played(Platform::Gba, &format!("Game {i}"));
+        }
+        r.played(Platform::Gb, "Tetris");
+        r.played(Platform::Gba, "Game 8");
+        assert_eq!(r.list.len(), RECENTS_MAX);
+        assert_eq!(r.list[0], (Platform::Gba, "Game 8".to_string()));
+        assert_eq!(r.list[1], (Platform::Gb, "Tetris".to_string()));
+        assert_eq!(r.list[9], (Platform::Gba, "Game 3".to_string()));
+        r.write(&p).unwrap();
+        let text = std::fs::read_to_string(p.data().join(RECENTS_FILE)).unwrap();
+        assert!(
+            text.starts_with("gba/Game 8\ngb/Tetris\ngba/Game 11\n"),
+            "{text}"
+        );
+        assert_eq!(Recents::read(&p), r);
+        r.forget(Platform::Gb, "Tetris");
+        assert_eq!(r.list.len(), RECENTS_MAX - 1);
+        assert_eq!(r.list[1], (Platform::Gba, "Game 11".to_string()));
     }
 
     #[test]

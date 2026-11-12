@@ -250,3 +250,10 @@ Calls made without asking, and why. Newest last.
     and in the README's credits, and `copy-from-slot.sh` clones slot on
     demand. The README's demo uses homebrew titles rather than the test
     fixture's commercial ones, and is recorded from the app, not mocked up.
+57. **The Recents shelf is slot-mini's own list, on by default** (0.6.0, the
+    maintainer's choices). It holds the games launched from slot-mini, in
+    slot's `recents.txt` format, not Onion's `recentlist.json`: X can then
+    take a cart off the shelf without editing Onion's history, and the
+    shelf means "what I played here". slot's shelf is opt-in; slot-mini's
+    has a MENU row to hide it instead. Launches are recorded either way, as
+    in slot.

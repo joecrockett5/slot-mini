@@ -19,7 +19,7 @@ use slot_mini_ui::{
 use crate::faces::{CartFaces, FaceWant};
 use crate::library::{self, ShelfKind};
 use crate::paths::Paths;
-use crate::settings::{Favourites, Settings, State};
+use crate::settings::{Favourites, Recents, Settings, State};
 use crate::status::{clock_text, Status};
 use crate::theme::Theme;
 
@@ -144,6 +144,8 @@ pub struct App {
     pub settings: Settings,
     pub theme: Theme,
     pub favourites: Favourites,
+    /// The games last launched from slot-mini, newest first.
+    pub recents: Recents,
     carts: Vec<Cart>,
     shelves: Vec<(ShelfKind, Shelf)>,
     at: usize,
@@ -208,6 +210,7 @@ impl App {
         let settings = Settings::read(&paths);
         let theme = Theme::read(&paths);
         let favourites = Favourites::read(&paths);
+        let recents = Recents::read(&paths);
         let state = State::read(&paths);
         let mut gfx = Renderer::new();
         let stage = Stage::MINI;
@@ -227,6 +230,7 @@ impl App {
             settings,
             theme,
             favourites,
+            recents,
             carts,
             shelves: Vec::new(),
             at: 0,
@@ -292,7 +296,12 @@ impl App {
             }
         }
         self.faces.reset();
-        self.shelves = library::shelves(&self.carts, &self.favourites)
+        // MENU's "Recents: Off" hides the shelf; the list is kept.
+        let recents: &[(Platform, String)] = match self.settings.recents {
+            true => &self.recents.list,
+            false => &[],
+        };
+        self.shelves = library::shelves(&self.carts, &self.favourites, recents)
             .into_iter()
             .map(|(kind, carts)| {
                 let mut shelf = Shelf::new(carts);
@@ -302,7 +311,13 @@ impl App {
             .collect();
         self.mark_hearts();
         if let Some((kind, platform, stem)) = keep {
-            self.select(kind, platform, &stem);
+            // A shelf that went away (Recents switched off) leaves its cart
+            // selected on its own system's shelf.
+            let gone = !self.shelves.iter().any(|(k, _)| *k == kind);
+            if !self.select(kind, platform, &stem) && gone {
+                self.select(ShelfKind::System(platform), platform, &stem);
+                self.shelf_named = Some(self.now);
+            }
         }
         self.at = self.at.min(self.shelves.len().saturating_sub(1));
     }
@@ -455,6 +470,32 @@ impl App {
         }
     }
 
+    /// slot's `forget_recent`: X on the Recents shelf takes the cart off it.
+    /// The game itself is untouched.
+    fn forget_recent(&mut self) {
+        let Some((ShelfKind::Recents, cart)) = self.current() else {
+            return;
+        };
+        let (platform, stem) = (cart.platform, cart.stem.clone());
+        self.recents.forget(platform, &stem);
+        if let Err(e) = self.recents.write(&self.paths) {
+            eprintln!("slot-mini: recents: {e}");
+        }
+        let index = self.shelf().map(|s| s.index).unwrap_or(0);
+        self.restock();
+        // Stay on Recents at the next cart while any are left; the last one
+        // gone, restock has put its system's shelf up.
+        if let Some(at) = self
+            .shelves
+            .iter()
+            .position(|(k, _)| *k == ShelfKind::Recents)
+        {
+            self.at = at;
+            let shelf = &mut self.shelves[at].1;
+            shelf.select(index.min(shelf.carts.len() - 1));
+        }
+    }
+
     // ---- input and time ------------------------------------------------
 
     pub fn handle(&mut self, ev: Event) {
@@ -487,6 +528,7 @@ impl App {
             Button::L1 => self.switch_shelf(-1),
             Button::R1 => self.switch_shelf(1),
             Button::Y => self.toggle_favourite(),
+            Button::X => self.forget_recent(),
             Button::A => self.a_held = Some(now),
             Button::Select => self.open_studio(),
             Button::Menu => self.open_about(),
@@ -611,8 +653,11 @@ impl App {
             self.phase = Phase::Shelf;
             return;
         };
-        let sounds = self.settings.sounds;
+        let (sounds, recents) = (self.settings.sounds, self.settings.recents);
         let outcome = about.press(b, &mut self.settings, &self.paths, &mut self.updater);
+        if recents != self.settings.recents {
+            self.restock();
+        }
         if sounds && !self.settings.sounds {
             self.sound.close();
         }
