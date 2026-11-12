@@ -498,6 +498,27 @@ Save and Load State worked on the device. Fixed:
   `shelf_recents_named`, `about_recents`), unit tests for the list and the
   shelf order.
 
+## 0.6.1: per-shelf wallpapers
+
+- slot's shelf wallpapers (roadmap item 2). `wallpaper::of_shelf` finds
+  `Wallpapers/<shelf>.png` by shelf key in any case (`gba`, `gbc`, `gb`,
+  `favorites`, `recents`), and `wallpaper::pick` leaves those files out of
+  the shuffle. No new setting (decision 58).
+- `App::load_shelf_grounds`: the wallpaper of the shelf on screen at
+  start-up is decoded before the first frame; the others go to
+  `WallpaperLoader`'s thread and are uploaded as they land
+  (`take_shelf_grounds`). `App::ground()` is the shelf's own wallpaper, else
+  the random one; the shelf background and MENU both use it. The studio has
+  its own cutting mat and is unchanged.
+- Tests: `tests/shelf.rs` `a_shelf_named_wallpaper_is_shown_on_its_shelf`
+  (GBA keeps the random one, GBC shows `gbc.png`, starting on GBC has it on
+  the first frame; golden `shelf_gbc_wallpaper`), unit tests in
+  `wallpaper.rs` for case-insensitive names and the shuffle. The `about*`
+  goldens were redrawn for the version.
+- Roadmap: logo re-tint is held back at the maintainer's request and stays
+  on the README roadmap; next are the print-and-tear and apply animation
+  (0.6.2) and the MENU sticker (0.6.3).
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from

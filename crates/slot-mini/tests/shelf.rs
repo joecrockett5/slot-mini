@@ -150,6 +150,51 @@ fn wallpaper_theme_and_status() {
     golden("shelf_light_wallpaper", &d.frame);
 }
 
+/// A wallpaper named after a shelf is that shelf's own (`gbc.png` here);
+/// other shelves keep the random one, which is never the shelf file.
+#[test]
+fn a_shelf_named_wallpaper_is_shown_on_its_shelf() {
+    let rig = Rig::new();
+    let wp = rig.paths.sd.join("Wallpapers");
+    std::fs::create_dir_all(&wp).unwrap();
+    let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/");
+    std::fs::copy(
+        format!("{assets}background_default_blur.png"),
+        wp.join("blur.png"),
+    )
+    .unwrap();
+    std::fs::copy(format!("{assets}board.png"), wp.join("gbc.png")).unwrap();
+    // A spot above the carts that only the wallpaper covers.
+    let at = |d: &common::Driver| d.frame.px[(40 * d.frame.w + 150) as usize];
+
+    let mut d = rig.app();
+    d.run(2500);
+    assert_eq!(d.app.current().unwrap().0, ShelfKind::System(Platform::Gba));
+    let random = at(&d);
+    d.wait_until("the GBC wallpaper", |d| d.app.shelf_wallpapers() == 1);
+    d.tap(Button::R1);
+    d.run(2500);
+    assert_eq!(d.app.current().unwrap().0, ShelfKind::System(Platform::Gbc));
+    let own = at(&d);
+    assert_ne!(own, random, "GBC shows its own wallpaper");
+    golden("shelf_gbc_wallpaper", &d.frame);
+    // Back on GBA, the random one again.
+    d.tap(Button::L1);
+    d.run(2500);
+    assert_eq!(at(&d), random);
+    // Starting on GBC, its wallpaper is there on the first frame.
+    slot_mini::settings::State {
+        shelf: Some("GBC".into()),
+        cart: None,
+        launched: false,
+    }
+    .write(&rig.paths)
+    .unwrap();
+    let d = rig.app();
+    assert_eq!(d.app.current().unwrap().0, ShelfKind::System(Platform::Gbc));
+    assert_eq!(at(&d), own);
+}
+
 /// Charging: slot's bolt left of the gauge and a green fill, in both inks.
 #[test]
 fn charging_shows_a_bolt_and_a_green_gauge() {

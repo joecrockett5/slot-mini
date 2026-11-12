@@ -283,6 +283,21 @@ Update slot-mini to 0.5.0 on 4.3.1-1 first, then Onion (beta channel).
 - [ ] MENU -> Splash screens: Onion. Reboot and power off: the theme's
       screens are back.
 
+## 15. Shelf wallpapers (0.6.1)
+
+Put two pictures in `Wallpapers/` at the SD root: any name (say
+`beach.png`) and `GBC.png`.
+
+- [ ] The GBA shelf shows `beach.png`; R1 to GBC shows `GBC.png`; back to GBA
+      shows `beach.png` again. Restart a few times: `GBC.png` never shows on
+      GBA.
+- [ ] Leave slot-mini on the GBC shelf, launch a game and quit it: the first
+      frame back already has `GBC.png` (no flash of the other wallpaper).
+- [ ] MENU on the GBC shelf shows `GBC.png` dimmed behind the rows.
+- [ ] With a picture for every shelf (`GBA`, `GBC`, `GB`, `Favorites`,
+      `Recents`), the first frame still comes within about a second and
+      resident memory (section 3) stays under 40 MB. Note both.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

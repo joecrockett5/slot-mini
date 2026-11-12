@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot/src/wallpaper.rs
-// Changes: the shuffle deck lives in App/slot-mini/data; imports point at slot-mini crates
+// Changes: the shuffle deck lives in App/slot-mini/data; imports point at slot-mini crates;
+//   shelf-named files (slot's wallpaper_of_rack, app.rs) are found by `of_shelf` and left out of the shuffle
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::path::{Path, PathBuf};
@@ -75,9 +76,31 @@ pub fn list(root: &Path) -> Vec<String> {
     files
 }
 
+/// The names a wallpaper can carry to belong to one shelf: slot's rack keys.
+pub const SHELF_KEYS: [&str; 5] = ["recents", "favorites", "gba", "gbc", "gb"];
+
+fn shelf_key(file: &str) -> Option<&'static str> {
+    let (stem, _) = file.rsplit_once('.')?;
+    SHELF_KEYS
+        .into_iter()
+        .find(|k| stem.eq_ignore_ascii_case(k))
+}
+
+/// slot's `wallpaper_of_rack`: the file in `Wallpapers/` named after the
+/// shelf (`GBA.png`, `favorites.png`, ...), whatever its case.
+pub fn of_shelf(root: &Path, key: &str) -> Option<String> {
+    let mut files = pngs(&root.join("Wallpapers"));
+    files.sort();
+    files
+        .into_iter()
+        .find(|f| shelf_key(f).is_some_and(|k| k.eq_ignore_ascii_case(key)))
+}
+
 pub fn pick(root: &Path, seed: u64) -> Option<PathBuf> {
     let dir = root.join("Wallpapers");
     let mut files = pngs(&dir);
+    // A shelf's own wallpaper is not one of the random ones.
+    files.retain(|f| shelf_key(f).is_none());
     if files.is_empty() {
         return None;
     }
@@ -164,5 +187,56 @@ impl Rng {
         z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
         z ^= z >> 31;
         (z % n as u64) as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn card(files: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let wp = dir.path().join("Wallpapers");
+        std::fs::create_dir_all(&wp).unwrap();
+        for f in files {
+            std::fs::write(wp.join(f), b"").unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn shelf_files_are_found_whatever_their_case() {
+        let dir = card(&[
+            "gba.PNG",
+            "Favorites.png",
+            "GB.png",
+            "beach.png",
+            "gbc-old.png",
+        ]);
+        let root = dir.path();
+        assert_eq!(of_shelf(root, "GBA").as_deref(), Some("gba.PNG"));
+        assert_eq!(
+            of_shelf(root, "favorites").as_deref(),
+            Some("Favorites.png")
+        );
+        assert_eq!(of_shelf(root, "GB").as_deref(), Some("GB.png"));
+        assert_eq!(of_shelf(root, "GBC"), None);
+        assert_eq!(of_shelf(root, "recents"), None);
+    }
+
+    #[test]
+    fn the_shuffle_never_picks_a_shelf_file() {
+        let dir = card(&["GBA.png", "recents.png", "beach.png", "gbc-old.png"]);
+        for seed in 0..20 {
+            let name = pick(dir.path(), seed).unwrap();
+            let name = name.file_name().unwrap().to_str().unwrap();
+            assert!(name == "beach.png" || name == "gbc-old.png", "{name}");
+        }
+    }
+
+    #[test]
+    fn only_shelf_files_means_no_random_wallpaper() {
+        let dir = card(&["GBA.png", "gb.png", "Favorites.png"]);
+        assert_eq!(pick(dir.path(), 7), None);
     }
 }

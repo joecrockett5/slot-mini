@@ -208,7 +208,9 @@ these:
 ## Customisation
 
 - **Wallpaper:** put `.png` files in `Wallpapers/` at the SD root, and slot-mini picks one at random each time it
-  starts (slot's wood otherwise). Any size works: images are scaled to cover and cropped.
+  starts (slot's wood otherwise). Any size works: images are scaled to cover and cropped. A file named after a shelf
+  (`GBA.png`, `GBC.png`, `GB.png`, `Favorites.png` or `Recents.png`, in any case) is that shelf's own wallpaper, as in
+  slot, and is never one of the random picks; shelves without one keep the random wallpaper.
 - **Theme:** copy `App/slot-mini/theme.txt.example` to `theme.txt`. `appearance = light` selects slot's light look,
   and `footer_ink`, `heart_ink` and `wallpaper_tint` adjust the colours.
 - **Sounds:** slot's cartridge insert and eject sounds, under **MENU → Sounds** (off by default). They are played
@@ -334,7 +336,6 @@ Possible next steps, roughly in order of effort:
 - Re-tinting **logo labels** after the studio is closed (slot keeps the logo so it can re-tint it).
 - The label printer's **print and tear** animation, and the studio cart's apply animation.
 - The **sticker curl** on the menu screen.
-- **Per-shelf wallpapers** (`GB.png`, `GBA.png`, … as in slot).
 
 Not planned: other Onion systems, a core picker for Game Boy carts, and features that belong to RetroArch or to
 slot's own frontend, such as save-state browsing, rewind, shaders, bezels, colour grading, link play, slot's web

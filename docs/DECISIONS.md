@@ -257,3 +257,11 @@ Calls made without asking, and why. Newest last.
     shelf means "what I played here". slot's shelf is opt-in; slot-mini's
     has a MENU row to hide it instead. Launches are recorded either way, as
     in slot.
+58. **Shelf wallpapers are found by file name, with no setting** (0.6.1, the
+    maintainer's choice). `GBA.png`, `GBC.png`, `GB.png`, `Favorites.png` and
+    `Recents.png` in `Wallpapers/`, in any case, belong to their shelf and
+    are left out of the random pick, so a shelf's picture never turns up on
+    another shelf. slot chooses between Random, Shelf and a single file in
+    its settings; slot-mini has no wallpaper setting, and a card without
+    shelf-named files behaves as before. Each shelf wallpaper stays decoded
+    (about 1 MB at 640x420), so five cost about 5 MB of the memory budget.
