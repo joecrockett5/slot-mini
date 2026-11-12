@@ -28,7 +28,7 @@ slot-mini renders.
 | --- | --- | --- |
 | Shelf (carousel) | yes | Same layout code (`shelf.rs`, copied). Wallpaper, carts, slot chrome, platform title, footer. |
 | Favourites shelf | yes | slot's own Favourites shelf, listed before GBA, GBC and GB as in `site/docs/guide/shelf.md`. |
-| Recents shelf | no | Onion's Game Switcher already covers this. Roadmap. |
+| Recents shelf | yes | slot's list (`recents.txt`, ten games, newest first), first in the shelf order; X takes a cart off it. On by default (slot's is opt-in), with a MENU row to hide it. Golden `shelf_recents_named`. |
 | GBA Video shelf | no | Not a separate Onion system. |
 | Insert (cart slides into the slot) | yes, simplified | The cart drops into the slot mouth over ~300 ms, the insert sound plays, then slot-mini exits. |
 | Eject (cart rises out of the slot) | yes, simplified | When slot-mini starts straight after a game it opens on that cart and plays the rise in reverse. |

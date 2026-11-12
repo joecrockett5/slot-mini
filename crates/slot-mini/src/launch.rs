@@ -205,6 +205,13 @@ pub fn hand_off(
         // Recents is Onion's history; a failure must not stop the game.
         eprintln!("slot-mini: recents: {e}");
     }
+    // slot-mini's own Recents shelf, kept whether or not it is shown (slot
+    // does the same), so switching it on finds the games already played.
+    let mut played = crate::settings::Recents::read(paths);
+    played.played(cart.platform, &cart.stem);
+    if let Err(e) = played.write(paths) {
+        eprintln!("slot-mini: recents.txt: {e}");
+    }
     let reset = paths.tmp.join("reset_game");
     let mut cmd = cmd;
     match fresh {

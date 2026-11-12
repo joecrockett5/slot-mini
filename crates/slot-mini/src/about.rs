@@ -14,6 +14,7 @@ use crate::update::{Status, Updater};
 pub enum Row {
     Sounds,
     IngameMenu,
+    Recents,
     BootLauncher,
     BootScreen,
     Update,
@@ -68,6 +69,7 @@ impl About {
             rows: vec![
                 Row::Sounds,
                 Row::IngameMenu,
+                Row::Recents,
                 Row::BootLauncher,
                 Row::BootScreen,
                 Row::Update,
@@ -110,6 +112,12 @@ impl About {
                 }
                 Row::IngameMenu => {
                     settings.ingame_menu = !settings.ingame_menu;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
+                }
+                Row::Recents => {
+                    settings.recents = !settings.recents;
                     if let Err(e) = settings.write(paths) {
                         eprintln!("slot-mini: settings: {e}");
                     }
@@ -200,6 +208,7 @@ impl About {
             },
             Row::Sounds => format!("Sounds: {}", on(settings.sounds)),
             Row::IngameMenu => format!("In-game menu: {}", on(settings.ingame_menu)),
+            Row::Recents => format!("Recents: {}", on(settings.recents)),
             Row::BootLauncher => format!("Boot launcher: {}", on(self.launcher)),
             Row::BootScreen => format!(
                 "Splash screens: {}",
@@ -234,15 +243,15 @@ impl About {
             let style = if i == 0 { Style::Title } else { Style::Small };
             let f = self.face(gfx, line, style);
             put(out, f, y, if i == 0 { 1.0 } else { 0.8 });
-            y += if i == 0 { 42.0 } else { 26.0 };
+            y += if i == 0 { 42.0 } else { 22.0 };
         }
-        y += 12.0;
+        y += 6.0;
         for (i, row) in self.rows.clone().into_iter().enumerate() {
             let text = self.label(row, settings, update);
             let f = self.face(gfx, &text, Style::Title);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
-            // Six rows and the note line fit above slot's footer.
-            y += 36.0;
+            // Seven rows and the note line fit above slot's footer.
+            y += 33.0;
         }
         let update_note = match update {
             Status::UpToDate => Some(format!(

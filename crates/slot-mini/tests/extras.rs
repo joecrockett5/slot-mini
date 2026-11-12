@@ -81,7 +81,7 @@ fn menu_puts_slots_screens_in_onions_overrides() {
     let rig = Rig::new();
     let mut d = rig.app();
     d.tap(Button::Menu);
-    for _ in 0..3 {
+    for _ in 0..4 {
         d.tap(Button::Down);
     }
     d.tap(Button::A);
