@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot/src/wallpaper.rs
-// Changes: the shuffle deck lives in App/slot-mini/data; imports point at slot-mini crates
+// Changes: the shuffle deck lives in App/slot-mini/data; imports point at slot-mini crates;
+//   shelf-named files (slot's wallpaper_of_rack, app.rs) are found by `of_shelf` and left out of the shuffle
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::path::{Path, PathBuf};
@@ -75,9 +76,31 @@ pub fn list(root: &Path) -> Vec<String> {
     files
 }
 
+/// The names a wallpaper can carry to belong to one shelf: slot's rack keys.
+pub const SHELF_KEYS: [&str; 5] = ["recents", "favorites", "gba", "gbc", "gb"];
+
+fn shelf_key(file: &str) -> Option<&'static str> {
+    let (stem, _) = file.rsplit_once('.')?;
+    SHELF_KEYS
+        .into_iter()
+        .find(|k| stem.eq_ignore_ascii_case(k))
+}
+
+/// slot's `wallpaper_of_rack`: the file in `Wallpapers/` named after the
+/// shelf (`GBA.png`, `favorites.png`, ...), whatever its case.
+pub fn of_shelf(root: &Path, key: &str) -> Option<String> {
+    let mut files = pngs(&root.join("Wallpapers"));
+    files.sort();
+    files
+        .into_iter()
+        .find(|f| shelf_key(f).is_some_and(|k| k.eq_ignore_ascii_case(key)))
+}
+
 pub fn pick(root: &Path, seed: u64) -> Option<PathBuf> {
     let dir = root.join("Wallpapers");
     let mut files = pngs(&dir);
+    // A shelf's own wallpaper is not one of the random ones.
+    files.retain(|f| shelf_key(f).is_none());
     if files.is_empty() {
         return None;
     }

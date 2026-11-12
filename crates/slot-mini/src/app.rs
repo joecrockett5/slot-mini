@@ -146,6 +146,12 @@ pub struct App {
     pub favourites: Favourites,
     /// The games last launched from slot-mini, newest first.
     pub recents: Recents,
+    /// Wallpapers named after a shelf (`Wallpapers/GBA.png`), by shelf key.
+    /// They load in the background; until one lands its shelf shows the
+    /// random wallpaper.
+    shelf_grounds: Vec<(&'static str, (TexId, u32))>,
+    shelf_grounds_due: Vec<(&'static str, String)>,
+    wallpapers: crate::wallpaper::WallpaperLoader,
     carts: Vec<Cart>,
     shelves: Vec<(ShelfKind, Shelf)>,
     at: usize,
@@ -231,6 +237,9 @@ impl App {
             theme,
             favourites,
             recents,
+            shelf_grounds: Vec::new(),
+            shelf_grounds_due: Vec::new(),
+            wallpapers: crate::wallpaper::WallpaperLoader::spawn(),
             carts,
             shelves: Vec::new(),
             at: 0,
@@ -273,11 +282,73 @@ impl App {
         };
         app.restock();
         app.restore(&state);
+        app.load_shelf_grounds();
         // Ready a player now, while the eject (if any) has not started.
         if app.settings.sounds {
             app.sound.prepare();
         }
         app
+    }
+
+    // ---- wallpapers ----------------------------------------------------
+
+    /// Find the shelves' own wallpapers. The one for the shelf on screen is
+    /// loaded now, so the first frame has it; the rest load on a thread.
+    fn load_shelf_grounds(&mut self) {
+        let size = (self.stage.w as u32, OUT_H);
+        let first = self.current_shelf_key();
+        for key in crate::wallpaper::SHELF_KEYS {
+            let Some(file) = crate::wallpaper::of_shelf(&self.paths.sd, key) else {
+                continue;
+            };
+            if first.as_deref() == Some(key) {
+                let path = self.paths.sd.join("Wallpapers").join(&file);
+                if let Some(rgba) = slot_mini_ui::wallpaper_face(&path, size.0, size.1) {
+                    let tex = self.gfx.upload(Sprite::from_rgba(size.0, size.1, &rgba));
+                    self.shelf_grounds.push((key, (tex, size.0)));
+                }
+                continue;
+            }
+            self.wallpapers.request(&self.paths.sd, &file, size);
+            self.shelf_grounds_due.push((key, file));
+        }
+    }
+
+    fn take_shelf_grounds(&mut self) {
+        while let Some(done) = self.wallpapers.take() {
+            let Some(at) = self
+                .shelf_grounds_due
+                .iter()
+                .position(|(_, file)| *file == done.name)
+            else {
+                continue;
+            };
+            let (key, _) = self.shelf_grounds_due.remove(at);
+            let (w, h) = done.size;
+            let tex = self.gfx.upload(Sprite::from_rgba(w, h, &done.rgba));
+            self.shelf_grounds.push((key, (tex, w)));
+        }
+    }
+
+    /// Whether every shelf wallpaper that will load has (tests wait on it).
+    /// A file that cannot be read never lands and is not waited for.
+    pub fn shelf_wallpapers(&self) -> usize {
+        self.shelf_grounds.len()
+    }
+
+    fn current_shelf_key(&self) -> Option<String> {
+        self.shelves.get(self.at).map(|(k, _)| k.key())
+    }
+
+    /// The wallpaper behind the shelf on screen: its own, else the random
+    /// one (slot's `wallpaper_of_rack`).
+    fn ground(&self) -> Option<(TexId, u32)> {
+        let key = self.current_shelf_key();
+        self.shelf_grounds
+            .iter()
+            .find(|(k, _)| key.as_deref() == Some(*k))
+            .map(|(_, g)| *g)
+            .or(self.statics.ground)
     }
 
     // ---- shelves -------------------------------------------------------
@@ -765,6 +836,7 @@ impl App {
             s.tick(now);
             s.update(dt.min(0.1));
         }
+        self.take_shelf_grounds();
         if let Some(ui) = self.studio.as_mut() {
             ui.poll(&mut self.gfx);
         }
@@ -1048,13 +1120,14 @@ impl App {
         self.sync_text();
         let mut out = std::mem::take(&mut self.spare);
         out.clear();
+        let ground = self.ground();
         match (self.studio.as_mut(), self.about.as_mut()) {
             (Some(ui), _) if self.phase == Phase::Studio => {
                 ui.draw(&self.paths, self.stage, &mut self.gfx, &mut out)
             }
             (_, Some(about)) if self.phase == Phase::About => about.draw(
                 self.stage,
-                self.statics.ground,
+                ground,
                 &self.settings,
                 &self.updater.status(),
                 &mut self.gfx,
@@ -1080,7 +1153,7 @@ impl App {
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {
-        draw_ground(self.stage, self.statics.ground, out);
+        draw_ground(self.stage, self.ground(), out);
         if self.theme.wallpaper_tint > 0.0 {
             out.push(Draw::Rect {
                 x: 0.0,
