@@ -24,6 +24,10 @@ impl Rig {
         let paths = Paths::new(dir.path().join("sd"), dir.path().join("tmp"));
         slot_mini::fixture::build(&paths.sd, labels).unwrap();
         std::fs::create_dir_all(&paths.tmp).unwrap();
+        // Online labels are on by default; tests stay off the network
+        // unless they turn them on (tests/label_service.rs).
+        std::fs::create_dir_all(paths.data()).unwrap();
+        std::fs::write(paths.data().join("settings.txt"), "online_labels = off\n").unwrap();
         Rig { dir, paths }
     }
 

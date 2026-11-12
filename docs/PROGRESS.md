@@ -559,6 +559,23 @@ Save and Load State worked on the device. Fixed:
   after the peel. Unit tests for the strip joining and the serial's check
   character.
 
+## 0.6.4: MENU's Settings page, online labels on
+
+- MENU's first page is Settings, Check for updates and Exit to Onion;
+  Settings opens Sounds, In-game menu, Recents, Boot launcher, Splash
+  screens and Online labels (decision 61). B goes back a page; MENU closes.
+- slot's label service is on by default under the new `online_labels` key;
+  the old `label_service` key is ignored. Tests' rig writes
+  `online_labels = off` so only `tests/label_service.rs` goes online (to a
+  local server).
+- Fix: label writes each use their own temporary file. The background
+  fetch and the studio's apply shared `<label>.part`, so writing one cart's
+  label at once could fail with "No such file" (seen in CI as
+  `the_label_printer_prints_and_applies`); unit test
+  `concurrent_writes_to_one_label_do_not_collide`.
+- Tests: new golden `about_settings`; MENU tests step into Settings. Not
+  checked on a device (DEVICE-TESTING section 18).
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from
