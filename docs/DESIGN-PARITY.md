@@ -54,7 +54,7 @@ slot-mini renders.
 | Platform title | Platform name above the slot, fades out after switching. | Same timing. |
 | Footer | Battery gauge and percentage on the left, clock on the right, Wi-Fi icon after the battery, ink colour by theme. | Same layout; battery from `/tmp/percBat`; slot's charging bolt from batmon's `/tmp/.axp_result` (see `PLATFORM.md`), plus a green fill while charging (slot-mini addition). |
 | Button legend | Menu screens show B/A legend plates in the footer. | Same, using slot's `buttonlegend_*.png` assets. |
-| Wallpaper | `Wallpapers/*.png` scaled to cover and centre-cropped; Random picks one at boot. | Random at boot from `Wallpapers/` in slot-mini's app folder or on the SD root; slot's `background_default.png` otherwise. Scaled once at start-up, not per frame. |
+| Wallpaper | `Wallpapers/*.png` scaled to cover and centre-cropped; Random picks one at boot; a file named after a shelf (`wallpaper_of_rack`) is that shelf's. | Random at boot from `Wallpapers/` on the SD root; slot's `background_default.png` otherwise. Shelf-named files (`GBA.png`, `Favorites.png`, ...) are used on their shelf and left out of the random pick (0.6.1). Scaled once, not per frame: the shelf on screen at start-up before the first frame, the others on a thread. |
 | Theme | Dark or Light appearance (`settings.md`) stored in slot's `key = value` config format. | `theme.txt` in slot-mini's app folder, same `key = value` format (slot's `ini.rs` parser): `appearance = dark|light` plus optional colour overrides. |
 
 ## Effects that slot does on the GPU
@@ -169,6 +169,7 @@ All in `crates/slot-mini/tests/golden/`:
 | `shelf_gbc.png` | A Game Boy Color shelf, clear shell with the board showing |
 | `shelf_gb_named.png`, `shelf_gb_glitter.png` | Game Boy paks, a glitter finish from `cart_shell.txt` |
 | `shelf_light_wallpaper.png` | Light appearance, a custom wallpaper with tint, Wi-Fi icon, low battery |
+| `shelf_gbc_wallpaper.png` | The GBC shelf's own wallpaper (`Wallpapers/gbc.png`) |
 | `empty.png` | No games on the card |
 | `relaunch_same_cart.png` | The launcher started again by the fake runtime loop after a game, on the same cart |
 | `shelf_hearted.png`, `shelf_favorites.png` | A hearted cart, and the Favorites shelf mixing GBA and GB carts |

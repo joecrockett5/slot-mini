@@ -301,7 +301,10 @@ impl App {
             let Some(file) = crate::wallpaper::of_shelf(&self.paths.sd, key) else {
                 continue;
             };
-            if first.as_deref() == Some(key) {
+            if first
+                .as_deref()
+                .is_some_and(|f| f.eq_ignore_ascii_case(key))
+            {
                 let path = self.paths.sd.join("Wallpapers").join(&file);
                 if let Some(rgba) = slot_mini_ui::wallpaper_face(&path, size.0, size.1) {
                     let tex = self.gfx.upload(Sprite::from_rgba(size.0, size.1, &rgba));
@@ -346,7 +349,10 @@ impl App {
         let key = self.current_shelf_key();
         self.shelf_grounds
             .iter()
-            .find(|(k, _)| key.as_deref() == Some(*k))
+            .find(|(k, _)| {
+                key.as_deref()
+                    .is_some_and(|key| key.eq_ignore_ascii_case(k))
+            })
             .map(|(_, g)| *g)
             .or(self.statics.ground)
     }

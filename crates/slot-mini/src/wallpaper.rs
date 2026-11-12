@@ -189,3 +189,54 @@ impl Rng {
         (z % n as u64) as usize
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn card(files: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let wp = dir.path().join("Wallpapers");
+        std::fs::create_dir_all(&wp).unwrap();
+        for f in files {
+            std::fs::write(wp.join(f), b"").unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn shelf_files_are_found_whatever_their_case() {
+        let dir = card(&[
+            "gba.PNG",
+            "Favorites.png",
+            "GB.png",
+            "beach.png",
+            "gbc-old.png",
+        ]);
+        let root = dir.path();
+        assert_eq!(of_shelf(root, "GBA").as_deref(), Some("gba.PNG"));
+        assert_eq!(
+            of_shelf(root, "favorites").as_deref(),
+            Some("Favorites.png")
+        );
+        assert_eq!(of_shelf(root, "GB").as_deref(), Some("GB.png"));
+        assert_eq!(of_shelf(root, "GBC"), None);
+        assert_eq!(of_shelf(root, "recents"), None);
+    }
+
+    #[test]
+    fn the_shuffle_never_picks_a_shelf_file() {
+        let dir = card(&["GBA.png", "recents.png", "beach.png", "gbc-old.png"]);
+        for seed in 0..20 {
+            let name = pick(dir.path(), seed).unwrap();
+            let name = name.file_name().unwrap().to_str().unwrap();
+            assert!(name == "beach.png" || name == "gbc-old.png", "{name}");
+        }
+    }
+
+    #[test]
+    fn only_shelf_files_means_no_random_wallpaper() {
+        let dir = card(&["GBA.png", "gb.png", "Favorites.png"]);
+        assert_eq!(pick(dir.path(), 7), None);
+    }
+}
