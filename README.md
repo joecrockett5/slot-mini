@@ -85,11 +85,11 @@ each game's mGBA save across the first time it runs there.
 
 ### Boot launcher (optional)
 
-Press **MENU** in slot-mini and turn **Boot launcher** on. slot-mini then starts in place of Onion's main menu,
+Press **MENU** in slot-mini and turn **Settings → Boot launcher** on. slot-mini then starts in place of Onion's main menu,
 and every game brings you back to the shelf, on the cart you just played.
 
 - Hold **L2** while slot-mini starts, or choose **MENU → Exit to Onion**, to reach Onion's own menu.
-- **MENU → Boot launcher: Off** restores Onion's menu.
+- **MENU → Settings → Boot launcher: Off** restores Onion's menu.
 - If slot-mini is missing, crashes or fails to start, Onion's menu starts instead.
 
 slot-mini saves Onion's original `MainUI` binaries to `.tmp_update/slot-mini/stock/` before it replaces
@@ -97,7 +97,7 @@ anything. See [how the boot switch works](#how-the-boot-switch-works).
 
 ### Splash screens (optional)
 
-**MENU → Splash screens: slot** shows slot's screens while the device starts and shuts down: the **slot.**
+**MENU → Settings → Splash screens: slot** shows slot's screens while the device starts and shuts down: the **slot.**
 wordmark at boot, and **Powering Down** at power off, whether from Onion's menu, an app or a game.
 **Splash screens: Onion** brings back Onion's screens, or your theme's.
 
@@ -109,8 +109,8 @@ every theme. If Tweaks' "Reset theme overrides" removes them, slot-mini reinstal
 
 ### Uninstalling
 
-1. If the boot launcher is on, turn it off (**MENU → Boot launcher: Off**).
-2. If slot's splash screens are on, turn them off (**MENU → Splash screens: Onion**).
+1. If the boot launcher is on, turn it off (**MENU → Settings → Boot launcher: Off**).
+2. If slot's splash screens are on, turn them off (**MENU → Settings → Splash screens: Onion**).
 3. Delete `App/slot-mini/`.
 
 If you deleted the app with the boot launcher still on, Onion's menu still starts, because the launcher falls
@@ -135,7 +135,7 @@ are removed with the folder.
 | X | On the Recents shelf: take the cart off it (the game is not touched) |
 | SELECT | Open the cart studio |
 | START | GBA carts: open the cart and choose its core (mGBA or gpSP) |
-| MENU | slot's About sticker (credits, version, battery) and settings: sounds, in-game menu, the Recents shelf, boot launcher, splash screens, updates, exit to Onion |
+| MENU | slot's About sticker (credits, version, battery); Settings (sounds, in-game menu, the Recents shelf, boot launcher, splash screens, online labels), Check for updates, Exit to Onion |
 
 Holding A starts the game the way Onion's own **Reset game** does, for that one run. RetroArch still writes its
 auto state when you quit.
@@ -185,10 +185,10 @@ The ROM name is the file name without its extension. A cart without label art ge
 **On the device**, SELECT opens the cart studio for the selected cart. You can set the shell colour, the finish
 and, for Game Boy carts, the shape. Changes are saved to `Labels/cart_shell.txt` in the same format.
 
-**The label printer** can fetch labels from slot's art service. It is **off by default** until the service's
-author approves third-party use. While it is off, the printer points you to Cart Studio. To turn it on anyway,
-add `label_service = on` to `App/slot-mini/data/settings.txt`. With it on and Wi-Fi up, slot-mini also fetches
-labels for unlabelled carts in the background. It never replaces a label file you already have.
+**The label printer** fetches labels from slot's art service (`art.slot-cfw.fyi`). With Wi-Fi up, slot-mini
+also fetches labels for unlabelled carts in the background. It never replaces a label file you already have.
+It is on by default; **MENU → Settings → Online labels: Off** turns it off, and the printer then points you
+to Cart Studio.
 
 <details>
 <summary><b>Using Cart Studio with an Onion card</b></summary>

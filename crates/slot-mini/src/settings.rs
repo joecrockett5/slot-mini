@@ -14,15 +14,17 @@ pub const RECENTS_FILE: &str = "recents.txt";
 /// slot: `RECENTS_MAX`. The Recents shelf holds the last ten games played.
 pub const RECENTS_MAX: usize = 10;
 
-/// The default label service, slot's art host. Off unless `label_service = on`.
+/// The default label service, slot's art host. On unless `online_labels = off`.
 pub const ART_HOST: &str = "https://art.slot-cfw.fyi";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     /// Play slot's insert and eject sounds (see docs/PLATFORM.md, Audio).
     pub sounds: bool,
-    /// Fetch labels from slot's art service. Off until its author approves
-    /// third-party use.
+    /// Fetch labels for carts without one from slot's art service (MENU ->
+    /// Settings -> Online labels). The key is `online_labels`: before 0.6.4
+    /// every settings write stored `label_service = off` though nothing
+    /// could turn it on, so that key is ignored.
     pub label_service: bool,
     pub art_host: String,
     pub clock_24h: bool,
@@ -48,7 +50,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             sounds: false,
-            label_service: false,
+            label_service: true,
             art_host: ART_HOST.to_string(),
             clock_24h: true,
             ingame_menu: true,
@@ -74,7 +76,7 @@ impl Settings {
         let d = Settings::default();
         Settings {
             sounds: on(m.get("sounds"), d.sounds),
-            label_service: on(m.get("label_service"), d.label_service),
+            label_service: on(m.get("online_labels"), d.label_service),
             art_host: m
                 .get("art_host")
                 .filter(|h| !h.is_empty())
@@ -98,7 +100,7 @@ impl Settings {
         let mut text = std::fs::read_to_string(&path).unwrap_or_default();
         let flag = |b: bool| if b { "on" } else { "off" };
         text = ini::set(&text, "sounds", Some(flag(self.sounds)))?;
-        text = ini::set(&text, "label_service", Some(flag(self.label_service)))?;
+        text = ini::set(&text, "online_labels", Some(flag(self.label_service)))?;
         text = ini::set(&text, "ingame_menu", Some(flag(self.ingame_menu)))?;
         text = ini::set(&text, "boot_launcher", Some(flag(self.boot_launcher)))?;
         text = ini::set(&text, "boot_screen", Some(flag(self.boot_screen)))?;
@@ -265,13 +267,23 @@ mod tests {
     }
 
     #[test]
-    fn settings_default_off_and_round_trip() {
+    fn settings_defaults_and_round_trip() {
         let (_d, p) = tmp();
         let s = Settings::read(&p);
-        assert!(!s.sounds && !s.label_service);
+        assert!(!s.sounds && s.label_service);
         let s2 = Settings { sounds: true, ..s };
         s2.write(&p).unwrap();
         assert_eq!(Settings::read(&p), s2);
+    }
+
+    #[test]
+    fn the_old_label_service_key_is_ignored() {
+        let (_d, p) = tmp();
+        std::fs::create_dir_all(p.data()).unwrap();
+        std::fs::write(p.data().join(SETTINGS_FILE), "label_service = off\n").unwrap();
+        assert!(Settings::read(&p).label_service);
+        std::fs::write(p.data().join(SETTINGS_FILE), "online_labels = off\n").unwrap();
+        assert!(!Settings::read(&p).label_service);
     }
 
     #[test]

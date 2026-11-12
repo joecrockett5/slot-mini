@@ -67,11 +67,18 @@ fn menu_opens_about_and_settings_stick() {
     golden("about_peel", &d.frame);
     d.run(400);
     golden("about", &d.frame);
-    // Sounds: Off -> On.
+    // Settings, then Sounds: Off -> On.
+    d.tap(Button::A);
+    assert!(d.app.about.as_ref().unwrap().in_settings());
+    golden("about_settings", &d.frame);
     d.tap(Button::A);
     assert!(d.app.settings.sounds);
     let text = std::fs::read_to_string(rig.paths.data().join("settings.txt")).unwrap();
     assert!(text.contains("sounds = on"), "{text}");
+    // B goes back to the first page, then closes MENU.
+    d.tap(Button::B);
+    assert_eq!(d.app.phase, Phase::About);
+    assert!(!d.app.about.as_ref().unwrap().in_settings());
     d.tap(Button::B);
     assert_eq!(d.app.phase, Phase::Shelf);
 }
@@ -84,6 +91,7 @@ fn menu_puts_slots_screens_in_onions_overrides() {
     let rig = Rig::new();
     let mut d = rig.app();
     d.tap(Button::Menu);
+    d.tap(Button::A);
     for _ in 0..4 {
         d.tap(Button::Down);
     }
@@ -211,7 +219,8 @@ fn turning_sounds_on_plays_one() {
     };
     tap(&mut app, Button::Menu);
     assert_eq!(app.phase, Phase::About);
-    // Sounds is the first row: Off -> On.
+    // Sounds is the first row of Settings: Off -> On.
+    tap(&mut app, Button::A);
     tap(&mut app, Button::A);
     assert!(app.settings.sounds);
     assert_eq!(*played.lock().unwrap(), vec![Clip::Insert]);
@@ -261,6 +270,7 @@ fn the_sound_test_shows_how_the_player_ended() {
         app.render(&mut frame);
     };
     step(&mut app, Some(Button::Menu));
+    step(&mut app, Some(Button::A));
     step(&mut app, Some(Button::A));
     let note = |app: &App| app.about.as_ref().and_then(|a| a.note.clone());
     assert_eq!(note(&app).as_deref(), Some("Sound test: playing..."));

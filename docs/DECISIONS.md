@@ -291,3 +291,11 @@ Calls made without asking, and why. Newest last.
     strips are taken two at a time and the flat part is drawn as one quad
     (`slot_mini_ui::curl_runs`). If the device stutters, take more strips
     at a time (`CURL_GROUP`).
+61. **MENU's settings go on a page of their own, and online labels are on**
+    (0.6.4, the maintainer's call). MENU's first page holds Settings, Check
+    for updates and Exit to Onion; Settings opens the six switches, and B
+    comes back. slot's label service at `art.slot-cfw.fyi` is on by default
+    and can be switched off on that page. Its key is new, `online_labels`:
+    every settings write before 0.6.4 stored `label_service = off` although
+    nothing could switch it on, so the old key is ignored rather than read
+    as the player's choice.

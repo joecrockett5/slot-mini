@@ -117,9 +117,9 @@ Start **Apps -> slot-mini**.
       **Important:** the game's own sound works normally after an insert sound
       (the sound player must not hold the audio device). If it does not, turn
       Sounds off and report it.
-- [ ] (Optional, at your discretion) `label_service = on` in
-      `App/slot-mini/data/settings.txt` with Wi-Fi up: carts without labels
-      get them in the background, and the printer offers two labels.
+- [ ] With Wi-Fi up and MENU -> Settings -> Online labels on (the
+      default from 0.6.4): carts without labels get them in the background,
+      and the printer offers two labels.
 
 ## 6. MENU -> Exit to Onion
 
@@ -300,7 +300,7 @@ Put two pictures in `Wallpapers/` at the SD root: any name (say
 
 ## 16. Label printer animation (0.6.2)
 
-Needs Wi-Fi and the label service turned on (README, label printer).
+Needs Wi-Fi and MENU -> Settings -> Online labels on (README, label printer).
 
 - [ ] SELECT on a GBA cart, A on the printer row: the light turns blue while
       fetching, then green; the slips print and drop one after the other.
@@ -317,8 +317,23 @@ Needs Wi-Fi and the label service turned on (README, label printer).
       flat. Note whether the peel stutters.
 - [ ] The sticker shows the battery level and this version; plug in or let
       the battery drop a step and reopen MENU: the number follows.
-- [ ] All seven rows and the note line (e.g. Check for updates) clear the
-      footer.
+- [ ] All six Settings rows and the note line clear the footer.
+
+## 18. MENU's Settings page and online labels (0.6.4)
+
+- [ ] MENU shows three rows: Settings, Check for updates, Exit to Onion.
+      A on Settings shows Sounds, In-game menu, Recents, Boot launcher,
+      Splash screens and Online labels; B goes back to the three rows, and B
+      again (or MENU from either page) closes it.
+- [ ] Online labels reads On after the update, even on a card whose
+      `settings.txt` already says `label_service = off`.
+- [ ] With Wi-Fi up, a cart with no file in `Labels/` gets a label within a
+      minute or so of starting slot-mini (it shows next time the shelf
+      draws it); carts that already have a label file keep it. Note how
+      long it took and whether scrolling stuttered meanwhile.
+- [ ] SELECT, A on the printer row: two slips print. Apply one.
+- [ ] Online labels: Off, restart slot-mini: nothing more is fetched, and
+      the printer points to Cart Studio.
 
 ## What to report
 

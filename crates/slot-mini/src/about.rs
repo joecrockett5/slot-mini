@@ -1,4 +1,6 @@
-//! MENU: about slot-mini, its few settings, and the way back to Onion.
+//! MENU: about slot-mini, its settings, updates and the way back to Onion.
+//! The first page holds Settings, Check for updates and Exit to Onion;
+//! Settings opens a second page of switches, and B comes back from it.
 //! Drawn on slot's menu ground: the wallpaper under slot's scrim, slot's
 //! About sticker at the top (peeling in as MENU opens), then rows in slot's
 //! title type, selected row bright and the rest dimmed as in slot's quick
@@ -16,14 +18,29 @@ use crate::update::{Status, Updater};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Row {
+    /// Opens the settings page.
+    Settings,
     Sounds,
     IngameMenu,
     Recents,
     BootLauncher,
     BootScreen,
+    OnlineLabels,
     Update,
     ExitToOnion,
 }
+
+/// MENU's first page.
+const MAIN: [Row; 3] = [Row::Settings, Row::Update, Row::ExitToOnion];
+/// The settings page.
+const SETTINGS: [Row; 6] = [
+    Row::Sounds,
+    Row::IngameMenu,
+    Row::Recents,
+    Row::BootLauncher,
+    Row::BootScreen,
+    Row::OnlineLabels,
+];
 
 pub enum Outcome {
     Stay,
@@ -99,15 +116,7 @@ impl About {
     pub fn new(paths: &Paths) -> About {
         About {
             row: 0,
-            rows: vec![
-                Row::Sounds,
-                Row::IngameMenu,
-                Row::Recents,
-                Row::BootLauncher,
-                Row::BootScreen,
-                Row::Update,
-                Row::ExitToOnion,
-            ],
+            rows: MAIN.to_vec(),
             launcher: crate::switch::installed(paths),
             boot_screen: crate::bootscreen::installed(paths),
             note: None,
@@ -121,6 +130,17 @@ impl About {
 
     pub fn rows(&self) -> &[Row] {
         &self.rows
+    }
+
+    /// Whether the settings page is showing.
+    pub fn in_settings(&self) -> bool {
+        self.rows[0] != Row::Settings
+    }
+
+    fn show(&mut self, rows: &[Row], row: usize) {
+        self.rows = rows.to_vec();
+        self.row = row;
+        self.note = None;
     }
 
     pub fn press(
@@ -138,8 +158,11 @@ impl About {
         match b {
             Button::Up => self.row = (self.row + n - 1) % n,
             Button::Down => self.row = (self.row + 1) % n,
+            Button::B if self.in_settings() => self.show(&MAIN, 0),
             Button::B | Button::Menu => return Outcome::Close,
             Button::A | Button::Left | Button::Right => match self.rows[self.row] {
+                Row::Settings if b == Button::A => self.show(&SETTINGS, 0),
+                Row::Settings => {}
                 Row::Sounds => {
                     settings.sounds = !settings.sounds;
                     if let Err(e) = settings.write(paths) {
@@ -154,6 +177,15 @@ impl About {
                 }
                 Row::Recents => {
                     settings.recents = !settings.recents;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
+                }
+                Row::OnlineLabels => {
+                    settings.label_service = !settings.label_service;
+                    self.note = settings.label_service.then(|| {
+                        "Carts without a label get one from slot's art host on Wi-Fi.".into()
+                    });
                     if let Err(e) = settings.write(paths) {
                         eprintln!("slot-mini: settings: {e}");
                     }
@@ -323,6 +355,8 @@ impl About {
                 Status::Installing(_) => "Installing...".into(),
                 Status::Installed(_) => "Updated. Restarting...".into(),
             },
+            Row::Settings => "Settings".into(),
+            Row::OnlineLabels => format!("Online labels: {}", on(settings.label_service)),
             Row::Sounds => format!("Sounds: {}", on(settings.sounds)),
             Row::IngameMenu => format!("In-game menu: {}", on(settings.ingame_menu)),
             Row::Recents => format!("Recents: {}", on(settings.recents)),
@@ -364,7 +398,7 @@ impl About {
             let text = self.label(row, settings, update);
             let f = self.face(gfx, &text, Style::Title);
             put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
-            // Seven rows and the note line fit above slot's footer.
+            // Up to seven rows and the note line fit above slot's footer.
             y += ROW_PITCH;
         }
         let update_note = match update {

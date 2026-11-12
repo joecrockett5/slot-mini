@@ -90,6 +90,7 @@ fn menu_hides_the_shelf_and_keeps_the_list() {
     let mut d = rig.app();
     assert_eq!(d.app.current().unwrap().0, ShelfKind::Recents);
     d.tap(Button::Menu);
+    d.tap(Button::A);
     d.tap(Button::Down);
     d.tap(Button::Down);
     d.run(650);
@@ -97,6 +98,7 @@ fn menu_hides_the_shelf_and_keeps_the_list() {
     d.tap(Button::A);
     let text = std::fs::read_to_string(rig.paths.data().join("settings.txt")).unwrap();
     assert!(text.contains("recents = off"), "{text}");
+    d.tap(Button::B);
     d.tap(Button::B);
     assert!(!kinds(&d).contains(&ShelfKind::Recents));
     // The cart stays selected, on its own system's shelf.
@@ -106,9 +108,11 @@ fn menu_hides_the_shelf_and_keeps_the_list() {
     let mut d = rig.app();
     assert!(!kinds(&d).contains(&ShelfKind::Recents));
     d.tap(Button::Menu);
+    d.tap(Button::A);
     d.tap(Button::Down);
     d.tap(Button::Down);
     d.tap(Button::A);
+    d.tap(Button::B);
     d.tap(Button::B);
     assert_eq!(kinds(&d)[0], ShelfKind::Recents);
     assert_eq!(Recents::read(&rig.paths).list.len(), 1);

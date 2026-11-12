@@ -38,7 +38,7 @@ fn enable(rig: &Rig, server: &Server) {
     std::fs::create_dir_all(rig.paths.data()).unwrap();
     std::fs::write(
         rig.paths.data().join("settings.txt"),
-        format!("label_service = on\nart_host = {}\n", server.base),
+        format!("online_labels = on\nart_host = {}\n", server.base),
     )
     .unwrap();
 }
@@ -139,7 +139,7 @@ fn the_label_printer_prints_and_applies() {
     // Keep the background fetch from labelling Metroid first.
     std::fs::write(
         rig.paths.data().join("settings.txt"),
-        format!("label_service = on\nart_host = {}\n", server.base),
+        format!("online_labels = on\nart_host = {}\n", server.base),
     )
     .unwrap();
     let mut d = rig.app_with(FixedStatus {

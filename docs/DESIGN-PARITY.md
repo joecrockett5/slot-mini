@@ -28,14 +28,14 @@ slot-mini renders.
 | --- | --- | --- |
 | Shelf (carousel) | yes | Same layout code (`shelf.rs`, copied). Wallpaper, carts, slot chrome, platform title, footer. |
 | Favourites shelf | yes | slot's own Favourites shelf, listed before GBA, GBC and GB as in `site/docs/guide/shelf.md`. |
-| Recents shelf | yes | slot's list (`recents.txt`, ten games, newest first), first in the shelf order; X takes a cart off it. On by default (slot's is opt-in), with a MENU row to hide it. Golden `shelf_recents_named`. |
+| Recents shelf | yes | slot's list (`recents.txt`, ten games, newest first), first in the shelf order; X takes a cart off it. On by default (slot's is opt-in), with a MENU -> Settings row to hide it. Golden `shelf_recents_named`. |
 | GBA Video shelf | no | Not a separate Onion system. |
 | Insert (cart slides into the slot) | yes, simplified | The cart drops into the slot mouth over ~300 ms, the insert sound plays, then slot-mini exits. |
 | Eject (cart rises out of the slot) | yes, simplified | When slot-mini starts straight after a game it opens on that cart and plays the rise in reverse. |
 | Cart Studio (SELECT) | yes, simplified | Cutting-mat ground, the cart on the left, rows on the right: Label Printer, Shell (GB only), Shell Colour, Finish. See below. |
 | Label printer and slips | yes | slot's printer, paper strip and light; slips print, drop and shuffle, and the chosen label peels and flies onto the cart (0.6.2). Back faces are plain paper. |
-| About (MENU) | yes | slot's About sticker (slot-mini's wording) peels in at the top of the menu ground, above slot-mini's own rows: sounds, in-game menu, Recents, boot launcher, splash screens, updates, exit to Onion (0.6.3). |
-| Settings (quick menu) | partly | Folded into the About screen: only settings slot-mini needs. |
+| About (MENU) | yes | slot's About sticker (slot-mini's wording) peels in at the top of the menu ground, above slot-mini's own rows: Settings, Check for updates, Exit to Onion (0.6.3; the Settings page 0.6.4). |
+| Settings (quick menu) | partly | MENU -> Settings, a page under the sticker: only settings slot-mini needs (sounds, in-game menu, Recents, boot launcher, splash screens, online labels). |
 | In-game menu (tap MENU) and eject (hold MENU) | yes, for games slot-mini launches (0.2.0) | slot's quick-menu type, pointer and layout over the frozen game; rows Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game. See below. |
 | Core picker (START) | yes, GBA carts (0.4.0) | slot's scene: the other carts recede and dim, the cart's lid lifts and turns off its board, the chip hops between the mGBA and gpSP sockets, slot's Cancel, Swap and Choose legends. Game Boy carts (slot: mGBA or Gambatte) are not offered. See below. |
 | Save-state switcher (double-tap MENU), link, RomM, Wi-Fi setup, clock setting, brightness | no | Out of scope (RetroArch and Onion own these). |
@@ -138,12 +138,15 @@ paper.
 
 slot's MENU opens its settings (left), and slot's About page is its sticker
 alone. slot-mini's MENU is both: slot's sticker at three quarters of its size
-on slot's menu ground (wallpaper under slot's scrim), then the rows. The
+on slot's menu ground (wallpaper under slot's scrim), then three rows:
+Settings, Check for updates and Exit to Onion. Settings shows slot-mini's
+switches under the same sticker (decision 61). The
 sticker is slot's design with slot-mini's words (decision 60): the model rows
 name slot-mini and the Mini Plus, the credits name slot, Markus, Onion's
 RetroArch, the fonts and slot's cart sounds, slot's copyright line stays as
 the original design's, and the Anbernic wordmark is left out. It peels in from
-the left as MENU opens. Goldens: `about.png`, `about_peel.png`.
+the left as MENU opens. Goldens: `about.png`, `about_peel.png`,
+`about_settings.png`.
 
 ### In-game menu (tap MENU)
 
