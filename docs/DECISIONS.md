@@ -275,3 +275,19 @@ Calls made without asking, and why. Newest last.
     a 60 Hz frame on the A7 and are kept. If the device shows them too slow,
     widen the strips (fewer quads) before dropping the curl. While the scene
     plays every button is ignored, as in slot.
+60. **MENU carries slot's About sticker, reworded** (0.6.3, the maintainer's
+    choice of wording). slot's sticker replaces MENU's four info lines,
+    drawn at three quarters of its size so the seven rows still fit (their
+    pitch goes from 33 to 28 px). It reads "slot-mini for Miyoo Mini Plus",
+    the battery and the version, then credits rewritten for slot-mini
+    (design and art from slot by Brandon Kowalski and Markus, games run by
+    Onion's RetroArch, Open Sans and Nerd Fonts, cart sounds from slot);
+    slot's © line is kept as the original design's copyright. slot prints
+    its git hash as the serial; slot-mini prints `SM` and the version with a
+    Code 39 check character, so the sticker only changes with a release. The
+    Anbernic wordmark is dropped. slot draws its sticker flat; slot-mini
+    peels it in over 600 ms with slot's curl (the roadmap's "sticker curl on
+    the menu screen"). The sticker is four times the studio's, so its 8 px
+    strips are taken two at a time and the flat part is drawn as one quad
+    (`slot_mini_ui::curl_runs`). If the device stutters, take more strips
+    at a time (`CURL_GROUP`).

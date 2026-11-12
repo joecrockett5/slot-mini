@@ -538,6 +538,27 @@ Save and Load State worked on the device. Fixed:
   `studio_printing`, `studio_printer`, `studio_slip_picked`, `studio_peel`,
   `studio_to_cart`, `studio_applied`; unit tests for `blit_quad`.
 
+## 0.6.3: the MENU sticker
+
+- slot's About sticker on MENU (roadmap item 5, decision 60). `slot-mini-ui`
+  copies slot's `sticker.rs` (slot-mini's wording, no wordmark) and
+  `barcode.rs`, and slot's `assets/sticker.png`. MENU draws it at 0.75
+  scale over its rows and peels it in over 600 ms (`about::PEEL_MS`); the
+  face is made again when the battery changes, as slot's `sync_about` does.
+- `slot_mini_ui::curl_runs`: `joined` draws the flat part of a curl as one
+  quad (exact; the studio uses it too), `wider` takes strips n at a time.
+- `Canvas::blit_quad` is faster: each row's run is found from the edges
+  instead of testing the bounding box, and the texture steps in fixed point.
+  Studio sticker (host): 0.18 ms flat, 0.30 ms peeling, 0.39 ms tossed (was
+  0.48-0.56 ms).
+- Performance (x86-64 host, release, `examples/perf.rs`): MENU frame while
+  peeling 2.3 ms average, 2.7 ms worst; flat MENU 0.9-1.1 ms. The worst
+  shelf scroll frame on the same host is 3.4 ms. Not measured on a device
+  (DEVICE-TESTING section 17).
+- Tests: `tests/extras.rs` adds golden `about_peel`; MENU goldens are taken
+  after the peel. Unit tests for the strip joining and the serial's check
+  character.
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from

@@ -30,6 +30,8 @@ pub const GB_CHIP_W: u32 = 59;
 pub const GB_CHIP_H: u32 = 92;
 pub const SLOT_W: u32 = OUT_W;
 pub const SLOT_H: u32 = 58;
+pub const STICKER_W: u32 = 660;
+pub const STICKER_H: u32 = 228;
 
 const GBA_CART_PNG: &[u8] = include_bytes!("../../../assets/gba_cart.png");
 const GB_CART_PNG: &[u8] = include_bytes!("../../../assets/gb_cart.png");
@@ -51,6 +53,7 @@ const SLOT_FRONT_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_da
 const SLOT_FRONT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_light.png");
 const SLOT_PLUGGED_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_plugged_dark.png");
 const SLOT_PLUGGED_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_plugged_light.png");
+const STICKER_PNG: &[u8] = include_bytes!("../../../assets/sticker.png");
 
 fn load(bytes: &'static [u8], w: u32, h: u32, slot: &'static OnceLock<Vec<u8>>) -> &'static [u8] {
     slot.get_or_init(|| {
@@ -220,6 +223,11 @@ pub fn slot_plugged() -> &'static [u8] {
 pub fn slot_plugged_light() -> &'static [u8] {
     static P: OnceLock<Vec<u8>> = OnceLock::new();
     load(SLOT_PLUGGED_LIGHT_PNG, SLOT_W, SLOT_H, &P)
+}
+
+pub fn sticker() -> &'static [u8] {
+    static P: OnceLock<Vec<u8>> = OnceLock::new();
+    load(STICKER_PNG, STICKER_W, STICKER_H, &P)
 }
 
 // Shells are hand drawn. There is no Game Boy clear file yet, so a clear Game Boy pak uses

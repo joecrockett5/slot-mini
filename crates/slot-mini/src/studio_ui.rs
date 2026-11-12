@@ -26,6 +26,7 @@ use crate::studio::{
 use crate::studio_view::{
     layout, tray, turned, view, well_of, Align, Item, Style, CART_TILT, SLIP_PAD, TRAY_TOP,
 };
+use slot_mini_ui::curl_runs::joined;
 use slot_mini_ui::sticker_curl::{strips, Pose};
 
 /// What the label printer has to show.
@@ -961,7 +962,7 @@ impl StudioUi {
         });
         let focus = [stage.w / 2.0, 240.0];
         let stick = |tex: TexId, flat: f32, curl: f32, pose: Pose, out: &mut Vec<Draw>| {
-            for strip in strips(rect, flat, curl, &pose, focus) {
+            for strip in joined(strips(rect, flat, curl, &pose, focus)) {
                 let (tex, uv) = match strip.back {
                     true => (paper, [0.0, 0.0, 1.0, 1.0]),
                     false => (tex, strip.uv),

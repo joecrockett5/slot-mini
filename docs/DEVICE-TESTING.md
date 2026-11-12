@@ -311,6 +311,15 @@ Needs Wi-Fi and the label service turned on (README, label printer).
 - [ ] B during the scene does nothing; after it, B closes the studio and the
       shelf shows the new label.
 
+## 17. The MENU sticker (0.6.3)
+
+- [ ] MENU: slot's sticker peels in from the left at the top, then lies
+      flat. Note whether the peel stutters.
+- [ ] The sticker shows the battery level and this version; plug in or let
+      the battery drop a step and reopen MENU: the number follows.
+- [ ] All seven rows and the note line (e.g. Check for updates) clear the
+      footer.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,
