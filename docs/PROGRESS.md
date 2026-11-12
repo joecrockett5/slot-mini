@@ -519,6 +519,25 @@ Save and Load State worked on the device. Fixed:
   on the README roadmap; next are the print-and-tear and apply animation
   (0.6.2) and the MENU sticker (0.6.3).
 
+## 0.6.2: print, tear and apply
+
+- slot's label printer scene (roadmap item 3). `studio.rs` gains slot's
+  tray, light, zoom, shuffle and apply-stage code unchanged; `studio_ui.rs`
+  ports `draw_studio_sheet`, `draw_slip` and the top half of
+  `draw_apply_cart`. Prints drop from the printer one at a time, the light
+  is green while printing and blue while fetching, the held slip zooms, and
+  A peels the old label, tosses it, lifts the new one off its slip and rolls
+  it onto the cart. Buttons are ignored until it lands, as in slot.
+- `slot-mini-ui` copies slot's `sticker_curl.rs` and `liner.rs`;
+  `slot-mini-gfx` adds `Canvas::blit_quad` and draws `Draw::Quad`.
+- Performance (x86-64 host, release, `examples/perf.rs`): a full studio
+  frame 0.31 ms; a curled 205x106 sticker (26 strips) 0.48 ms flat,
+  0.51 ms peeling, 0.56 ms tossed. Not yet measured on the device
+  (DEVICE-TESTING section 16). Decision 59.
+- Tests: `tests/label_service.rs` steps through the scene with goldens
+  `studio_printing`, `studio_printer`, `studio_slip_picked`, `studio_peel`,
+  `studio_to_cart`, `studio_applied`; unit tests for `blit_quad`.
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from

@@ -17,6 +17,18 @@ pub fn scale_px(c: u32, f: u32) -> u32 {
     rb | ag
 }
 
+/// `a` towards `b` by `w / 256`, per 8-bit channel.
+#[inline(always)]
+fn lerp_px(a: u32, b: u32, w: u32) -> u32 {
+    if w == 0 || a == b {
+        return a;
+    }
+    let (ia, ib) = (256 - w, w);
+    let rb = ((a & 0x00FF_00FF) * ia + (b & 0x00FF_00FF) * ib) >> 8 & 0x00FF_00FF;
+    let ag = ((a >> 8 & 0x00FF_00FF) * ia + (b >> 8 & 0x00FF_00FF) * ib) & 0xFF00_FF00;
+    rb | ag
+}
+
 /// Premultiplied `src` over opaque `dst`.
 #[inline(always)]
 pub fn over(dst: u32, src: u32) -> u32 {
@@ -513,6 +525,124 @@ impl Canvas {
         }
     }
 
+    /// slot's `Draw::Quad`: the `uv` window of `s` (u, v, width, height in
+    /// 0..1) mapped onto the quad `corners` (top-left, top-right,
+    /// bottom-right, bottom-left), as slot's GL draws it: two triangles split
+    /// along the top-right to bottom-left diagonal, texture coordinates
+    /// interpolated linearly in each, sampled bilinearly with edges clamped.
+    /// A top-left fill rule means quads that share an edge (the strips of a
+    /// curling sticker) meet with no gap and no pixel drawn twice.
+    pub fn blit_quad(&mut self, s: &Sprite, corners: [[f32; 2]; 4], uv: [f32; 4], alpha: u32) {
+        if alpha == 0 || s.w == 0 || s.h == 0 {
+            return;
+        }
+        // Texture coordinates of each corner, in sprite pixels (centres at
+        // .5, as GL samples).
+        let tex = |a: f32, b: f32| {
+            [
+                (uv[0] + a * uv[2]) * s.w as f32 - 0.5,
+                (uv[1] + b * uv[3]) * s.h as f32 - 0.5,
+            ]
+        };
+        let t = [tex(0.0, 0.0), tex(1.0, 0.0), tex(1.0, 1.0), tex(0.0, 1.0)];
+        for (a, b, c) in [(0, 1, 3), (1, 2, 3)] {
+            self.triangle(
+                s,
+                [corners[a], corners[b], corners[c]],
+                [t[a], t[b], t[c]],
+                alpha,
+            );
+        }
+    }
+
+    fn triangle(&mut self, s: &Sprite, p: [[f32; 2]; 3], t: [[f32; 2]; 3], alpha: u32) {
+        let area =
+            (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
+        if !area.is_finite() || area.abs() < 1e-6 {
+            return;
+        }
+        // One winding for every triangle, so the fill rule is consistent.
+        let (p, t) = match area > 0.0 {
+            true => (p, t),
+            false => ([p[0], p[2], p[1]], [t[0], t[2], t[1]]),
+        };
+        let area = area.abs();
+        let min_x = p.iter().map(|q| q[0]).fold(f32::INFINITY, f32::min);
+        let max_x = p.iter().map(|q| q[0]).fold(f32::NEG_INFINITY, f32::max);
+        let min_y = p.iter().map(|q| q[1]).fold(f32::INFINITY, f32::min);
+        let max_y = p.iter().map(|q| q[1]).fold(f32::NEG_INFINITY, f32::max);
+        let x0 = ((min_x - 0.5).ceil() as i32).max(0);
+        let x1 = ((max_x - 0.5).floor() as i32).min(self.w as i32 - 1);
+        let y0 = ((min_y - 0.5).ceil() as i32).max(0);
+        let y1 = ((max_y - 0.5).floor() as i32).min(self.h as i32 - 1);
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+        // Edge i runs from p[i+1] to p[i+2] and is 0 on that edge, `area`
+        // at p[i]. Its weight is p[i]'s share of the texture coordinate.
+        struct Edge {
+            dx: f32,
+            dy: f32,
+            c: f32,
+            /// A pixel exactly on this edge is drawn (top or left edges).
+            owns: bool,
+        }
+        let edge = |i: usize| {
+            let (a, b) = (p[(i + 1) % 3], p[(i + 2) % 3]);
+            // w(x, y) = (b - a) x (q - a), positive inside for this winding.
+            let (ex, ey) = (b[0] - a[0], b[1] - a[1]);
+            Edge {
+                dx: -ey,
+                dy: ex,
+                c: ey * a[0] - ex * a[1],
+                owns: (ey == 0.0 && ex < 0.0) || ey > 0.0,
+            }
+        };
+        let e = [edge(0), edge(1), edge(2)];
+        // u and v are linear in x and y: the weights over the area.
+        let lin = |k: usize| {
+            let f =
+                |g: &dyn Fn(&Edge) -> f32| (0..3).map(|i| g(&e[i]) * t[i][k]).sum::<f32>() / area;
+            (f(&|e| e.dx), f(&|e| e.dy), f(&|e| e.c))
+        };
+        let (u, v) = (lin(0), lin(1));
+        let (sw, sh) = (s.w as i32, s.h as i32);
+        let width = self.w as usize;
+        for py in y0..=y1 {
+            let fy = py as f32 + 0.5;
+            for px in x0..=x1 {
+                let fx = px as f32 + 0.5;
+                let inside = e.iter().all(|e| {
+                    let w = e.dx * fx + e.dy * fy + e.c;
+                    w > 0.0 || (w == 0.0 && e.owns)
+                });
+                if !inside {
+                    continue;
+                }
+                let su = (u.0 * fx + u.1 * fy + u.2).clamp(0.0, (sw - 1) as f32);
+                let sv = (v.0 * fx + v.1 * fy + v.2).clamp(0.0, (sh - 1) as f32);
+                let (ix, iy) = (su as i32, sv as i32);
+                let (wx, wy) = (
+                    ((su - ix as f32) * 256.0) as u32,
+                    ((sv - iy as f32) * 256.0) as u32,
+                );
+                let (ix1, iy1) = ((ix + 1).min(sw - 1), (iy + 1).min(sh - 1));
+                let at = |x: i32, y: i32| s.px[(y * sw + x) as usize];
+                let top = lerp_px(at(ix, iy), at(ix1, iy), wx);
+                let bottom = lerp_px(at(ix, iy1), at(ix1, iy1), wx);
+                let mut c = lerp_px(top, bottom, wy);
+                if c >> 24 == 0 {
+                    continue;
+                }
+                if alpha < 255 {
+                    c = scale_px(c, alpha);
+                }
+                let d = &mut self.px[py as usize * width + px as usize];
+                *d = over(*d, c);
+            }
+        }
+    }
+
     /// Blend an 8-bit coverage mask (text) in one colour.
     pub fn blit_mask(
         &mut self,
@@ -675,5 +805,85 @@ mod tests {
         let s = Sprite::from_rgba(2, 1, &[0, 0, 0, 255, 255, 255, 255, 255]);
         let r = s.resized(1, 1);
         assert_eq!(r.px[0], 0xFF80_8080);
+    }
+
+    fn numbered(w: u32, h: u32) -> Sprite {
+        let mut s = Sprite::new(w, h);
+        for (i, p) in s.px.iter_mut().enumerate() {
+            *p = 0xFF00_0000 | (i as u32 * 16) << 8 | 0x40;
+        }
+        s
+    }
+
+    const WHOLE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
+    #[test]
+    fn a_square_quad_is_a_straight_copy() {
+        let s = numbered(4, 4);
+        let mut c = Canvas::new(6, 6);
+        c.clear(0);
+        c.blit_quad(
+            &s,
+            [[1.0, 1.0], [5.0, 1.0], [5.0, 5.0], [1.0, 5.0]],
+            WHOLE,
+            255,
+        );
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(
+                    c.px[((y + 1) * 6 + x + 1) as usize],
+                    s.px[(y * 4 + x) as usize]
+                );
+            }
+        }
+        assert_eq!(c.px[0], BLACK, "outside is untouched");
+        assert_eq!(c.px[35], BLACK);
+    }
+
+    #[test]
+    fn a_mirrored_quad_mirrors() {
+        let s = numbered(4, 1);
+        let mut c = Canvas::new(4, 1);
+        c.blit_quad(
+            &s,
+            [[4.0, 0.0], [0.0, 0.0], [0.0, 1.0], [4.0, 1.0]],
+            WHOLE,
+            255,
+        );
+        for x in 0..4 {
+            assert_eq!(c.px[x], s.px[3 - x]);
+        }
+    }
+
+    #[test]
+    fn quads_sharing_an_edge_meet_without_gaps_or_overlap() {
+        let mut s = Sprite::new(2, 2);
+        s.px.fill(0x8080_8080); // white at half alpha, premultiplied
+        let mut c = Canvas::new(32, 16);
+        c.clear(0);
+        // A slanted shared edge, as two strips of a curl.
+        let (top, bottom) = ([13.3, 1.2], [17.9, 14.7]);
+        c.blit_quad(&s, [[2.0, 1.2], top, bottom, [2.0, 14.7]], WHOLE, 255);
+        c.blit_quad(&s, [top, [29.0, 1.2], [29.0, 14.7], bottom], WHOLE, 255);
+        let once = over(BLACK, 0x8080_8080);
+        for y in 2..14 {
+            for x in 2..29 {
+                assert_eq!(c.px[y * 32 + x], once, "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn a_degenerate_quad_draws_nothing() {
+        let s = numbered(2, 2);
+        let mut c = Canvas::new(4, 4);
+        c.clear(0);
+        c.blit_quad(
+            &s,
+            [[1.0, 1.0], [3.0, 1.0], [3.0, 1.0], [1.0, 1.0]],
+            WHOLE,
+            255,
+        );
+        assert!(c.px.iter().all(|&p| p == BLACK));
     }
 }

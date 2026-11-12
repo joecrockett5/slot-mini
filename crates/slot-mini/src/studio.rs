@@ -1,7 +1,6 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
-//   crates/slot/src/studio.rs (the Studio state machine, up to `legends`)
-// Changes: buttons are slot-mini-gfx's `Button` (aliased to slot's `Btn`);
-//   the print and apply animation code after `legends` is not copied.
+//   crates/slot/src/studio.rs
+// Changes: buttons are slot-mini-gfx's `Button` (aliased to slot's `Btn`).
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use slot_mini_gfx::Button as Btn;
@@ -634,4 +633,160 @@ impl Studio {
             ],
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApplyStage {
+    Peel,
+    Toss,
+    Lift,
+    ToCart,
+    Roll,
+}
+
+const APPLY_STAGES: [(ApplyStage, f64); 5] = [
+    (ApplyStage::Peel, 240.0),
+    (ApplyStage::Toss, 200.0),
+    (ApplyStage::Lift, 130.0),
+    (ApplyStage::ToCart, 220.0),
+    (ApplyStage::Roll, 220.0),
+];
+
+pub const APPLY_MS: f64 = 240.0 + 200.0 + 130.0 + 220.0 + 220.0;
+
+pub fn apply_stage(elapsed_ms: f64) -> (ApplyStage, f32) {
+    let mut t = elapsed_ms.max(0.0);
+    for (stage, ms) in APPLY_STAGES {
+        if t < ms {
+            return (stage, (t / ms) as f32);
+        }
+        t -= ms;
+    }
+    (ApplyStage::Roll, 1.0)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ApplyScene {
+    pub chosen: LabelKind,
+    pub was: LabelKind,
+    pub used_y: f32,
+    pub started: f64,
+}
+
+const PRINT_MS: f64 = 300.0;
+pub const PRINT_LIGHT_HOLD_MS: f64 = 600.0;
+const CUT_MS: f64 = 70.0;
+const DROP_MS: f64 = 420.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Slip {
+    pub kind: LabelKind,
+    pub y0: f32,
+    pub y1: f32,
+    pub t0: f64,
+    pub ms: f64,
+}
+
+impl Slip {
+    pub fn y(&self, now: f64) -> f32 {
+        let t = (((now - self.t0) / self.ms).clamp(0.0, 1.0)) as f32;
+        let e = if self.y0 < 0.0 {
+            t
+        } else if t < 0.5 {
+            2.0 * t * t
+        } else {
+            1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+        };
+        self.y0 + (self.y1 - self.y0) * e
+    }
+
+    pub fn moving(&self, now: f64) -> bool {
+        now < self.t0 + self.ms
+    }
+
+    pub fn printing(&self, now: f64) -> bool {
+        self.y0 < 0.0 && self.moving(now)
+    }
+
+    pub fn lit(&self, now: f64) -> bool {
+        self.y0 < 0.0 && now - self.t0 < self.ms + PRINT_LIGHT_HOLD_MS
+    }
+}
+
+pub fn tray_step(
+    slips: &mut Vec<Slip>,
+    sheet: &[LabelKind],
+    ready: &dyn Fn(LabelKind) -> bool,
+    now: f64,
+    height: f32,
+    bottom: f32,
+) {
+    slips.retain(|s| sheet.contains(&s.kind));
+    if slips.iter().any(|s| s.moving(now)) {
+        return;
+    }
+    let settled = |s: &Slip| s.y1;
+    for (i, kind) in sheet.iter().enumerate().rev() {
+        let target = if i == 1 { bottom } else { 0.0 };
+        if let Some(slip) = slips.iter_mut().find(|s| s.kind == *kind) {
+            if slip.y1 != target {
+                let y0 = slip.y1;
+                *slip = Slip {
+                    y0,
+                    y1: target,
+                    t0: now + CUT_MS,
+                    ms: DROP_MS,
+                    ..*slip
+                };
+                return;
+            }
+            continue;
+        }
+        if ready(*kind) && !slips.iter().any(|s| settled(s) == 0.0) {
+            slips.push(Slip {
+                kind: *kind,
+                y0: -height,
+                y1: 0.0,
+                t0: now,
+                ms: PRINT_MS,
+            });
+        }
+        return;
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Light {
+    Off,
+    Printing,
+    Waiting,
+}
+
+pub fn printer_light(printing: bool, waiting: bool, now: f64) -> Light {
+    match (printing, waiting) {
+        (true, _) => Light::Printing,
+        (false, true) if ((now / 400.0) as u64).is_multiple_of(2) => Light::Waiting,
+        _ => Light::Off,
+    }
+}
+
+pub const SLIP_ZOOM: f32 = 1.06;
+const SLIP_ZOOM_MS: f64 = 120.0;
+
+pub fn slip_zoom(elapsed: f64) -> f32 {
+    let p = (elapsed / SLIP_ZOOM_MS).clamp(0.0, 1.0) as f32;
+    1.0 + (SLIP_ZOOM - 1.0) * (1.0 - (1.0 - p) * (1.0 - p))
+}
+
+pub fn backing_shift(p: f32, distance: f32) -> f32 {
+    distance * p * p
+}
+
+pub const SLIP_SHUFFLE_MS: f64 = 220.0;
+
+pub fn slip_shuffle(elapsed: f64) -> f32 {
+    if !(0.0..SLIP_SHUFFLE_MS).contains(&elapsed) {
+        return 0.0;
+    }
+    (elapsed / SLIP_SHUFFLE_MS * std::f64::consts::PI).sin() as f32
 }

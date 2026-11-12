@@ -845,6 +845,7 @@ impl App {
         self.take_shelf_grounds();
         if let Some(ui) = self.studio.as_mut() {
             ui.poll(&mut self.gfx);
+            ui.tick(now, self.stage);
         }
         if self.sound_test {
             if let Some(report) = self.sound.report() {

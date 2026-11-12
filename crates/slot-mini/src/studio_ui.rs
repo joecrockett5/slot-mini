@@ -1,7 +1,9 @@
 //! The on-device cart studio (SELECT): slot's `Studio` state machine and
-//! `studio_view` layout, drawn flat. The cart is tilted once in software
-//! instead of by slot's GL quads, and printed labels appear as plain slips
-//! without the printer animation (see docs/DESIGN-PARITY.md).
+//! `studio_view` layout. The resting cart is tilted once in software instead
+//! of by slot's GL quad; the printer, its slips and the apply scene (peel,
+//! toss, lift, stick, roll) follow slot's `draw_studio_sheet` and
+//! `draw_apply_cart`, with the curling sticker drawn as software quads (see
+//! docs/DESIGN-PARITY.md).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,8 +19,14 @@ use slot_mini_ui::{
 use crate::art::jobs::{self, Prints, UpdateFail};
 use crate::art::make;
 use crate::paths::Paths;
-use crate::studio::{Effect, LabelKind, Legend, Screen, Studio};
-use crate::studio_view::{layout, tray, view, Align, Item, Style, CART_TILT, SLIP_PAD, TRAY_TOP};
+use crate::studio::{
+    apply_stage, backing_shift, printer_light, slip_shuffle, slip_zoom, tray_step, ApplyScene,
+    ApplyStage, Effect, LabelKind, Legend, Light, Screen, Slip, Studio, APPLY_MS, SLIP_SHUFFLE_MS,
+};
+use crate::studio_view::{
+    layout, tray, turned, view, well_of, Align, Item, Style, CART_TILT, SLIP_PAD, TRAY_TOP,
+};
+use slot_mini_ui::sticker_curl::{strips, Pose};
 
 /// What the label printer has to show.
 pub enum Printer {
@@ -49,10 +57,52 @@ pub struct StudioUi {
     chip_disc: Option<TexId>,
     /// Set when the label file changed, so the shelf rebuilds the face.
     pub relabelled: bool,
+    /// The label the cart came in with, as art and as the file's bytes, read
+    /// before anything is applied: its slip, and putting it back.
+    existing: Option<Existing>,
+    /// Each label kind as a sticker the size it is on the tray, and what it
+    /// was built for (the title colour, the cart's well).
+    stickers: HashMap<LabelKind, (TexId, Option<[u8; 3]>, [u32; 4])>,
+    /// The tilted cart without its label, for the apply scene.
+    bare_tex: Option<(TexId, u32, u32)>,
+    /// The cart face's own size, to place the sticker on its well.
+    face_wh: Option<(f32, f32)>,
+    liner: Option<(TexId, u32, u32)>,
+    printer_body: Option<TexId>,
+    paper: Option<TexId>,
+    /// slot's tray: the slips, how many were printed (the liner's travel),
+    /// when the pick last moved, and the apply scene.
+    now: f64,
+    slips: Vec<Slip>,
+    prints_made: u32,
+    shuffled: f64,
+    picked: Option<(LabelKind, f64)>,
+    scene: Option<ApplyScene>,
 }
 
 const MAT: [f32; 4] = [0.122, 0.267, 0.216, 1.0];
 const PAPER: [f32; 4] = [0.957, 0.945, 0.918, 1.0];
+
+/// slot's `SLIP_SHUFFLE_PX`: how far piled slips pull apart on a pick.
+/// The label the cart came in with.
+struct Existing {
+    art: Option<Vec<u8>>,
+    file: Option<Vec<u8>>,
+    /// It came without a label file.
+    bare: bool,
+}
+
+const SLIP_SHUFFLE_PX: f32 = 28.0;
+/// How far the liner under the printer moves before its pattern repeats
+/// (slot scrolls its 121 px liner texture by 60 px).
+const LINER_TILE: f32 = 60.0;
+/// The liner is at least this tall, so the strip under the printer has a
+/// full repeat to scroll through.
+const LINER_MIN_H: u32 = 88;
+/// slot's printer light colours.
+const LIGHT_PRINTING: [f32; 4] = [0.37, 0.88, 0.48, 1.0];
+const LIGHT_WAITING: [f32; 4] = [0.25, 0.55, 1.0, 1.0];
+const LIGHT_OFF: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
 
 /// The message where the printed labels would be, when there are none.
 pub const DISABLED_LINES: [&str; 2] = ["Make labels in Cart Studio", "studio.slot-cfw.fyi"];
@@ -73,7 +123,30 @@ impl StudioUi {
             text: HashMap::new(),
             chip_disc: None,
             relabelled: false,
+            existing: None,
+            stickers: HashMap::new(),
+            bare_tex: None,
+            face_wh: None,
+            liner: None,
+            printer_body: None,
+            paper: None,
+            now: 0.0,
+            slips: Vec::new(),
+            prints_made: 0,
+            shuffled: f64::NEG_INFINITY,
+            picked: None,
+            scene: None,
         }
+    }
+
+    /// Whether the apply scene is playing (input waits for it).
+    pub fn applying(&self) -> bool {
+        self.scene.is_some()
+    }
+
+    /// Slips on the tray, printed or printing.
+    pub fn slip_count(&self) -> usize {
+        self.slips.len()
     }
 
     /// The cart as the studio currently dresses it.
@@ -92,13 +165,102 @@ impl StudioUi {
         wifi: bool,
         gfx: &mut Renderer,
     ) -> bool {
-        match self.studio.press(b) {
+        // slot's `studio_input`: nothing while a label goes on, and A only
+        // takes a slip that has come to rest.
+        if self.scene.is_some() {
+            return false;
+        }
+        let now = self.now;
+        let was = self.studio.wearing;
+        let used_y = match self.studio.screen {
+            Screen::Sheet { at } => {
+                let picked = self.studio.sheet.get(at).copied();
+                let slip = self.slips.iter().find(|s| Some(s.kind) == picked);
+                let resting = slip.filter(|s| !s.moving(now));
+                if b == Button::A && resting.is_none() {
+                    return false;
+                }
+                resting.map_or(0.0, |s| s.y1)
+            }
+            _ => 0.0,
+        };
+        let from = self.studio.screen;
+        let effect = self.studio.press(b);
+        if let (Screen::Sheet { at: a }, Screen::Sheet { at: b }) = (from, self.studio.screen) {
+            if a != b && effect.is_none() {
+                self.shuffled = now;
+            }
+        }
+        match effect {
             Some(Effect::Close) => return true,
             Some(Effect::Fetch) => self.fetch(paths, service, wifi),
-            Some(Effect::Apply(kind)) => self.apply(kind, paths, gfx),
-            None => {}
+            Some(Effect::Apply(kind)) if self.apply(kind, paths, gfx) => {
+                self.scene = Some(ApplyScene {
+                    chosen: kind,
+                    was,
+                    used_y,
+                    started: now,
+                });
+            }
+            Some(Effect::Apply(_)) | None => {}
         }
         false
+    }
+
+    /// Advance the tray and the apply scene to `now` (slot's `tick_tray`
+    /// and the end of its apply scene).
+    pub fn tick(&mut self, now: u64, stage: Stage) {
+        let now = now as f64;
+        self.now = now;
+        if self
+            .scene
+            .as_ref()
+            .is_some_and(|s| now - s.started >= APPLY_MS)
+        {
+            self.scene = None;
+        }
+        if self.scene.is_some() {
+            return;
+        }
+        let Screen::Sheet { at } = self.studio.screen else {
+            self.slips.clear();
+            return;
+        };
+        let picked = self.studio.sheet.get(at).copied();
+        if picked != self.picked.map(|(kind, _)| kind) {
+            self.picked = picked.map(|kind| (kind, now));
+        }
+        let t = tray(stage.w, &self.studio.cart);
+        let ready: Vec<LabelKind> = [
+            LabelKind::Existing,
+            LabelKind::Real,
+            LabelKind::Logo,
+            LabelKind::Title,
+        ]
+        .into_iter()
+        .filter(|k| self.has_face(*k))
+        .collect();
+        let before = self.slips.len();
+        tray_step(
+            &mut self.slips,
+            &self.studio.sheet,
+            &|k| ready.contains(&k),
+            now,
+            t.slip_h,
+            t.bottom,
+        );
+        if self.slips.len() > before {
+            self.prints_made += 1;
+        }
+    }
+
+    /// slot's `studio_face(kind).is_some()`: printed labels once they have
+    /// arrived; the cart's own and the text label always.
+    fn has_face(&self, kind: LabelKind) -> bool {
+        match kind {
+            LabelKind::Real | LabelKind::Logo => self.prints.contains_key(&kind),
+            LabelKind::Existing | LabelKind::Title => true,
+        }
     }
 
     fn fetch(&mut self, paths: &Paths, (enabled, host): (bool, &str), wifi: bool) {
@@ -166,7 +328,8 @@ impl StudioUi {
         }
     }
 
-    fn apply(&mut self, kind: LabelKind, paths: &Paths, gfx: &mut Renderer) {
+    fn apply(&mut self, kind: LabelKind, paths: &Paths, gfx: &mut Renderer) -> bool {
+        self.remember_existing(paths);
         let cart = self.studio.cart.clone();
         let png = match kind {
             LabelKind::Real | LabelKind::Logo => self.prints.get(&kind).map(|p| p.0.clone()),
@@ -177,23 +340,47 @@ impl StudioUi {
                     .unwrap_or(slot_mini_ui::label_colour(&slot_mini_ui::label_text(&cart)));
                 Some(make::text_label(&cart, colour))
             }
-            LabelKind::Existing => None,
+            // The cart's own label back; a cart that came without one goes
+            // back to none.
+            LabelKind::Existing => self.existing.as_ref().and_then(|e| e.file.clone()),
         };
-        let Some(png) = png else {
-            return;
+        let bare = self.existing.as_ref().is_some_and(|e| e.bare);
+        let written = match (&png, kind) {
+            (Some(png), _) => make::relabel(&paths.sd, &cart, png),
+            (None, LabelKind::Existing) if bare => make::apply_label(&paths.sd, &cart, None),
+            (None, _) => return false,
         };
-        if let Err(e) = make::relabel(&paths.sd, &cart, &png) {
+        if let Err(e) = written {
             eprintln!("slot-mini: studio: label: {e}");
-            return;
+            return false;
         }
-        self.studio.cart.label = Some(make::label_path(&paths.sd, &cart));
+        self.studio.cart.label = png.map(|_| make::label_path(&paths.sd, &cart));
         self.studio.applied(kind);
         self.relabelled = true;
         self.invalidate(gfx);
+        true
+    }
+
+    /// Read the cart's own label once, before anything replaces it.
+    fn remember_existing(&mut self, paths: &Paths) {
+        if self.existing.is_some() {
+            return;
+        }
+        let cart = &self.studio.cart;
+        let art = crate::label_cache::label_art(&paths.sd, cart);
+        let file = cart.label.as_ref().and_then(|p| std::fs::read(p).ok());
+        self.existing = Some(Existing {
+            art,
+            file,
+            bare: cart.label.is_none(),
+        });
     }
 
     fn invalidate(&mut self, gfx: &mut Renderer) {
-        if let Some((t, ..)) = self.cart_tex.take() {
+        for (t, ..) in [self.cart_tex.take(), self.bare_tex.take()]
+            .into_iter()
+            .flatten()
+        {
             gfx.free(t);
         }
         self.built_for = None;
@@ -227,7 +414,19 @@ impl StudioUi {
         for (_, (t, ..)) in self.text.drain() {
             gfx.free(t);
         }
-        if let Some(t) = self.chip_disc.take() {
+        for (_, (t, ..)) in self.stickers.drain() {
+            gfx.free(t);
+        }
+        let liner = self.liner.take().map(|l| l.0);
+        for t in [
+            self.chip_disc.take(),
+            self.printer_body.take(),
+            self.paper.take(),
+            liner,
+        ]
+        .into_iter()
+        .flatten()
+        {
             gfx.free(t);
         }
     }
@@ -256,39 +455,62 @@ impl StudioUi {
             None => crate::label_cache::label_art(&paths.sd, &cart),
         };
         let face = cart_face_with(&cart, art);
-        let mut flat = Sprite::new(face.w, face.h);
-        if shows_interior(&cart) {
-            // A see-through cart: back plastic, then the board, then the shell.
-            let gb = !matches!(cart.platform, Platform::Gba | Platform::Gbav);
-            let shell = slot_mini_ui::gb_shell_of(&cart);
-            let r = match gb {
-                true => Placed {
-                    x: 0.0,
-                    y: 0.0,
-                    w: face.w as f32,
-                    h: face.h as f32,
-                },
-                false => board_in(Placed {
-                    x: 0.0,
-                    y: 0.0,
-                    w: face.w as f32,
-                    h: face.h as f32,
-                }),
-            };
-            for layer in [cart_interior(&cart), cart_backing(shell)] {
-                let s = Sprite::from_rgba(layer.w, layer.h, &layer.rgba)
-                    .resized(r.w.round() as u32, r.h.round() as u32);
-                flat.draw_over(&s, r.x.round() as i32, r.y.round() as i32);
-            }
-        }
-        flat.draw_over(&Sprite::from_rgba(face.w, face.h, &face.rgba), 0, 0);
-        let l = layout(stage.w, cart.platform);
-        let scaled = flat.resized(l.cart_w.round() as u32, l.cart_h.round() as u32);
-        let turned = scaled.rotated(CART_TILT);
+        let turned = tilted(&cart, stage, &face);
         let (w, h) = (turned.w, turned.h);
         self.cart_tex = Some((gfx.upload(turned), w, h));
         self.built_for = Some(key);
         self.cart_tex
+    }
+
+    /// The tilted cart without a label, under the apply scene's sticker.
+    fn bare_face(&mut self, stage: Stage, gfx: &mut Renderer) -> Option<(TexId, u32, u32)> {
+        if self.bare_tex.is_none() {
+            let cart = self.dressed();
+            let face = slot_mini_ui::bare_face(&cart);
+            self.face_wh = Some((face.w as f32, face.h as f32));
+            let turned = tilted(&cart, stage, &face);
+            let (w, h) = (turned.w, turned.h);
+            self.bare_tex = Some((gfx.upload(turned), w, h));
+        }
+        self.bare_tex
+    }
+
+    /// `kind` as a sticker: the cart's label well cut from its face, at the
+    /// size it has on the tray (slot draws the face texture's well).
+    fn sticker(&mut self, kind: LabelKind, stage: Stage, gfx: &mut Renderer) -> Option<TexId> {
+        let cart = self.dressed();
+        let well = well_of(&cart);
+        let title = (kind == LabelKind::Title).then(|| {
+            self.studio
+                .ground
+                .unwrap_or(slot_mini_ui::label_colour(&slot_mini_ui::label_text(&cart)))
+        });
+        if let Some((t, c, w)) = self.stickers.get(&kind) {
+            if *c == title && *w == well {
+                return Some(*t);
+            }
+        }
+        let (lw, lh) = slot_mini_ui::label_size(&cart);
+        let art = match kind {
+            LabelKind::Real | LabelKind::Logo => {
+                let png = &self.prints.get(&kind)?.0;
+                Some(slot_mini_ui::cover_bytes(png, lw, lh)?)
+            }
+            LabelKind::Title => title.map(|c| slot_mini_ui::text_label(&cart, c)),
+            // A cart without art wears the generated label.
+            LabelKind::Existing => self.existing.as_ref().and_then(|e| e.art.clone()),
+        };
+        let face = cart_face_with(&cart, art);
+        let t = tray(stage.w, &cart);
+        let crop = crop(&face, well).resized(
+            t.sticker_w.round().max(1.0) as u32,
+            t.sticker_h.round().max(1.0) as u32,
+        );
+        let tex = gfx.upload(crop);
+        if let Some((old, ..)) = self.stickers.insert(kind, (tex, title, well)) {
+            gfx.free(old);
+        }
+        Some(tex)
     }
 
     fn text(&mut self, gfx: &mut Renderer, s: &str, style: Style) -> (TexId, u32, u32) {
@@ -328,13 +550,18 @@ impl StudioUi {
     }
 
     pub fn draw(&mut self, paths: &Paths, stage: Stage, gfx: &mut Renderer, out: &mut Vec<Draw>) {
+        self.remember_existing(paths);
         ground(stage, out);
         let l = layout(stage.w, self.studio.cart.platform);
         let shown = view(&self.studio, stage.w);
         for item in shown.items {
             match item {
                 Item::Cart => {
-                    if let Some((tex, w, h)) = self.cart_face(paths, stage, gfx) {
+                    let face = match self.scene {
+                        Some(_) => self.bare_face(stage, gfx),
+                        None => self.cart_face(paths, stage, gfx),
+                    };
+                    if let Some((tex, w, h)) = face {
                         let (cx, cy) = (l.cart_x + l.cart_w / 2.0, l.cart_y + l.cart_h / 2.0);
                         out.push(Draw::Tex {
                             x: (cx - w as f32 / 2.0).round(),
@@ -396,14 +623,16 @@ impl StudioUi {
                         alpha,
                     });
                 }
-                Item::Sheet if matches!(self.printer, Printer::Ready) => self.sheet(stage, out),
-                Item::Sheet => {}
+                Item::Sheet => self.sheet(stage, gfx, out),
             }
         }
         if let Screen::Sheet { .. } = self.studio.screen {
             self.printer_message(stage, &l, gfx, out);
         }
         slot_mini_ui::draw_empty_slot(stage, None, out);
+        if self.scene.is_some() {
+            self.apply_cart(stage, gfx, out);
+        }
         self.legends(stage, gfx, out);
     }
 
@@ -474,41 +703,296 @@ impl StudioUi {
         });
     }
 
-    fn sheet(&mut self, stage: Stage, out: &mut Vec<Draw>) {
+    /// slot's `draw_slip`: a liner slip with its sticker, `zoom`ed about
+    /// its centre.
+    #[allow(clippy::too_many_arguments)]
+    fn slip(
+        &mut self,
+        kind: Option<LabelKind>,
+        y: f32,
+        shift: f32,
+        zoom: f32,
+        stage: Stage,
+        gfx: &mut Renderer,
+        out: &mut Vec<Draw>,
+    ) {
         let t = tray(stage.w, &self.studio.cart);
-        let at = match self.studio.screen {
-            Screen::Sheet { at } => at,
-            _ => 0,
+        let (w, h) = (t.slip_w * zoom, t.slip_h * zoom);
+        let (x, y) = (t.x + shift - (w - t.slip_w) / 2.0, y - (h - t.slip_h) / 2.0);
+        out.push(Draw::Rect {
+            x: x + 1.0,
+            y: y + 3.0,
+            w,
+            h,
+            colour: [0.0, 0.0, 0.0, 0.4],
+        });
+        let (liner, lw, lh) = self.liner(stage, gfx);
+        out.push(Draw::Part {
+            x,
+            y,
+            w,
+            h,
+            tex: liner,
+            alpha: 1.0,
+            uv: [0.0, 0.0, t.slip_w / lw as f32, t.slip_h / lh as f32],
+        });
+        let Some(face) = kind.and_then(|k| self.sticker(k, stage, gfx)) else {
+            return;
         };
-        for (i, kind) in self.studio.sheet.clone().into_iter().enumerate() {
-            let y = TRAY_TOP + i as f32 * t.bottom;
-            let lift = if i == at { 4.0 } else { 0.0 };
-            if i == at {
+        let (sw, sh) = match gfx.get(face) {
+            Some(s) if zoom == 1.0 => (s.w as f32, s.h as f32),
+            _ => (t.sticker_w * zoom, t.sticker_h * zoom),
+        };
+        out.push(Draw::Tex {
+            x: x + SLIP_PAD * zoom,
+            y: y + SLIP_PAD * zoom,
+            w: sw,
+            h: sh,
+            tex: face,
+            alpha: 1.0,
+        });
+    }
+
+    /// The slip backing, the size of a slip: slot's `liner_face`.
+    fn liner(&mut self, stage: Stage, gfx: &mut Renderer) -> (TexId, u32, u32) {
+        if let Some(l) = self.liner {
+            return l;
+        }
+        let t = tray(stage.w, &self.studio.cart);
+        let (w, h) = (
+            t.slip_w.round() as u32,
+            (t.slip_h.round() as u32).max(LINER_MIN_H),
+        );
+        let face = slot_mini_ui::liner::liner_face(w, h);
+        let l = (gfx.upload_rgba(face.w, face.h, &face.rgba), w, h);
+        self.liner = Some(l);
+        l
+    }
+
+    /// slot's `draw_studio_sheet`: the slips on the tray, the picked one
+    /// held up, the liner feeding out of the printer, and its light.
+    fn sheet(&mut self, stage: Stage, gfx: &mut Renderer, out: &mut Vec<Draw>) {
+        let t = tray(stage.w, &self.studio.cart);
+        let now = self.now;
+        let picked = match self.studio.screen {
+            Screen::Sheet { at } => self.studio.sheet.get(at).copied(),
+            _ => None,
+        };
+        let scene = self.scene.clone();
+        let used = scene.as_ref().map(|s| s.chosen);
+        let held = |s: &Slip| Some(s.kind) == picked && !s.moving(now) && scene.is_none();
+        let slips: Vec<Slip> = self
+            .slips
+            .iter()
+            .filter(|s| Some(s.kind) != used)
+            .copied()
+            .collect();
+        let piled = t.bottom < t.slip_h;
+        let since = self.picked.map_or(now, |(_, at)| at);
+        let apart = match piled {
+            true => slip_shuffle(now - self.shuffled) * SLIP_SHUFFLE_PX,
+            false => 0.0,
+        };
+        let dim = scene.is_some() || slips.iter().any(held);
+        let rest = |ui: &mut Self, gfx: &mut Renderer, out: &mut Vec<Draw>| {
+            for slip in slips.iter().filter(|s| !held(s)) {
+                let y = TRAY_TOP + slip.y(now);
+                ui.slip(Some(slip.kind), y, apart, 1.0, stage, gfx, out);
+                if dim && !slip.moving(now) {
+                    out.push(Draw::Rect {
+                        x: t.x + apart,
+                        y,
+                        w: t.slip_w,
+                        h: t.slip_h,
+                        colour: [0.0, 0.0, 0.0, 0.5],
+                    });
+                }
+            }
+        };
+        let swapped = !piled || now - self.shuffled >= SLIP_SHUFFLE_MS / 2.0;
+        if swapped {
+            rest(self, gfx, out);
+        }
+        for slip in slips.iter().filter(|s| held(s)) {
+            let zoom = if piled { 1.0 } else { slip_zoom(now - since) };
+            let (w, h) = (t.slip_w * zoom, t.slip_h * zoom);
+            let x = t.x - apart - (w - t.slip_w) / 2.0;
+            let y = TRAY_TOP + slip.y(now) - (h - t.slip_h) / 2.0;
+            for (grow, colour) in [(6.0, [0.0, 0.0, 0.0, 0.85]), (4.0, [1.0, 1.0, 1.0, 1.0])] {
                 out.push(Draw::Rect {
-                    x: t.x - 3.0,
-                    y: y - 3.0 - lift,
-                    w: t.slip_w + 6.0,
-                    h: t.slip_h + 6.0,
-                    colour: [1.0, 1.0, 1.0, 1.0],
+                    x: x - grow,
+                    y: y - grow,
+                    w: w + 2.0 * grow,
+                    h: h + 2.0 * grow,
+                    colour,
                 });
             }
-            out.push(Draw::Rect {
-                x: t.x,
-                y: y - lift,
-                w: t.slip_w,
-                h: t.slip_h,
-                colour: PAPER,
+            self.slip(
+                Some(slip.kind),
+                TRAY_TOP + slip.y(now),
+                -apart,
+                zoom,
+                stage,
+                gfx,
+                out,
+            );
+        }
+        if !swapped {
+            rest(self, gfx, out);
+        }
+        if let Some(scene) = &scene {
+            let (stage_now, p) = apply_stage(now - scene.started);
+            let lifted = !matches!(stage_now, ApplyStage::Peel | ApplyStage::Toss);
+            let kind = (!lifted).then_some(scene.chosen);
+            let shift = match stage_now {
+                ApplyStage::Roll => backing_shift(p, stage.w - t.x),
+                _ => 0.0,
+            };
+            self.slip(kind, TRAY_TOP + scene.used_y, shift, 1.0, stage, gfx, out);
+        }
+        // The liner feeding out under the printer, moved on by each print.
+        let printing = self.slips.iter().find(|s| s.printing(now));
+        let travel = self.prints_made as f32 * t.slip_h + printing.map_or(0.0, |s| s.y(now) - s.y1);
+        let (liner, lw, lh) = self.liner(stage, gfx);
+        let top = lh as f32 - LINER_TILE - travel.rem_euclid(LINER_TILE);
+        out.push(Draw::Part {
+            x: t.x,
+            y: 0.0,
+            w: t.slip_w,
+            h: 24.0,
+            tex: liner,
+            alpha: 1.0,
+            uv: [0.0, top / lh as f32, t.slip_w / lw as f32, 24.0 / lh as f32],
+        });
+        let (px, pw) = (t.printer_x, t.printer_w);
+        out.push(Draw::Rect {
+            x: px,
+            y: 20.0,
+            w: pw,
+            h: 34.0,
+            colour: [0.0, 0.0, 0.0, 0.45],
+        });
+        let body = *self.printer_body.get_or_insert_with(|| {
+            let (w, h) = (slot_mini_ui::SLOT_W, slot_mini_ui::SLOT_H);
+            gfx.upload_rgba(w, h, slot_mini_ui::slot_plugged_light())
+        });
+        if let Some(b) = gfx.get(body) {
+            let (bw, bh) = (b.w as f32, b.h as f32);
+            out.push(Draw::Part {
+                x: px,
+                y: 16.0,
+                w: pw,
+                h: 32.0,
+                tex: body,
+                alpha: 1.0,
+                uv: [0.1, 0.1, pw / bw, 32.0 / bh],
             });
-            if let Some((_, tex, ..)) = self.prints.get(&kind) {
-                out.push(Draw::Tex {
-                    x: t.x + SLIP_PAD,
-                    y: y - lift + SLIP_PAD,
-                    w: t.sticker_w,
-                    h: t.sticker_h,
-                    tex: *tex,
-                    alpha: if i == at { 1.0 } else { 0.6 },
+        }
+        let waiting = matches!(self.printer, Printer::Fetching(_));
+        let lit = self.slips.iter().any(|s| s.lit(now));
+        let colour = match printer_light(lit, waiting, now) {
+            Light::Printing => LIGHT_PRINTING,
+            Light::Waiting => LIGHT_WAITING,
+            Light::Off => LIGHT_OFF,
+        };
+        out.push(Draw::Rect {
+            x: px + pw - 18.0,
+            y: 28.0,
+            w: 7.0,
+            h: 7.0,
+            colour,
+        });
+    }
+
+    /// slot's `draw_apply_cart` (the top half; the bare cart is drawn in
+    /// the cart's place): the old label peels off and is tossed, the new
+    /// one lifts from its slip, flies to the cart and rolls on.
+    fn apply_cart(&mut self, stage: Stage, gfx: &mut Renderer, out: &mut Vec<Draw>) {
+        let Some(scene) = self.scene.clone() else {
+            return;
+        };
+        let cart = self.dressed();
+        let l = layout(stage.w, cart.platform);
+        let (x, y, w, h) = (l.cart_x, l.cart_y, l.cart_w, l.cart_h);
+        let well = well_of(&cart);
+        let Some((fw, fh)) = self.face_wh else {
+            return;
+        };
+        let (sx, sy) = (w / fw, h / fh);
+        let rect = [
+            x + well[0] as f32 * sx,
+            y + well[1] as f32 * sy,
+            well[2] as f32 * sx,
+            well[3] as f32 * sy,
+        ];
+        let t = tray(stage.w, &cart);
+        let spot = [t.x + SLIP_PAD, TRAY_TOP + scene.used_y + SLIP_PAD];
+        let centre = [x + w / 2.0, y + h / 2.0];
+        let tilt = CART_TILT;
+        let seat = turned(rect, centre, tilt)[0];
+        let (dx, dy) = (seat[0] - rect[0], seat[1] - rect[1]);
+        let seated = Pose {
+            x: dx,
+            y: dy,
+            z: 0.0,
+            turn_deg: tilt,
+            scale: 1.0,
+        };
+        let pose_at = |p: f32| {
+            let arc = (p * std::f32::consts::PI).sin();
+            Pose {
+                x: dx + (spot[0] - seat[0]) * p,
+                y: dy + (spot[1] - seat[1]) * p - 30.0 * arc,
+                z: 90.0 * arc,
+                turn_deg: tilt * (1.0 - p),
+                scale: 1.0 + (t.sticker_w / rect[2] - 1.0) * p,
+            }
+        };
+        let (stage_now, p) = apply_stage(self.now - scene.started);
+        let (Some(old), Some(new)) = (
+            self.sticker(scene.was, stage, gfx),
+            self.sticker(scene.chosen, stage, gfx),
+        ) else {
+            return;
+        };
+        let paper = *self.paper.get_or_insert_with(|| {
+            let [r, g, b, _] = PAPER.map(|c| (c * 255.0).round() as u8);
+            gfx.upload_rgba(1, 1, &[r, g, b, 255])
+        });
+        let focus = [stage.w / 2.0, 240.0];
+        let stick = |tex: TexId, flat: f32, curl: f32, pose: Pose, out: &mut Vec<Draw>| {
+            for strip in strips(rect, flat, curl, &pose, focus) {
+                let (tex, uv) = match strip.back {
+                    true => (paper, [0.0, 0.0, 1.0, 1.0]),
+                    false => (tex, strip.uv),
+                };
+                out.push(Draw::Quad {
+                    corners: strip.corners,
+                    tex,
+                    uv,
+                    alpha: 1.0,
                 });
             }
+        };
+        match stage_now {
+            ApplyStage::Peel => {
+                let q = p * p;
+                stick(old, 1.0 - q, 150.0 + 270.0 * q, seated, out);
+            }
+            ApplyStage::Toss => {
+                let (q, arc) = (p * p, (p * std::f32::consts::PI).sin());
+                let pose = Pose {
+                    x: dx - 520.0 * q,
+                    y: dy - 60.0 * q - 50.0 * arc,
+                    z: 90.0 * arc,
+                    turn_deg: tilt - 24.0 * q,
+                    scale: 1.0,
+                };
+                stick(old, 0.0, 420.0, pose, out);
+            }
+            ApplyStage::Lift => stick(new, 1.0 - p, 150.0, pose_at(1.0), out),
+            ApplyStage::ToCart => stick(new, 0.0, 150.0, pose_at(1.0 - p), out),
+            ApplyStage::Roll => stick(new, p, 150.0, seated, out),
         }
     }
 
@@ -542,10 +1026,18 @@ impl StudioUi {
 
     fn legends(&mut self, stage: Stage, gfx: &mut Renderer, out: &mut Vec<Draw>) {
         let mut legends = self.studio.legends();
-        if matches!(self.studio.screen, Screen::Sheet { .. })
-            && !matches!(self.printer, Printer::Ready)
-        {
-            legends.retain(|l| *l != Legend::Apply);
+        // slot's `draw_studio_legends`: APPLY only with the picked slip at
+        // rest, and not while a label goes on.
+        if let Screen::Sheet { at } = self.studio.screen {
+            let picked = self.studio.sheet.get(at).copied();
+            let now = self.now;
+            let ready = self
+                .slips
+                .iter()
+                .any(|s| Some(s.kind) == picked && !s.moving(now));
+            if !ready || self.scene.is_some() {
+                legends.retain(|l| *l != Legend::Apply);
+            }
         }
         let hint = |l: &Legend| -> (&'static str, &'static str) {
             match l {
@@ -622,4 +1114,42 @@ fn ground(stage: Stage, out: &mut Vec<Draw>) {
         let a = if i % 5 == 0 { 0.34 } else { 0.13 };
         out.push(line(0.0, i as f32 * 24.0, w, 1.0, a));
     }
+}
+
+/// The cart face, back plastic and board first for a see-through cart,
+/// scaled to the studio's cart and tilted by slot's `CART_TILT`.
+fn tilted(cart: &Cart, stage: Stage, face: &slot_mini_ui::CartFace) -> Sprite {
+    let mut flat = Sprite::new(face.w, face.h);
+    if shows_interior(cart) {
+        let gb = !matches!(cart.platform, Platform::Gba | Platform::Gbav);
+        let shell = slot_mini_ui::gb_shell_of(cart);
+        let whole = Placed {
+            x: 0.0,
+            y: 0.0,
+            w: face.w as f32,
+            h: face.h as f32,
+        };
+        let r = if gb { whole } else { board_in(whole) };
+        for layer in [cart_interior(cart), cart_backing(shell)] {
+            let s = Sprite::from_rgba(layer.w, layer.h, &layer.rgba)
+                .resized(r.w.round() as u32, r.h.round() as u32);
+            flat.draw_over(&s, r.x.round() as i32, r.y.round() as i32);
+        }
+    }
+    flat.draw_over(&Sprite::from_rgba(face.w, face.h, &face.rgba), 0, 0);
+    let l = layout(stage.w, cart.platform);
+    flat.resized(l.cart_w.round() as u32, l.cart_h.round() as u32)
+        .rotated(CART_TILT)
+}
+
+/// The face's label well (`[x, y, w, h]` in face pixels) as a sprite.
+fn crop(face: &slot_mini_ui::CartFace, well: [u32; 4]) -> Sprite {
+    let [x, y, w, h] = well;
+    let (w, h) = (w.min(face.w - x.min(face.w)), h.min(face.h - y.min(face.h)));
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for row in y..y + h {
+        let at = ((row * face.w + x) * 4) as usize;
+        rgba.extend_from_slice(&face.rgba[at..at + (w * 4) as usize]);
+    }
+    Sprite::from_rgba(w, h, &rgba)
 }

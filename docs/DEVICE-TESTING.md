@@ -298,6 +298,19 @@ Put two pictures in `Wallpapers/` at the SD root: any name (say
       `Recents`), the first frame still comes within about a second and
       resident memory (section 3) stays under 40 MB. Note both.
 
+## 16. Label printer animation (0.6.2)
+
+Needs Wi-Fi and the label service turned on (README, label printer).
+
+- [ ] SELECT on a GBA cart, A on the printer row: the light turns blue while
+      fetching, then green; the slips print and drop one after the other.
+- [ ] Down picks the lower slip; it lifts and zooms smoothly.
+- [ ] A: the old label peels off and tumbles away, the new label lifts off its
+      slip, flies over and rolls onto the cart. Note whether the curl stutters
+      (the strips drawn per frame are decision 59's concern).
+- [ ] B during the scene does nothing; after it, B closes the studio and the
+      shelf shows the new label.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

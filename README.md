@@ -334,7 +334,6 @@ To ship a new version, bump `version` in `Cargo.toml` and merge to `main`.
 Possible next steps, roughly in order of effort:
 
 - Re-tinting **logo labels** after the studio is closed (slot keeps the logo so it can re-tint it).
-- The label printer's **print and tear** animation, and the studio cart's apply animation.
 - The **sticker curl** on the menu screen.
 
 Not planned: other Onion systems, a core picker for Game Boy carts, and features that belong to RetroArch or to

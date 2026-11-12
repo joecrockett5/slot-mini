@@ -33,7 +33,7 @@ slot-mini renders.
 | Insert (cart slides into the slot) | yes, simplified | The cart drops into the slot mouth over ~300 ms, the insert sound plays, then slot-mini exits. |
 | Eject (cart rises out of the slot) | yes, simplified | When slot-mini starts straight after a game it opens on that cart and plays the rise in reverse. |
 | Cart Studio (SELECT) | yes, simplified | Cutting-mat ground, the cart on the left, rows on the right: Label Printer, Shell (GB only), Shell Colour, Finish. See below. |
-| Label printer and slips | yes, simplified | Two choices (scanned label, logo label) shown as flat slips; no print/tear animation. |
+| Label printer and slips | yes | slot's printer, paper strip and light; slips print, drop and shuffle, and the chosen label peels and flies onto the cart (0.6.2). Back faces are plain paper. |
 | About (MENU) | yes | slot's sticker on the menu ground, plus slot-mini's own rows: boot launcher switch, sounds, exit to Onion. |
 | Settings (quick menu) | partly | Folded into the About screen: only settings slot-mini needs. |
 | In-game menu (tap MENU) and eject (hold MENU) | yes, for games slot-mini launches (0.2.0) | slot's quick-menu type, pointer and layout over the frozen game; rows Resume, Save State, Load State, Settings (RetroArch's menu), Game Switcher (Onion's), Exit Game. See below. |
@@ -64,9 +64,9 @@ slot-mini renders.
 | LCD3x subpixel mask | In-game screen | Dropped: in-game is RetroArch's. |
 | Colour grading (saturation, contrast, blue light, dim) | In-game and the whole frame | Dropped (out of scope). |
 | Background blur | Menu ground behind the quick menu (`background_default_blur.png`) | Baked: slot ships the blurred default as a PNG; slot-mini uses it. Custom wallpapers are box-blurred once on the CPU when a menu first opens. |
-| Sticker paper curl (`Draw::Paper`) | About sticker peel, print slips | Baked flat: the sticker is drawn without the curl. |
+| Sticker paper curl (`Draw::Paper`) | About sticker peel, apply-label scene | The apply scene's curl is slot's `sticker_curl` strips (8 px wide) drawn as software quads; back faces are flat paper rather than slot's paper texture. The About sticker is not drawn yet. |
 | Rotated carts (`Draw::Turned`) | Studio cart tilt, core picker lid and chip, link screen | The studio cart is rotated once in software when the studio opens. The core picker's lid and chip are drawn turned every frame by a bilinear software blit (`Canvas::blit_turned`). |
-| Free quads (`Draw::Quad`) | Unwrap and apply-label animations | Dropped. A new label simply appears on the cart. |
+| Free quads (`Draw::Quad`) | Unwrap and apply-label animations | `Canvas::blit_quad`: two affine-mapped triangles, bilinear, per frame. Used by the apply scene; unwrap is not drawn. |
 | Bilinear scaling | Everywhere | Pre-scaled sprites; nearest-neighbour only during motion. |
 | Alpha blending | Everywhere | Software `src-over` with 8-bit alpha, skipping fully transparent and fully opaque runs. |
 
@@ -124,9 +124,13 @@ slot's. The tilted cart is rotated once in software. Other studio goldens:
 
 ![Label printer](parity/studio-printer.png)
 
-slot-mini: `studio_printer.png`, against a local test server. slot prints
-slips from a printer with paper, tear and apply animations; slot-mini shows
-the two slips flat and applies the chosen one directly.
+slot-mini: `studio_printer.png`, against a local test server. slot's print,
+drop, shuffle and apply scene run with slot's stages and timings
+(`studio_printing.png`, `studio_slip_picked.png`, `studio_peel.png`,
+`studio_to_cart.png`, `studio_applied.png`). The curl keeps slot's 8 px
+strips: on the host a curled 205x106 sticker draws in about 0.5 ms
+(decision 59). The liner is cut to the slip's size and back faces are plain
+paper.
 
 ### About (MENU)
 

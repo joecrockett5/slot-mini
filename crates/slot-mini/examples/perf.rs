@@ -157,4 +157,70 @@ fn main() {
             app.gfx.bytes() as f64 / 1e6,
         );
     }
+    studio(&paths);
+}
+
+/// The cart studio: a whole frame redrawn, and the apply scene's curling
+/// sticker drawn as software quads (slot's 8 px strips).
+fn studio(paths: &Paths) {
+    let status = FixedStatus {
+        battery: Some(80),
+        wifi: true,
+        clock: (12, 0),
+        charging: false,
+    };
+    let opts = Options {
+        sound: None,
+        face_wait: None,
+        seed: 1,
+    };
+    let mut app = App::new(paths.clone(), Box::new(status), opts, 0);
+    let mut frames = [
+        Canvas::new(SCREEN_W, SCREEN_H),
+        Canvas::new(SCREEN_W, SCREEN_H),
+    ];
+    let mut now = 16;
+    app.tick(now);
+    app.handle(Event::Press(Button::Select));
+    app.handle(Event::Release(Button::Select));
+    // Two canvases in turn, so every frame is drawn in full.
+    let mut total = Duration::ZERO;
+    for i in 0..120 {
+        now += 16;
+        let t = Instant::now();
+        app.tick(now);
+        app.render(&mut frames[i % 2]);
+        if i > 0 {
+            total += t.elapsed();
+        }
+    }
+    println!(
+        "studio: full frame avg {:.2} ms",
+        total.as_secs_f64() * 1000.0 / 119.0
+    );
+    let sticker = slot_mini_gfx::Sprite::from_rgba(205, 106, &vec![180u8; 205 * 106 * 4]);
+    let rect = [70.0, 160.0, 205.0, 106.0];
+    let mut canvas = Canvas::new(SCREEN_W, SCREEN_H);
+    for (what, flat, curl) in [
+        ("flat", 1.0, 150.0),
+        ("peeling", 0.5, 285.0),
+        ("tossed", 0.0, 420.0),
+    ] {
+        let pose = slot_mini_ui::sticker_curl::Pose {
+            turn_deg: -7.0,
+            ..slot_mini_ui::sticker_curl::Pose::REST
+        };
+        let strips = slot_mini_ui::sticker_curl::strips(rect, flat, curl, &pose, [320.0, 240.0]);
+        let t = Instant::now();
+        for _ in 0..100 {
+            for s in &strips {
+                canvas.blit_quad(&sticker, s.corners, s.uv, 255);
+            }
+        }
+        println!(
+            "studio: {what} sticker, {} strips, {:.2} ms",
+            strips.len(),
+            t.elapsed().as_secs_f64() * 1000.0 / 100.0
+        );
+    }
 }

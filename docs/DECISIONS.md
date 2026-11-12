@@ -72,10 +72,11 @@ Calls made without asking, and why. Newest last.
     1024x914); the test fails in slot at e66715d and is ignored here with
     that note. Labels are scaled to cover and centre-cropped, so either size
     shows correctly.
-20. **The on-device studio is flat.** slot's state machine and layout
-    (`studio.rs`, `studio_view.rs`) are copied unchanged; the cart is tilted
-    once in software, chips are drawn as discs, and printed labels appear as
-    plain slips without the print, tear and apply animations.
+20. **The on-device studio is drawn in software.** slot's state machine and
+    layout (`studio.rs`, `studio_view.rs`) are copied unchanged; the cart is
+    tilted once in software and chips are drawn as discs. Until 0.6.2 printed
+    labels were plain slips; the print and apply animations came in 0.6.2
+    (decision 59).
 21. **The label printer row is always shown.** With the service off it says
     labels can be made in Cart Studio on a computer; without Wi-Fi it says
     the printer needs Wi-Fi (slot hides the row without Wi-Fi).
@@ -265,3 +266,12 @@ Calls made without asking, and why. Newest last.
     its settings; slot-mini has no wallpaper setting, and a card without
     shelf-named files behaves as before. Each shelf wallpaper stays decoded
     (about 1 MB at 640x420), so five cost about 5 MB of the memory budget.
+59. **The print and apply animations keep slot's curl** (0.6.2, the
+    maintainer's choice: simplify the curl only where it is too slow). slot's
+    `sticker_curl` strips, stages and timings are copied; the GPU quads
+    become `Canvas::blit_quad`, two affine-mapped bilinear triangles. On the
+    host the 26 strips of a curled sticker draw in about 0.5 ms and a whole
+    studio frame in 0.3 ms, so by the ratios in PROGRESS the 8 px strips fit
+    a 60 Hz frame on the A7 and are kept. If the device shows them too slow,
+    widen the strips (fewer quads) before dropping the curl. While the scene
+    plays every button is ignored, as in slot.
