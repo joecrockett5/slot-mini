@@ -1,6 +1,6 @@
 //! The grid view, as the PC app shows it: golden images at 640x480 and its
-//! behaviour. The Miyoo build has no grid yet, so these need the `pc`
-//! feature (`cargo test --workspace` turns it on).
+//! behaviour. These need the `pc` feature (`cargo test --workspace` turns it
+//! on); the Miyoo's grid is in `tests/device_grid.rs`.
 #![cfg(feature = "pc")]
 
 mod common;

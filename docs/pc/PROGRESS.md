@@ -90,6 +90,14 @@ things; DECISIONS #82 to #88.
   RetroArch honours `-f` and the window position. `docs/pc/TESTING.md`
   has the steps.
 
+## 0.2.1: the grid's row height, once a frame
+
+Brief 4 (the Miyoo's grid) found that the shared grid worked out its row
+height by walking the shelf once per cart per frame. It is now worked
+out once a walk (`crates/slot-mini-ui/src/grid.rs`). Nothing the PC
+shows changed: every PC golden is byte-identical. The Miyoo's pacing
+and lean faces are behind `!paths.is_pc()` and do not apply here.
+
 ## Not done, and why
 
 - No sync: brief 3. The seams are the MENU Sync page, the status icon

@@ -74,6 +74,11 @@ pub struct Grid {
     down: Option<(usize, f32)>,
     held: Option<(Step, Millis, usize)>,
     settled: bool,
+    /// Rows kept decoded past the one beside the view, and the least time
+    /// between two steps of a held Up or Down (0: the shelf's pace). A slow
+    /// machine sets both (`paced`).
+    ahead: u8,
+    row_gap: Millis,
 }
 
 fn row_h(shelf: &Shelf) -> f32 {
@@ -101,7 +106,13 @@ fn left(canvas: Canvas) -> f32 {
 
 /// The rail under row `r`, before scrolling.
 fn rail_y(shelf: &Shelf, r: usize) -> f32 {
-    TOP + r as f32 * pitch(shelf) + row_h(shelf)
+    rail_at(row_h(shelf), r)
+}
+
+/// The same for a row height already worked out: `row_h` reads the whole
+/// shelf, so anything that walks the carts asks for it once.
+fn rail_at(row_h: f32, r: usize) -> f32 {
+    TOP + r as f32 * (row_h + RAIL_H + ROW_GAP) + row_h
 }
 
 /// How far the rows can scroll: the last rail stays clear of the slot.
@@ -115,6 +126,15 @@ fn max_scroll(shelf: &Shelf) -> f32 {
 impl Grid {
     pub fn new() -> Grid {
         Grid::default()
+    }
+
+    /// For a machine that builds faces slowly: keep `ahead` more rows
+    /// decoded on each side, and hold a held Up or Down to one row every
+    /// `row_gap` ms. A row brings four new faces where a shelf step brings
+    /// one, and a frame waits for the faces it shows.
+    pub fn paced(&mut self, ahead: u8, row_gap: Millis) {
+        self.ahead = ahead;
+        self.row_gap = row_gap;
     }
 
     /// Where the rows should rest so the selected row is in full view.
@@ -233,7 +253,11 @@ impl Grid {
             return;
         }
         self.step(shelf, step);
-        self.held = Some((step, now + repeat_gap(fired), fired + 1));
+        let gap = match step {
+            Step::Up | Step::Down => repeat_gap(fired).max(self.row_gap),
+            Step::Left | Step::Right => repeat_gap(fired),
+        };
+        self.held = Some((step, now + gap, fired + 1));
     }
 
     /// Scroll by `rows` (the mouse wheel): the selection moves that many
@@ -251,13 +275,17 @@ impl Grid {
 
     /// Where cart `i` rests, as `[x, y, w, h]`.
     pub fn cell(&self, shelf: &Shelf, canvas: Canvas, i: usize) -> [f32; 4] {
+        self.cell_in(shelf, canvas, i, row_h(shelf))
+    }
+
+    fn cell_in(&self, shelf: &Shelf, canvas: Canvas, i: usize, row_h: f32) -> [f32; 4] {
         let (cw, ch) = shelf.carts.get(i).map_or((0, 0), |c| cart_box(c.platform));
         let (w, h) = (
             (cw as f32 * GRID_SCALE).round(),
             (ch as f32 * GRID_SCALE).round(),
         );
         let x = left(canvas) + (i % GRID_COLS) as f32 * CELL_W + ((CELL_W - w) / 2.0).round();
-        let y = rail_y(shelf, i / GRID_COLS) - h - self.scroll.round();
+        let y = rail_at(row_h, i / GRID_COLS) - h - self.scroll.round();
         [x, y, w, h]
     }
 
@@ -286,7 +314,7 @@ impl Grid {
     /// The carts in view or within a row of it (kept decoded, so a scroll
     /// by one row shows faces at once).
     pub fn near(&self, shelf: &Shelf, canvas: Canvas) -> Vec<usize> {
-        self.within(shelf, canvas, pitch(shelf))
+        self.within(shelf, canvas, pitch(shelf) * (1.0 + self.ahead as f32))
     }
 
     fn within(&self, shelf: &Shelf, canvas: Canvas, margin: f32) -> Vec<usize> {
@@ -295,8 +323,9 @@ impl Grid {
             return out;
         }
         out.push(shelf.index);
+        let row_h = row_h(shelf);
         for i in 0..shelf.carts.len() {
-            let [_, y, _, h] = self.cell(shelf, canvas, i);
+            let [_, y, _, h] = self.cell_in(shelf, canvas, i, row_h);
             if i != shelf.index && y + h > -margin && y - LIFT < FLOOR + margin {
                 out.push(i);
             }
@@ -314,8 +343,9 @@ impl Grid {
         if !shelf.carts.is_empty() && x >= sx && x < sx + sw && y >= sy && y < sy + sh {
             return Some(shelf.index);
         }
+        let row_h = row_h(shelf);
         (0..shelf.carts.len()).find(|&i| {
-            let [cx, cy, cw, ch] = self.cell(shelf, canvas, i);
+            let [cx, cy, cw, ch] = self.cell_in(shelf, canvas, i, row_h);
             x >= cx && x < cx + cw && y >= cy && y < cy + ch
         })
     }
@@ -338,9 +368,10 @@ impl Grid {
         }
         let tone = usize::from(light);
         let scroll = self.scroll.round();
+        let row_h = row_h(shelf);
         for r in 0..rows(shelf) {
-            let y = rail_y(shelf, r) - scroll;
-            if y + RAIL_H + 3.0 <= 0.0 || y - row_h(shelf) - LIFT >= FLOOR {
+            let y = rail_at(row_h, r) - scroll;
+            if y + RAIL_H + 3.0 <= 0.0 || y - row_h - LIFT >= FLOOR {
                 continue;
             }
             let (x, w) = (RAIL_INSET, canvas.w - 2.0 * RAIL_INSET);
@@ -362,7 +393,7 @@ impl Grid {
         let skip = |i: usize| hidden == Some(shelf.carts[i].stem.as_str());
         let mut top: Vec<(usize, f32)> = Vec::new();
         for i in 0..shelf.carts.len() {
-            let rect = self.cell(shelf, canvas, i);
+            let rect = self.cell_in(shelf, canvas, i, row_h);
             if rect[1] + rect[3] <= 0.0 || rect[1] - LIFT >= FLOOR || skip(i) {
                 continue;
             }

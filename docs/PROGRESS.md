@@ -591,7 +591,42 @@ nothing in the launcher changed in it.
 - The PC app (`crates/slot-mini-pc`, brief 2) has its own progress file,
   `docs/pc/PROGRESS.md`.
 
+## 0.7.0: sync with slot-mini PC, and the grid view
+
+Brief 4 (`docs/briefs/04-device-sync.md`); its own progress file is
+`docs/sync/DEVICE-PROGRESS.md`, and the decisions are #101 to #118.
+
+- The Miyoo is a sync client (`crates/slot-mini/src/sync.rs`): MENU ->
+  Settings -> Sync (pair, Auto sync, Unpair), MENU -> Sync now, a status
+  icon beside Wi-Fi, and automatic syncs at start, on a poke from the
+  PC, before a launch (capped at 1.5 s from the press) and after a game
+  (the in-game helper's `--push` in app mode). Unpaired, nothing runs
+  and nothing on the screen differs.
+- The grid view: R2, or MENU -> Settings -> View, kept per shelf in
+  `data/views.txt`. The scrolling shelf is still the default.
+- Settings scrolls (seven rows shown).
+- Tests: `sync.rs` (the pages and Sync now against a local hub),
+  `sync_cycle.rs` (the real binary in the fake runtime: start, poke,
+  launch, helper push, shutdown), `sync_budget.rs` (memory during a
+  96 MB transfer), `device_grid.rs`. Every carousel golden is
+  byte-identical; the five `about*` goldens that show the Settings list
+  moved for its new rows.
+- Figures (decision #117; qemu-armv7 and x86-64, no device): first frame
+  341 to 385 ms with 207 carts (0.6.6: 336 to 388); grid 2.5 ms a frame
+  on average with none over 16.7 ms; peak memory 37.5 MB scrolling a
+  shelf, 36.8 MB in the grid, 36.3 MB during Sync now; the binary grew
+  by 373 KB to 5.65 MB.
+- The PC app is 0.2.1: it shares the grid, whose row height is now worked
+  out once a frame, not once a cart. Nothing else in it changed and its
+  goldens are the same.
+
 ## Open questions
+
+- Sync: how long does the pull before a launch really take on the
+  Miyoo's Wi-Fi, and does the helper's push finish before Onion's menu
+  is back? (Device test, section 19.)
+- The grid: is a held Down smooth with a couple of hundred carts, and
+  where does VmHWM end up? (Device test, section 20.)
 
 - On the development build: does the overlay Game Switcher started from
   slot-mini's menu draw and resume as from Onion's MENU? (Device test.)

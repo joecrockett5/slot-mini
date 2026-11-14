@@ -45,6 +45,10 @@ pub struct Settings {
     /// Show slot's Recents shelf: the last games launched from slot-mini.
     /// (slot's is off until switched on; slot-mini's is on.)
     pub recents: bool,
+    /// Sync with the paired PC by itself: at start, after a game, when the
+    /// PC says something changed and before a launch (MENU -> Settings ->
+    /// Sync). On once paired; nothing happens while unpaired.
+    pub auto_sync: bool,
 }
 
 impl Default for Settings {
@@ -59,6 +63,7 @@ impl Default for Settings {
             boot_launcher: false,
             boot_screen: false,
             recents: true,
+            auto_sync: true,
         }
     }
 }
@@ -94,6 +99,7 @@ impl Settings {
             boot_launcher: on(m.get("boot_launcher"), d.boot_launcher),
             boot_screen: on(m.get("boot_screen"), d.boot_screen),
             recents: on(m.get("recents"), d.recents),
+            auto_sync: on(m.get("auto_sync"), d.auto_sync),
         }
     }
 
@@ -107,6 +113,11 @@ impl Settings {
         text = ini::set(&text, "boot_launcher", Some(flag(self.boot_launcher)))?;
         text = ini::set(&text, "boot_screen", Some(flag(self.boot_screen)))?;
         text = ini::set(&text, "recents", Some(flag(self.recents)))?;
+        // Only once it has been touched: an unpaired Miyoo's file stays as
+        // it was.
+        if !self.auto_sync || text.contains("auto_sync") {
+            text = ini::set(&text, "auto_sync", Some(flag(self.auto_sync)))?;
+        }
         text = ini::set(
             &text,
             "clock",

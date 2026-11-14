@@ -335,6 +335,137 @@ Needs Wi-Fi and MENU -> Settings -> Online labels on (README, label printer).
 - [ ] Online labels: Off, restart slot-mini: nothing more is fetched, and
       the printer points to Cart Studio.
 
+## 19. Sync with slot-mini PC (0.7.0)
+
+Needs a Windows PC running slot-mini PC 0.2.0 or later on the same Wi-Fi.
+Do these in order: each step risks a little more than the one before.
+Before any of it, copy `Saves/CurrentProfile/` off the card.
+
+**Unpaired (nothing may have changed)**
+
+- [ ] After the update, without pairing: MENU has no Sync now row, the
+      footer has no new icon, `App/slot-mini/data/sync/` does not exist,
+      and a game starts and ejects exactly as before. Note the
+      first-frame time and compare it with section 3's.
+
+**Pair**
+
+- [ ] MENU -> Settings: the list scrolls, with View and Sync among the
+      rows. A on Sync, then A on "Pair with a PC": the PC is listed by
+      its name within a couple of seconds.
+- [ ] A on the PC: both screens show the same six-digit code. A on the
+      Miyoo, then confirm on the PC: "Paired with <name>".
+- [ ] With Wi-Fi off, the page says so instead of searching. With the PC
+      app closed: "No PC found", and A looks again.
+- [ ] B at each step cancels and leaves the Miyoo unpaired.
+
+**Sync now, with a few games**
+
+- [ ] Start small: a PC library of three or four games, or a Miyoo with
+      a few. MENU -> Sync now: the sticker shows the PC's name, the item
+      and "n of m", then "Sync finished" with what moved each way.
+- [ ] The shelf shows the new carts with no restart, with their labels,
+      shells and hearts.
+- [ ] Start one of the games that arrived: it runs. Start one that was
+      already there: its save is the one you had.
+- [ ] The footer icon beside Wi-Fi: two arrows while it syncs, a tick after.
+- [ ] Press B during a long transfer: the sync stops, nothing half
+      written is left in `Roms/` (every ROM there starts), and Sync now
+      again carries on.
+- [ ] Note how long a 16 MB and a 32 MB ROM take, and whether the menu
+      stayed responsive meanwhile.
+
+**Memory and space**
+
+- [ ] During a Sync now that copies ROMs, read `VmHWM` from
+      `/proc/<pid>/status` (over SSH or telnet): under 40 MB.
+- [ ] With the card nearly full (under 100 MB free), sync a library
+      bigger than the space: the summary says how many games did not
+      fit, saves still sync, and at least 64 MB stays free on the card.
+
+**Auto sync**
+
+- [ ] Auto sync: On (the default). Quit slot-mini and start it with the
+      PC running: the icon shows its two arrows for a moment after the shelf is up, and
+      the first frame is no later than unpaired.
+- [ ] Close a game on the PC: within a few seconds the Miyoo, sitting on
+      the shelf, syncs by itself (two arrows, then a tick). Sitting in the studio
+      or MENU it does not, until you are back on the shelf.
+- [ ] Leave the Miyoo on the shelf for ten minutes, paired, PC off: it
+      stays cool and the battery falls no faster than before the update.
+- [ ] Auto sync: Off: none of the above happens; Sync now still works.
+
+**Play on the PC, then the Miyoo; and the reverse**
+
+- [ ] Play a game on the PC, make progress in its in-game save, close
+      it. On the Miyoo start the same game: it starts no more than about
+      a second later than usual and has the PC's progress.
+- [ ] Carry on, eject, and open the game on the PC: it has the Miyoo's
+      progress. In boot-launcher mode the save goes up when the shelf
+      comes back; in app mode straight after the game (see below).
+- [ ] Hold A to start fresh: still starts fresh.
+
+**A deliberate conflict**
+
+- [ ] Turn Wi-Fi off on the Miyoo. Play the same game on both and save
+      in each. Turn Wi-Fi on and Sync now: the summary says "1 save
+      conflict", the footer icon shows "!", and the PC's cart wears an
+      amber "!".
+- [ ] The later save is the one both sides run. On the PC, Sync ->
+      Conflicts shows both copies; "Use the other copy", then Sync now on
+      the Miyoo: the Miyoo has the other save and the "!" is gone.
+- [ ] Nothing was deleted at any point: the copy not in use is on the
+      PC, beside the save, as `<game>.srm.conflict-<who>-<when>`.
+
+**App mode and boot-launcher mode**
+
+- [ ] App mode (slot-mini started from Apps): play, eject. Onion's menu
+      comes back as promptly as before; the save reaches the PC within
+      about ten seconds without opening slot-mini. Check
+      `.tmp_update/logs/slot-mini.log` for the push.
+- [ ] App mode, In-game menu: Off: MENU in the game is Onion's, and the
+      save still reaches the PC after the game.
+- [ ] App mode: power off with the power button while in a game. The
+      Miyoo powers off as fast as before and the save is intact; it
+      syncs at the next start.
+- [ ] Boot-launcher mode: play, eject: the shelf comes back at its usual
+      speed, then the icon shows its arrows and the save reaches the PC.
+- [ ] Start a game from Onion's own menu (app mode), play, quit: nothing
+      syncs until slot-mini is next started, and then it does. This is
+      the known gap.
+
+**Wi-Fi off, PC off**
+
+- [ ] Wi-Fi off: no icon activity, launches as fast as unpaired, Sync
+      now says "Wi-Fi is off."
+- [ ] Wi-Fi on, PC off or asleep: a launch waits no more than about half
+      a second longer than usual; the icon is a cross;
+      Sync now says so within a few seconds.
+- [ ] PC back on a different address (restart the router or the PC):
+      Sync now finds it again without pairing again.
+
+**Unpair**
+
+- [ ] Sync -> Unpair asks for A twice. Afterwards MENU has no Sync now
+      row, the icon is gone, and every game and save is still on the
+      card. The PC lists the Miyoo as gone after its next look.
+
+## 20. The grid view (0.7.0)
+
+- [ ] R2 on a shelf turns it into a grid of four rows; the footer shows
+      "R2 ROW". R2 again brings the shelf back. Each shelf remembers its
+      own choice across a restart (`App/slot-mini/data/views.txt`).
+- [ ] MENU -> Settings -> View does the same for the shelf you are on.
+- [ ] D-pad in four directions, held Up and Down: smooth, no stutter as
+      rows come in. L1 / R1 switch shelves; A inserts from the grid; Y
+      hearts; SELECT and START work as on the shelf.
+- [ ] With a couple of hundred games on one shelf, hold Down from top to
+      bottom: note any hitch, and read `VmHWM` afterwards (under 40 MB).
+- [ ] Light theme (`appearance = light`): the legend and the grid read
+      clearly.
+- [ ] A shelf never switched to the grid looks and moves exactly as in
+      0.6.6.
+
 ## What to report
 
 The Onion version, the panel size, which boxes failed, the first-frame time,

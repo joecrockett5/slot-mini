@@ -12,3 +12,4 @@ A slot-style game launcher for the Miyoo Mini Plus on Onion OS.
 - A change to the PC app alone bumps only `crates/slot-mini-pc`'s version; a change the Miyoo runs (anything in its binary, `crates/slot-mini*` other than the PC crate and `pc`-gated code) bumps the workspace version. Bump both when a change touches both.
 - The PC app (`crates/slot-mini-pc`) has its own brief in `docs/briefs/02-pc-app.md` and its own progress file, `docs/pc/PROGRESS.md`. Read both before working on it.
 - Brief 3, sync in the PC app, is `docs/briefs/03-pc-sync.md`; its progress file is `docs/pc/SYNC-PROGRESS.md`.
+- Brief 4, sync and the grid view on the Miyoo, is `docs/briefs/04-device-sync.md`; its progress file is `docs/sync/DEVICE-PROGRESS.md`. Read both before working on the device's sync client.

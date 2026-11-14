@@ -15,6 +15,7 @@ use slot_mini_ui::{draw_backdrop, ease, line_ink, title_line_face, FOOTER_Y};
 use crate::legend::Glyphs;
 use crate::paths::Paths;
 use crate::settings::Settings;
+use crate::sync::{Progress, Stage as SyncStage, Sync, View as SyncView};
 use crate::update::{Status, Updater};
 
 #[cfg(feature = "pc")]
@@ -35,6 +36,16 @@ pub enum Row {
     OnlineLabels,
     Update,
     ExitToOnion,
+    /// MENU's first page, while paired: a full sync now.
+    SyncNow,
+    /// Opens the sync page.
+    Sync,
+    /// The sync page: find a PC, or the PC this Miyoo is paired with.
+    Pair,
+    AutoSync,
+    Unpair,
+    /// The shelf on screen as a scrolling shelf or as a grid.
+    View,
     /// A row the PC app answers for itself.
     #[cfg(feature = "pc")]
     Host(HostRow),
@@ -43,19 +54,30 @@ pub enum Row {
 /// MENU's first page.
 const MAIN: [Row; 3] = [Row::Settings, Row::Update, Row::ExitToOnion];
 /// The settings page.
-const SETTINGS: [Row; 6] = [
+const SETTINGS: [Row; 8] = [
     Row::Sounds,
     Row::IngameMenu,
     Row::Recents,
     Row::BootLauncher,
     Row::BootScreen,
     Row::OnlineLabels,
+    Row::View,
+    Row::Sync,
 ];
+/// The sync page before pairing, and after.
+const SYNC_UNPAIRED: [Row; 1] = [Row::Pair];
+const SYNC_PAIRED: [Row; 3] = [Row::Pair, Row::AutoSync, Row::Unpair];
+/// How many rows show at once; a longer page scrolls with the selection.
+const ROWS_SHOWN: usize = 7;
+/// How many faces are kept: a sync's progress makes new ones all the time.
+const FACES_KEPT: usize = 48;
 
 pub enum Outcome {
     Stay,
     Close,
     ExitToOnion,
+    /// The view row was turned: the shelf on screen changes its view.
+    ToggleView,
     /// The PC app's row was chosen (A) or changed (Left, Right).
     #[cfg(feature = "pc")]
     Host(HostRow),
@@ -80,6 +102,13 @@ pub struct About {
     /// Whether Onion shows slot's boot and shutdown screens.
     pub boot_screen: bool,
     pub note: Option<String>,
+    /// Whether the shelf on screen is drawn as a grid (the view row), and
+    /// `None` where there is no shelf to turn.
+    pub grid: Option<bool>,
+    /// The row chosen in the list of PCs found.
+    hub_row: usize,
+    /// Unpair was pressed once: the next A unpairs.
+    unpair_armed: bool,
     /// Shown on the note line when there is no note: the CPU's state.
     pub diag: Option<String>,
     faces: Vec<(String, TexId, u32, u32)>,
@@ -153,6 +182,9 @@ impl About {
             launcher: crate::switch::installed(paths),
             boot_screen: crate::bootscreen::installed(paths),
             note: None,
+            grid: None,
+            hub_row: 0,
+            unpair_armed: false,
             diag: None,
             faces: Vec::new(),
             opened: None,
@@ -193,21 +225,104 @@ impl About {
         if self.host.is_some() {
             return pc::SETTINGS.to_vec();
         }
-        SETTINGS.to_vec()
+        SETTINGS
+            .into_iter()
+            .filter(|r| *r != Row::View || self.grid.is_some())
+            .collect()
     }
 
+    /// Keep the rows that come and go with pairing in step: Sync now on
+    /// the first page, and the sync page's own.
+    fn pairing_rows(&mut self, paired: bool) {
+        #[cfg(feature = "pc")]
+        if self.host.is_some() {
+            return;
+        }
+        let fix = |rows: &mut Vec<Row>, row: &mut usize| {
+            let was = rows.get(*row).copied();
+            if rows.first() == Some(&Row::Settings) {
+                let has = rows.contains(&Row::SyncNow);
+                match (paired, has) {
+                    (true, false) => rows.insert(1, Row::SyncNow),
+                    (false, true) => rows.retain(|r| *r != Row::SyncNow),
+                    _ => return,
+                }
+            } else if rows.first() == Some(&Row::Pair) {
+                if paired == (rows.len() > 1) {
+                    return;
+                }
+                *rows = match paired {
+                    true => SYNC_PAIRED.to_vec(),
+                    false => SYNC_UNPAIRED.to_vec(),
+                };
+            } else {
+                return;
+            }
+            // Stay on the row that was selected where it is still there.
+            *row = was
+                .and_then(|w| rows.iter().position(|r| *r == w))
+                .unwrap_or(0);
+        };
+        fix(&mut self.rows, &mut self.row);
+        for (rows, row) in &mut self.stack {
+            fix(rows, row);
+        }
+    }
+
+    /// A press while pairing or a sync has the page.
+    fn stage_press(&mut self, b: Button, stage: SyncStage, sync: &mut Sync, wifi: bool) {
+        let back = matches!(b, Button::B | Button::Menu);
+        match stage {
+            SyncStage::Idle => {}
+            SyncStage::Hubs(found) => match b {
+                Button::Up if !found.is_empty() => {
+                    self.hub_row = (self.hub_row + found.len() - 1) % found.len()
+                }
+                Button::Down if !found.is_empty() => {
+                    self.hub_row = (self.hub_row + 1) % found.len()
+                }
+                Button::A => match found.get(self.hub_row.min(found.len().max(1) - 1)) {
+                    Some(hub) => sync.choose(hub.clone()),
+                    None => sync.search(wifi),
+                },
+                _ if back => sync.dismiss(),
+                _ => {}
+            },
+            SyncStage::Code { .. } if b == Button::A => sync.confirm(),
+            // B stops a sync at its next safe point; the summary follows.
+            SyncStage::Syncing(_) if b == Button::B => sync.cancel(),
+            SyncStage::Syncing(_) => {}
+            SyncStage::Paired(_) | SyncStage::Summary(_) | SyncStage::Failed(_)
+                if b == Button::A || back =>
+            {
+                sync.dismiss()
+            }
+            _ if back => sync.dismiss(),
+            _ => {}
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn press(
         &mut self,
         b: Button,
         settings: &mut Settings,
         paths: &Paths,
         updater: &mut Updater,
+        sync: &mut Sync,
+        wifi: bool,
     ) -> Outcome {
-        let n = self.rows.len();
         // Leaving mid-install would hide the restart that follows it.
         if updater.busy() && matches!(b, Button::B | Button::Menu) {
             return Outcome::Stay;
         }
+        let view = sync.view();
+        self.pairing_rows(view.hub.is_some());
+        if view.stage != SyncStage::Idle {
+            self.stage_press(b, view.stage, sync, wifi);
+            return Outcome::Stay;
+        }
+        let n = self.rows.len();
         #[cfg(feature = "pc")]
         if self.paged.is_some() && (b == Button::B || n == 0) {
             return match b {
@@ -215,6 +330,9 @@ impl About {
                 Button::Menu => Outcome::Close,
                 _ => Outcome::Stay,
             };
+        }
+        if !matches!(b, Button::A) || self.rows[self.row] != Row::Unpair {
+            self.unpair_armed = false;
         }
         match b {
             Button::Up => self.row = (self.row + n - 1) % n,
@@ -301,6 +419,42 @@ impl About {
                 Row::Update => {}
                 Row::ExitToOnion if b == Button::A => return Outcome::ExitToOnion,
                 Row::ExitToOnion => {}
+                Row::SyncNow if b == Button::A => sync.sync_now(wifi),
+                Row::Sync if b == Button::A => {
+                    let rows = match view.hub {
+                        Some(_) => SYNC_PAIRED.to_vec(),
+                        None => SYNC_UNPAIRED.to_vec(),
+                    };
+                    self.open(&rows);
+                }
+                Row::Pair if b == Button::A && view.hub.is_none() => {
+                    self.hub_row = 0;
+                    sync.search(wifi);
+                }
+                Row::SyncNow | Row::Sync | Row::Pair => {}
+                Row::AutoSync => {
+                    settings.auto_sync = !settings.auto_sync;
+                    if let Err(e) = settings.write(paths) {
+                        eprintln!("slot-mini: settings: {e}");
+                    }
+                }
+                Row::Unpair if b == Button::A && self.unpair_armed => {
+                    self.unpair_armed = false;
+                    self.note = None;
+                    sync.unpair();
+                    self.pairing_rows(false);
+                }
+                Row::Unpair if b == Button::A => {
+                    self.unpair_armed = true;
+                    self.note = Some("A again unpairs. Nothing is deleted.".into());
+                }
+                Row::Unpair => {}
+                Row::View => {
+                    if let Some(grid) = self.grid.as_mut() {
+                        *grid = !*grid;
+                        return Outcome::ToggleView;
+                    }
+                }
                 #[cfg(feature = "pc")]
                 Row::Host(row) => return self.host_press(row, b),
             },
@@ -311,8 +465,17 @@ impl About {
 
     fn face(&mut self, gfx: &mut Renderer, text: &str, style: Style) -> (TexId, u32, u32) {
         let key = format!("{style:?}:{text}");
-        if let Some((_, t, w, h)) = self.faces.iter().find(|f| f.0 == key) {
-            return (*t, *w, *h);
+        if let Some(i) = self.faces.iter().position(|f| f.0 == key) {
+            // The last used go to the back; the front is dropped when the
+            // list is full, which a frame's own faces never reach.
+            let f = self.faces.remove(i);
+            let hit = (f.1, f.2, f.3);
+            self.faces.push(f);
+            return hit;
+        }
+        if self.faces.len() >= FACES_KEPT {
+            let (_, t, ..) = self.faces.remove(0);
+            gfx.free(t);
         }
         let f = match style {
             Style::Title => title_line_face(text),
@@ -435,7 +598,7 @@ impl About {
         }
     }
 
-    fn label(&self, row: Row, settings: &Settings, update: &Status) -> String {
+    fn label(&self, row: Row, settings: &Settings, update: &Status, sync: &SyncView) -> String {
         let on = |b: bool| if b { "On" } else { "Off" };
         match row {
             Row::Update => match update {
@@ -458,6 +621,22 @@ impl About {
                 if self.boot_screen { "slot" } else { "Onion" }
             ),
             Row::ExitToOnion => "Exit to Onion".into(),
+            Row::SyncNow => "Sync now".into(),
+            Row::Sync => "Sync".into(),
+            Row::Pair => match &sync.hub {
+                Some(name) => format!("PC: {}", short_name(name)),
+                None => "Pair with a PC".into(),
+            },
+            Row::AutoSync => format!("Auto sync: {}", on(settings.auto_sync)),
+            Row::Unpair => "Unpair".into(),
+            Row::View => format!(
+                "View: {}",
+                if self.grid == Some(true) {
+                    "Grid"
+                } else {
+                    "Shelf"
+                }
+            ),
             #[cfg(feature = "pc")]
             Row::Host(row) => self.host_label(row),
         }
@@ -472,9 +651,11 @@ impl About {
         ground: Option<(TexId, u32)>,
         settings: &Settings,
         update: &Status,
+        sync: &SyncView,
         gfx: &mut Renderer,
         out: &mut Vec<Draw>,
     ) {
+        self.pairing_rows(sync.hub.is_some());
         draw_backdrop(stage, ground, out);
         #[cfg(feature = "pc")]
         let sheet = self.sheet().cloned();
@@ -523,13 +704,49 @@ impl About {
             }
             y = About::sheet_rows_top(page);
         }
-        for (i, row) in self.rows.clone().into_iter().enumerate() {
-            let text = self.label(row, settings, update);
+        // Pairing and syncs take the rows' place while they run.
+        let staged = stage_lines(sync, self.hub_row);
+        let rows = match &staged {
+            Some(_) => Vec::new(),
+            None => self.rows.clone(),
+        };
+        // Up to seven rows and the note line fit above slot's footer; a
+        // longer page scrolls, its edge row fading where more lie beyond.
+        let first = first_shown(self.row, rows.len());
+        let last = (first + ROWS_SHOWN).min(rows.len());
+        for (i, row) in rows.iter().copied().enumerate().take(last).skip(first) {
+            let text = self.label(row, settings, update, sync);
             let f = self.face(gfx, &text, Style::Title);
-            put(out, f, y, if i == self.row { 1.0 } else { 0.5 });
-            // Up to seven rows and the note line fit above slot's footer.
+            let beyond = (i == first && first > 0) || (i + 1 == last && last < rows.len());
+            let alpha = match (i == self.row, beyond) {
+                (true, _) => 1.0,
+                (false, true) => 0.22,
+                (false, false) => 0.5,
+            };
+            put(out, f, y, alpha);
             y += ROW_PITCH;
         }
+        let mut stage_note = None;
+        if let Some(lines) = staged {
+            for line in lines {
+                match line {
+                    Line::Row(text, alpha) => {
+                        let f = self.face(gfx, &text, Style::Title);
+                        put(out, f, y, alpha);
+                        y += ROW_PITCH;
+                    }
+                    Line::Small(text) => {
+                        let f = self.face(gfx, &text, Style::Note);
+                        put(out, f, y + 4.0, 0.9);
+                        y += SMALL_PITCH;
+                    }
+                    Line::Note(text) => stage_note = Some(text),
+                }
+            }
+            // The note sits where a full page of rows would put it.
+            y = y.max(STICKER_Y + sticker_size().1 + 8.0 + 3.0 * ROW_PITCH);
+        }
+        let staging = stage_note.is_some() || sync.stage != SyncStage::Idle;
         let update_note = match update {
             Status::UpToDate => Some(format!(
                 "slot-mini {} is the latest release.",
@@ -547,7 +764,31 @@ impl About {
         };
         #[cfg(feature = "pc")]
         let update_note = update_note.or_else(|| self.host_note());
-        if let Some(note) = self.note.clone().or(update_note).or(self.diag.clone()) {
+        let row_note = match self.rows.get(self.row) {
+            Some(Row::Pair) if sync.hub.is_none() => {
+                Some("Open slot-mini on your PC, on the same Wi-Fi, then press A.")
+            }
+            Some(Row::Pair) => Some("Paired. MENU, Sync now syncs everything."),
+            Some(Row::AutoSync) if settings.auto_sync => {
+                Some("Saves sync at start, before and after a game, on Wi-Fi.")
+            }
+            Some(Row::AutoSync) => Some("Only MENU, Sync now syncs."),
+            Some(Row::Sync) if sync.hub.is_none() => {
+                Some("Share games and saves with slot-mini on a PC.")
+            }
+            _ => None,
+        }
+        .map(String::from);
+        let note = match staging {
+            true => stage_note,
+            false => self
+                .note
+                .clone()
+                .or(update_note)
+                .or(row_note)
+                .or(self.diag.clone()),
+        };
+        if let Some(note) = note {
             let f = self.face(gfx, &note, Style::Note);
             put(out, f, y + 4.0, 0.9);
         }
@@ -588,7 +829,144 @@ impl About {
         #[cfg(feature = "pc")]
         let top = self.sheet().map_or(top, About::sheet_rows_top);
         let i = ((y - top) / ROW_PITCH).floor();
-        (i >= 0.0 && (i as usize) < self.rows.len()).then_some(i as usize)
+        let i = (i >= 0.0).then_some(i as usize)?;
+        let at = first_shown(self.row, self.rows.len()) + i;
+        (i < ROWS_SHOWN && at < self.rows.len()).then_some(at)
+    }
+}
+
+/// A line of the page while pairing or a sync has it.
+enum Line {
+    /// In the rows' type, at this brightness.
+    Row(String, f32),
+    /// In the note's type, under the rows.
+    Small(String),
+    /// On the note line.
+    Note(String),
+}
+
+/// The pitch of small lines (a summary).
+const SMALL_PITCH: f32 = 22.0;
+
+/// The first row a page of `n` rows shows with `row` selected.
+fn first_shown(row: usize, n: usize) -> usize {
+    if n <= ROWS_SHOWN {
+        return 0;
+    }
+    // The selection keeps a row of the page after it in sight.
+    (row + 2).saturating_sub(ROWS_SHOWN).min(n - ROWS_SHOWN)
+}
+
+/// A PC's name, short enough for a row.
+fn short_name(name: &str) -> String {
+    const MAX: usize = 22;
+    match name.chars().count() > MAX {
+        true => format!("{}...", name.chars().take(MAX - 3).collect::<String>()),
+        false => name.to_string(),
+    }
+}
+
+/// What the page shows in place of its rows, if pairing or a sync has it.
+fn stage_lines(sync: &SyncView, hub_row: usize) -> Option<Vec<Line>> {
+    let row = |s: String| Line::Row(s, 1.0);
+    let pc = sync.hub.clone().unwrap_or_else(|| "the PC".into());
+    Some(match &sync.stage {
+        SyncStage::Idle => return None,
+        SyncStage::Searching => vec![
+            row("Looking for a PC...".into()),
+            Line::Note("B cancels.".into()),
+        ],
+        SyncStage::Hubs(found) if found.is_empty() => vec![
+            row("No PC found".into()),
+            Line::Note("Open slot-mini on the PC, on the same Wi-Fi. A looks again.".into()),
+        ],
+        SyncStage::Hubs(found) => {
+            let at = hub_row.min(found.len() - 1);
+            let first = first_shown(at, found.len());
+            let mut lines: Vec<Line> = found
+                .iter()
+                .enumerate()
+                .skip(first)
+                .take(ROWS_SHOWN)
+                .map(|(i, f)| Line::Row(short_name(&f.name), if i == at { 1.0 } else { 0.5 }))
+                .collect();
+            lines.push(Line::Note("A pairs with this PC. B cancels.".into()));
+            lines
+        }
+        SyncStage::Connecting(name) => vec![
+            row(format!("Asking {}...", short_name(name))),
+            Line::Note("B cancels.".into()),
+        ],
+        SyncStage::Code { hub, code } => vec![
+            Line::Row(short_name(hub), 0.5),
+            row(spaced(code)),
+            Line::Note("If the PC shows the same code, press A. B cancels.".into()),
+        ],
+        SyncStage::Confirming { hub, code } => vec![
+            Line::Row(short_name(hub), 0.5),
+            row(spaced(code)),
+            Line::Note("Now confirm on the PC. B cancels.".into()),
+        ],
+        SyncStage::Paired(name) => vec![
+            row(format!("Paired with {}", short_name(name))),
+            Line::Note("MENU, Sync now copies games and saves both ways.".into()),
+        ],
+        SyncStage::Syncing(p) => {
+            let mut lines = vec![Line::Row(format!("Syncing with {}", short_name(&pc)), 0.5)];
+            match p {
+                Progress::Connecting => lines.push(row("Connecting...".into())),
+                Progress::Checking { percent } => {
+                    lines.push(row(format!("Checking this card {percent}%")))
+                }
+                Progress::Planning => lines.push(row("Comparing...".into())),
+                Progress::Transfer {
+                    index,
+                    count,
+                    name,
+                    to_miyoo,
+                    done,
+                    size,
+                } => {
+                    let verb = if *to_miyoo { "Getting" } else { "Sending" };
+                    lines.push(row(format!("{verb} {index} of {count}")));
+                    lines.push(Line::Small(short_name_to(name, 56)));
+                    lines.push(Line::Small(format!(
+                        "{} of {}",
+                        crate::sync::size_text(*done),
+                        crate::sync::size_text(*size)
+                    )));
+                }
+            }
+            lines.push(Line::Note("B stops safely.".into()));
+            lines
+        }
+        SyncStage::Summary(text) => {
+            let mut lines = vec![row("Sync finished".into())];
+            // Seven small lines fit; the most important come first.
+            lines.extend(text.iter().take(7).cloned().map(Line::Small));
+            lines
+        }
+        SyncStage::Failed(why) => vec![row("Not synced".into()), Line::Note(why.clone())],
+    })
+}
+
+/// A pairing code in two groups: "123 456".
+fn spaced(code: &str) -> String {
+    match code.len() {
+        6 if code.is_ascii() => format!("{} {}", &code[..3], &code[3..]),
+        _ => code.to_string(),
+    }
+}
+
+/// `text` cut to `max` characters, keeping its end (a file's name).
+fn short_name_to(text: &str, max: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    match chars.len() > max {
+        true => format!(
+            "...{}",
+            chars[chars.len() - (max - 3)..].iter().collect::<String>()
+        ),
+        false => text.to_string(),
     }
 }
 

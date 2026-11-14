@@ -637,6 +637,34 @@ fn flag_path(paths: &Paths) -> PathBuf {
     paths.tmp.join(FLAG)
 }
 
+/// Where the helper says it is pushing a save after a game.
+const PUSH_PID: &str = "slot-mini-push.pid";
+
+/// What the helper beside a game is there for.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Helper {
+    /// slot's in-game MENU.
+    pub menu: bool,
+    /// Push this game's save to the paired PC once the game has ended
+    /// (app mode: nothing else runs then).
+    pub push: Option<(slot_mini_store::Platform, String)>,
+}
+
+impl Helper {
+    pub fn wanted(&self) -> bool {
+        self.menu || self.push.is_some()
+    }
+
+    /// `GBA/Golden Sun`, as `--push` carries it.
+    pub fn parse_push(arg: &str) -> Option<(slot_mini_store::Platform, String)> {
+        let (dir, stem) = arg.split_once('/')?;
+        let platform = slot_mini_store::Platform::ALL
+            .into_iter()
+            .find(|p| p.dir_name() == dir)?;
+        (!stem.is_empty()).then(|| (platform, stem.to_string()))
+    }
+}
+
 fn read_pid(p: &Path) -> Option<i32> {
     std::fs::read_to_string(p).ok()?.trim().parse().ok()
 }
@@ -656,6 +684,23 @@ pub fn clear_leftovers(paths: &Paths) {
         }
         let _ = std::fs::remove_file(&flag);
     }
+    // A push still on its way gives way to slot-mini's own sync: it stops
+    // at its next safe point, and is waited for a moment so that two
+    // syncs do not write the card's records at once.
+    let push = paths.tmp.join(PUSH_PID);
+    if let Some(pid) = read_pid(&push) {
+        if pid != std::process::id() as i32 && alive(pid) && is_helper(pid) {
+            // SAFETY: signalling a process we started.
+            unsafe { libc::kill(pid, libc::SIGTERM) };
+            for _ in 0..50 {
+                if !alive(pid) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+        let _ = std::fs::remove_file(&push);
+    }
 }
 
 fn is_helper(pid: i32) -> bool {
@@ -666,7 +711,7 @@ fn is_helper(pid: i32) -> bool {
 
 /// Start the helper beside the game about to run: a separate session, so
 /// it outlives slot-mini and the boot shim.
-pub fn spawn(paths: &Paths) {
+pub fn spawn(paths: &Paths, helper: &Helper) {
     use std::os::unix::process::CommandExt;
     let Ok(exe) = std::env::current_exe() else {
         return;
@@ -675,8 +720,15 @@ pub fn spawn(paths: &Paths) {
     cmd.args(["--ingame", "--sd"])
         .arg(&paths.sd)
         .arg("--tmp")
-        .arg(&paths.tmp)
-        .stdin(std::process::Stdio::null())
+        .arg(&paths.tmp);
+    if !helper.menu {
+        cmd.arg("--no-menu");
+    }
+    if let Some((platform, stem)) = &helper.push {
+        cmd.arg("--push")
+            .arg(format!("{}/{stem}", platform.dir_name()));
+    }
+    cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     // SAFETY: setsid in the child before exec only detaches it.
@@ -825,12 +877,14 @@ extern "C" fn on_signal(_: libc::c_int) {
 
 /// The helper's main loop (`slot-mini --ingame`). Returns when the game ends.
 #[cfg(target_os = "linux")]
-pub fn run(paths: &Paths, fb: &Path, input: &Path) {
+pub fn run(paths: &Paths, fb: &Path, input: &Path, helper: &Helper) {
     use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
 
     let flag = flag_path(paths);
-    let _ = std::fs::write(&flag, std::process::id().to_string());
+    if helper.menu {
+        let _ = std::fs::write(&flag, std::process::id().to_string());
+    }
     let cleanup = |flag: &Path| {
         // A frozen game must never be left behind.
         let pid = FROZEN.swap(0, Ordering::SeqCst);
@@ -870,12 +924,26 @@ pub fn run(paths: &Paths, fb: &Path, input: &Path) {
         }
         std::thread::sleep(Duration::from_millis(200));
     };
-    let (Some(pid), Ok(screen), Ok(mut buttons)) = (
-        pid,
-        slot_mini_gfx::fbdev::Fbdev::open_any(fb),
-        slot_mini_gfx::evdev::Evdev::open(input),
-    ) else {
+    let Some(pid) = pid else {
         return cleanup(&flag);
+    };
+    let menu = match helper.menu {
+        true => slot_mini_gfx::fbdev::Fbdev::open_any(fb)
+            .ok()
+            .zip(slot_mini_gfx::evdev::Evdev::open(input).ok()),
+        false => None,
+    };
+    let Some((screen, mut buttons)) = menu else {
+        // No menu to show: only wait for the game to end, for the push.
+        cleanup(&flag);
+        if helper.push.is_some() {
+            let mut game = RetroArch::attach(pid);
+            while !STOP.load(Ordering::SeqCst) && game.running() {
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            push_after(paths, helper);
+        }
+        return;
     };
     let onion = crate::onion::Onion::detect(paths);
     let mut overlay = Overlay::new(RetroArch::attach(pid), screen, paths.sysdir());
@@ -908,6 +976,43 @@ pub fn run(paths: &Paths, fb: &Path, input: &Path) {
         overlay.game.resume();
     }
     cleanup(&flag);
+    push_after(paths, helper);
+}
+
+/// The game has ended: push its save to the paired PC, beside whatever
+/// Onion shows next. Stopped by SIGTERM (slot-mini starting, which syncs
+/// for itself) and by a power-off, at the sync's next safe point.
+#[cfg(target_os = "linux")]
+fn push_after(paths: &Paths, helper: &Helper) {
+    use std::sync::atomic::Ordering;
+    let Some((platform, stem)) = helper.push.clone() else {
+        return;
+    };
+    // Onion's power-off is under way: about a second is left.
+    let off = paths.tmp.join(".offOrder");
+    if STOP.load(Ordering::SeqCst) || off.exists() {
+        return;
+    }
+    let pid_file = paths.tmp.join(PUSH_PID);
+    let _ = std::fs::write(&pid_file, std::process::id().to_string());
+    let cancel = slot_mini_sync::Cancel::new();
+    let worker = {
+        let (paths, cancel) = (paths.clone(), cancel.clone());
+        std::thread::spawn(move || {
+            let game = slot_mini_sync::GameId::new(platform, &stem);
+            crate::sync::after_game(&paths, game, crate::sync::AFTER_GAME_CAP, &cancel)
+        })
+    };
+    while !worker.is_finished() {
+        if STOP.load(Ordering::SeqCst) || off.exists() {
+            cancel.cancel();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let _ = worker.join();
+    if read_pid(&pid_file) == Some(std::process::id() as i32) {
+        let _ = std::fs::remove_file(&pid_file);
+    }
 }
 
 #[cfg(test)]

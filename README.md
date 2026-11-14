@@ -44,6 +44,9 @@ cartridges, each in its own shell with its own label, and you play a game by sli
   Switcher. slot-mini adds slot's in-game menu and a per-game choice of core (mGBA or gpSP).
 - **Optional boot launcher.** Replace Onion's main menu with slot-mini and come back to the cart you just played
   after every game. If slot-mini is ever missing or fails, Onion's menu starts instead.
+- **Sync with a PC.** Pair with slot-mini PC and games, saves, labels and hearts stay in step over your own
+  Wi-Fi, so you can play on one and carry on from the other.
+- **Shelf or grid.** R2 shows a shelf as a grid of carts.
 - **Over-the-air updates.** MENU → Check for updates installs new releases over Wi-Fi.
 
 ## Installation
@@ -130,13 +133,14 @@ are removed with the folder.
 | Left / Right | Browse the shelf (hold to scroll) |
 | Up / Down | Jump to the previous or next letter |
 | L1 / R1 | Switch shelves: Recents, Favorites, GBA, GBC, GB |
+| R2 | Show this shelf as a grid, or as a shelf again (each shelf remembers) |
 | A (tap) | Insert the cart and resume from its auto save state |
 | A (hold) | Insert the cart and start fresh, without loading the state |
 | Y | Heart or un-heart the cart (hearted carts get a Favorites shelf) |
 | X | On the Recents shelf: take the cart off it (the game is not touched) |
 | SELECT | Open the cart studio |
 | START | GBA carts: open the cart and choose its core (mGBA or gpSP) |
-| MENU | slot's About sticker (credits, version, battery); Settings (sounds, in-game menu, the Recents shelf, boot launcher, splash screens, online labels), Check for updates, Exit to Onion |
+| MENU | slot's About sticker (credits, version, battery); Settings (sounds, in-game menu, the Recents shelf, boot launcher, splash screens, online labels, the shelf or grid view, Sync), Sync now once paired with a PC, Check for updates, Exit to Onion |
 
 Holding A starts the game the way Onion's own **Reset game** does, for that one run. RetroArch still writes its
 auto state when you quit.
@@ -144,6 +148,9 @@ auto state when you quit.
 The **Recents** shelf holds the last ten games you started from slot-mini, newest first, and appears once you
 have played something. **MENU → Recents: Off** hides it; the list is still kept. Games started from Onion's menu
 are not on it.
+
+**R2** turns the shelf you are on into a grid of carts, four rows to a screen, and back; **MENU → Settings →
+View** does the same. The D-pad moves in all four directions there, and everything else works as on the shelf.
 
 ### In a game
 
@@ -158,6 +165,27 @@ is pressed with MENU, in any order, slot-mini treats it as a hotkey and stays ou
 development build, **Game Switcher** opens over the paused game, as Onion's own menu does there. On 4.3.1-1 the
 game closes first. Games started from Onion's menu keep Onion's MENU, and **MENU → In-game menu: Off** hands MENU
 back to Onion everywhere.
+
+### Sync with a PC
+
+slot-mini can keep its games, saves, labels, shells and hearts in step with [slot-mini PC](#slot-mini-pc) over
+your home Wi-Fi. Nothing is sent anywhere else, and nothing happens until you pair.
+
+- **Pair:** open slot-mini on the PC, then **MENU → Settings → Sync → Pair with a PC** on the Miyoo. Pick the PC,
+  check that both show the same six-digit code, press A, and confirm on the PC.
+- **MENU → Sync now** copies games and saves both ways and says what moved. B stops it safely.
+- **Auto sync** (on by default once paired) syncs saves by itself, on Wi-Fi: when slot-mini starts, when the PC
+  says a game was closed there, just before a game starts (the game waits at most about a second for it) and
+  after you eject. If the PC cannot be reached, nothing is said and the game starts with the save on the card.
+- A small icon beside Wi-Fi shows the last sync: a tick, two arrows while syncing, a cross when the PC was not
+  reached, and "!" for a conflict.
+- **Conflicts:** if a game was played on both since they last synced, the later save is used and the other is
+  kept on the PC, where Sync → Conflicts can swap them.
+- **Space:** sync leaves 64 MB of the card free. Games that do not fit are left out and counted in the summary.
+- **Unpair** (two presses of A) forgets the PC and deletes nothing.
+
+One gap: a game started from Onion's own menu, not from slot-mini, is synced the next time slot-mini starts,
+not around the game. The rules are in [docs/SYNC.md](docs/SYNC.md).
 
 ### Cores (GBA)
 
@@ -223,10 +251,13 @@ these:
 
 | File | Contents |
 | --- | --- |
-| `App/slot-mini/data/settings.txt` | Sounds, in-game menu, the Recents shelf, boot launcher, splash screens, label service, clock format |
+| `App/slot-mini/data/settings.txt` | Sounds, in-game menu, the Recents shelf, boot launcher, splash screens, label service, clock format, Auto sync |
 | `App/slot-mini/data/state.txt` | The shelf and cart you were on |
 | `App/slot-mini/data/favorites.txt` | Hearted carts, in slot's format |
 | `App/slot-mini/data/recents.txt` | The last ten games started from slot-mini, in slot's format |
+| `App/slot-mini/data/views.txt` | Which shelves are shown as a grid |
+| `App/slot-mini/data/sync/` | Only once paired: the PC's name and key, what was last synced, how the last sync ended |
+| `Roms/`, `Saves/CurrentProfile/saves` and `states`, `Labels/` | Only when a sync brings games, saves or labels from the PC |
 | `App/slot-mini/cache/` | Scaled labels, ROM headers, the art index, sound clips |
 | `App/slot-mini/*`, `App/slot-mini/update/` | Only when installing an update: the new files, and the replaced ones in `update/previous/` |
 | `Labels/cart_shell.txt`, `Labels/<sys>/*.png` | Only when you change a cart in the studio or fetch labels |
@@ -272,8 +303,8 @@ games, labels, shells, favourites and saves from a Miyoo's SD card (nothing on t
 the library is replaced); or copy ROMs into its `Roms` folders yourself.
 
 **Sync.** slot-mini PC keeps its library in step with your Miyoo's: games, labels, box art, cart shells,
-favourites and saves, so you can play on one and carry on from the other. It needs a slot-mini on the Miyoo that
-has Sync in its MENU, and both on the same Wi-Fi network.
+favourites and saves, so you can play on one and carry on from the other. It needs slot-mini 0.7.0 or later on the
+Miyoo ([Sync with a PC](#sync-with-a-pc)), and both on the same Wi-Fi network.
 
 - *Windows Firewall.* The first time slot-mini PC runs, Windows asks whether to let it through. Choose **Allow**
   with **Private networks** ticked. If you chose Cancel, the Miyoo will not find the PC: open Windows Security ->
@@ -412,6 +443,7 @@ exactly `v<x.y.z>`.
 | [DECISIONS.md](docs/DECISIONS.md) | Design decisions and the reasons for them |
 | [PROGRESS.md](docs/PROGRESS.md) | Changes by version, performance figures and open questions |
 | [DEVICE-TESTING.md](docs/DEVICE-TESTING.md) | A step-by-step checklist for a real Mini Plus |
+| [sync/DEVICE-PROGRESS.md](docs/sync/DEVICE-PROGRESS.md) | Where sync and the grid on the Miyoo stand |
 | [pc/TESTING.md](docs/pc/TESTING.md) | The same for the Windows app |
 | [pc/PROGRESS.md](docs/pc/PROGRESS.md) | Where the Windows app stands |
 

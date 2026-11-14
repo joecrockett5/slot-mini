@@ -16,6 +16,7 @@ pc = ["slot-mini-gfx/pc", "slot-mini-ui/pc"]
 slot-mini-gfx = { path = "../slot-mini-gfx" }
 slot-mini-store = { path = "../slot-mini-store" }
 slot-mini-ui = { path = "../slot-mini-ui" }
+slot-mini-sync = { path = "../slot-mini-sync", features = ["client"] }
 lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
 libc = { workspace = true }
 serde_json = { workspace = true }
@@ -28,6 +29,7 @@ jpeg-decoder = { version = "0.3", default-features = false }
 png = { workspace = true }
 
 [dev-dependencies]
+slot-mini-sync = { path = "../slot-mini-sync", features = ["client", "server"] }
 tempfile = { workspace = true }
 png = { workspace = true }
 

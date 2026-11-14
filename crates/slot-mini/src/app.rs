@@ -58,6 +58,10 @@ pub mod bar;
 const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
 pub const FACE_WAIT: Duration = Duration::from_millis(500);
+/// The Miyoo's grid (DECISIONS #68): a second row of faces built ahead of
+/// the view, and a held Up or Down kept to one row in this long.
+const GRID_AHEAD: u8 = 1;
+const GRID_ROW_GAP_MS: Millis = 110;
 /// Faces kept decoded either side of the selected cart.
 const NEAR: i32 = 4;
 /// The longest note MENU shows on its one line.
@@ -228,6 +232,12 @@ pub struct App {
     /// use it, whether the one on screen does, its rows and lift, and when a
     /// cart ejected into it began flying back to its cell.
     views: Views,
+    /// The Miyoo's footer legend on the grid (`R2 ROW`), and whether the
+    /// shared faces have their copy at the grid's scale: both made the
+    /// first time a shelf shows as a grid, so a Miyoo that never does
+    /// pays nothing for it.
+    view_hint: Option<(TexId, u32, u32)>,
+    grid_ready: bool,
     grid_mode: bool,
     grid: Grid,
     grid_settle: Option<Millis>,
@@ -252,6 +262,16 @@ pub struct App {
     bar: bar::Bar,
     /// The buttons the legends name.
     glyphs: crate::legend::Glyphs,
+    /// Sync with slot-mini PC. Inert until the player pairs.
+    pub sync: crate::sync::Sync,
+    /// The footer's sync marks, made the first time one is shown.
+    sync_marks: Option<[(TexId, u32, u32); 4]>,
+    /// What the footer shows of sync, read once a tick.
+    sync_mark: Option<crate::sync::Icon>,
+    /// The sync that follows the first frame (and Wi-Fi coming up) is
+    /// still owed.
+    start_sync_due: bool,
+    rendered: bool,
     pub exit: Option<Exit>,
 }
 
@@ -285,6 +305,7 @@ impl App {
             #[cfg(not(unix))]
             None => Box::new(crate::sound::Silent),
         };
+        let paths_for_sync = paths.clone();
         let mut app = App {
             paths,
             settings,
@@ -336,6 +357,8 @@ impl App {
             core_statics: None,
             restart_at: None,
             views: Views::default(),
+            view_hint: None,
+            grid_ready: false,
             grid_mode: false,
             grid: Grid::new(),
             grid_settle: None,
@@ -353,11 +376,14 @@ impl App {
             #[cfg(feature = "pc")]
             bar: bar::Bar::default(),
             glyphs: crate::legend::Glyphs::default(),
+            sync: crate::sync::Sync::new(&paths_for_sync, crate::sync::Options::default()),
+            sync_marks: None,
+            sync_mark: None,
+            start_sync_due: true,
+            rendered: false,
             exit: None,
         };
-        if app.paths.is_pc() {
-            app.views = Views::read(&app.paths);
-        }
+        app.views = Views::read(&app.paths);
         app.restock();
         app.restore(&state);
         app.refresh_view();
@@ -367,6 +393,77 @@ impl App {
             app.sound.prepare();
         }
         app
+    }
+
+    /// Look for hubs and listen for pokes somewhere other than the
+    /// network's defaults (tests).
+    pub fn with_sync(mut self, opts: crate::sync::Options) -> App {
+        self.sync = crate::sync::Sync::new(&self.paths, opts);
+        self
+    }
+
+    // ---- sync ----------------------------------------------------------
+
+    /// Every cart in the library (tests).
+    pub fn carts(&self) -> &[Cart] {
+        &self.carts
+    }
+
+    /// Whether a game is hearted (tests).
+    pub fn is_favourite(&self, platform: Platform, stem: &str) -> bool {
+        self.favourites.contains(platform, stem)
+    }
+
+    /// Whether nothing is open or moving over the shelf.
+    fn resting(&self) -> bool {
+        self.phase == Phase::Shelf
+            && self.studio.is_none()
+            && self.about.is_none()
+            && self.core.is_none()
+    }
+
+    /// Whether syncs may start by themselves.
+    fn auto_sync(&self) -> bool {
+        self.settings.auto_sync && self.wifi && self.sync.paired()
+    }
+
+    /// Sync's share of a tick: nothing while unpaired.
+    fn sync_tick(&mut self) {
+        if self.paths.is_pc() {
+            return;
+        }
+        self.sync_mark = self.sync.icon();
+        if self.sync_mark.is_none() {
+            return;
+        }
+        if self.sync_marks.is_none() {
+            let ink = self.theme.footer_ink;
+            self.sync_marks = Some(slot_mini_ui::SyncMark::ALL.map(|m| {
+                let f = slot_mini_ui::sync_face(m, ink);
+                (upload(&mut self.gfx, &f), f.w, f.h)
+            }));
+        }
+        if !self.resting() || !self.rendered {
+            return;
+        }
+        // A sync changed the library: show it, between frames of a shelf
+        // that is standing still.
+        if let Some(fresh) = self.sync.take_fresh() {
+            self.carts = fresh.carts;
+            self.favourites = fresh.favourites;
+            self.restock();
+            self.refresh_view();
+        }
+        if !self.auto_sync() {
+            return;
+        }
+        self.sync.listen();
+        if self.start_sync_due {
+            self.start_sync_due = false;
+            self.sync.auto();
+        } else if self.sync.has_poke() {
+            self.sync.poked();
+        }
     }
 
     // ---- wallpapers ----------------------------------------------------
@@ -424,22 +521,23 @@ impl App {
 
     // ---- the grid view -------------------------------------------------
 
-    /// Whether the shelf on screen shows as a grid. Only the PC has the
-    /// grid for now, so the device build drops everything behind this.
+    /// Whether the shelf on screen shows as a grid.
     #[inline]
     pub fn grid_on(&self) -> bool {
-        self.paths.is_pc() && self.grid_mode
+        self.grid_mode
     }
 
-    /// Take up the view the shelf on screen was left in.
+    /// Take up the view the shelf on screen was left in: the PC opens a
+    /// shelf as a grid, the Miyoo as slot's scrolling shelf.
     fn refresh_view(&mut self) {
-        if !self.paths.is_pc() {
-            return;
-        }
         let was = self.grid_mode;
+        let default = self.paths.is_pc();
         self.grid_mode = self
             .current_shelf_key()
-            .is_some_and(|k| self.views.is_grid(&k, true));
+            .is_some_and(|k| self.views.is_grid(&k, default));
+        if self.grid_mode {
+            self.ready_grid();
+        }
         self.grid_settle = None;
         if let Some((_, shelf)) = self.shelves.get(self.at) {
             self.grid.snap(shelf);
@@ -448,6 +546,39 @@ impl App {
             // Faces are pre-scaled for the view they were built for.
             self.drop_faces();
         }
+    }
+
+    /// What the grid needs of the Miyoo beyond the shelf's: the shared
+    /// shadows and backings at the grid's scale, and its footer legend.
+    /// (The PC makes its own at start.)
+    fn ready_grid(&mut self) {
+        if self.grid_ready || self.paths.is_pc() {
+            return;
+        }
+        self.grid_ready = true;
+        self.grid.paced(GRID_AHEAD, GRID_ROW_GAP_MS);
+        let faces = [
+            cart_shadow(),
+            gb_cart_shadow(GbShell::Notched),
+            gb_cart_shadow(GbShell::Rounded),
+            cart_backing(None),
+            cart_backing(Some(GbShell::Notched)),
+            cart_backing(Some(GbShell::Rounded)),
+        ];
+        let texes = self
+            .statics
+            .shadows
+            .into_iter()
+            .chain(self.statics.backings);
+        for (tex, f) in texes.zip(faces) {
+            let cell = Sprite::from_rgba(f.w, f.h, &f.rgba).resized(
+                (f.w as f32 * slot_mini_ui::GRID_SCALE).round() as u32,
+                (f.h as f32 * slot_mini_ui::GRID_SCALE).round() as u32,
+            );
+            self.gfx.pin_scaled(tex, cell);
+        }
+        let hint = slot_mini_ui::footer_hint_face("R2", "ROW", self.theme.footer_ink);
+        self.view_hint = Some((upload(&mut self.gfx, &hint), hint.w, hint.h));
     }
 
     fn drop_faces(&mut self) {
@@ -467,7 +598,8 @@ impl App {
     /// Switch the shelf on screen between the scrolling shelf and the grid,
     /// and remember it for that shelf.
     pub fn toggle_view(&mut self) {
-        if !self.paths.is_pc() || self.phase != Phase::Shelf || self.core.is_some() {
+        // From the shelf (R2, the PC's button) or from MENU's Settings row.
+        if !matches!(self.phase, Phase::Shelf | Phase::About) || self.core.is_some() {
             return;
         }
         let Some(key) = self.current_shelf_key() else {
@@ -1008,6 +1140,11 @@ impl App {
         let mut about = crate::about::About::new(&self.paths);
         about.diag = self.cpu.clone();
         about.glyphs = self.glyphs;
+        // The Miyoo's Settings has a row for the view of the shelf on
+        // screen; the PC has its button in the footer.
+        if !self.paths.is_pc() && self.current_shelf_key().is_some() {
+            about.grid = Some(self.grid_on());
+        }
         #[cfg(feature = "pc")]
         if self.paths.is_pc() {
             about.for_host(self.host.clone());
@@ -1022,7 +1159,14 @@ impl App {
             return;
         };
         let (sounds, recents) = (self.settings.sounds, self.settings.recents);
-        let outcome = about.press(b, &mut self.settings, &self.paths, &mut self.updater);
+        let outcome = about.press(
+            b,
+            &mut self.settings,
+            &self.paths,
+            &mut self.updater,
+            &mut self.sync,
+            self.wifi,
+        );
         if recents != self.settings.recents {
             self.restock();
         }
@@ -1047,6 +1191,7 @@ impl App {
                 self.phase = Phase::Shelf;
             }
             crate::about::Outcome::ExitToOnion => self.exit = Some(Exit::ToOnion),
+            crate::about::Outcome::ToggleView => self.toggle_view(),
             #[cfg(feature = "pc")]
             crate::about::Outcome::Host(row) => self.host_action = Some(row),
         }
@@ -1122,8 +1267,13 @@ impl App {
             return;
         }
         let stem = cart.stem.clone();
+        let game = slot_mini_sync::GameId::new(cart.platform, &cart.stem);
         if let Some(s) = self.shelf_mut() {
             s.release_hold();
+        }
+        // The PC may hold a newer save: fetch it while the cart goes in.
+        if !self.paths.is_pc() && self.auto_sync() {
+            self.sync.launching(game);
         }
         // From the grid the cart first flies to where the shelf holds it.
         let lift = match self.grid_on() {
@@ -1192,6 +1342,7 @@ impl App {
             }
         }
         self.sync_fetched();
+        self.sync_tick();
         // An installed update: let "Restarting" show, then start it.
         if let crate::update::Status::Installed(_) = self.updater.status() {
             let at = *self.restart_at.get_or_insert(now);
@@ -1217,15 +1368,27 @@ impl App {
             self.insert_sounded = true;
             self.play(crate::sound::Clip::Insert);
         }
-        match &self.phase {
-            Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => {
+        // The pull of this game's save may take a little longer than the
+        // cart does (`sync::LAUNCH_CAP`); the launch waits no longer.
+        let seated = match &self.phase {
+            Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => Some(*fresh),
+            _ => None,
+        };
+        match seated {
+            Some(_) if self.exit.is_none() && self.sync.launch_waits() => {}
+            Some(fresh) if self.exit.is_none() => {
+                // Nothing may be half written when the game starts.
+                self.sync.close();
                 if let Some((_, cart)) = self.current() {
                     self.exit = Some(Exit::Launch {
                         cart: cart.clone(),
-                        fresh: *fresh,
+                        fresh,
                     });
                 }
             }
+            _ => {}
+        }
+        match &self.phase {
             Phase::Ejecting { at, .. } if self.secs_since(*at) >= EJECT_S => {
                 self.phase = Phase::Shelf;
                 if self.grid_on() {
@@ -1360,13 +1523,27 @@ impl App {
             ),
             false => (shelf.on_screen(), shelf.around(NEAR)),
         };
+        // The Miyoo's grid keeps one face whole, the selected cart's (it
+        // lifts, flies and goes into the slot); the rest hold only their
+        // cell-sized copy, a seventh of the memory. A cart newly selected
+        // is built again, as a step along the shelf builds one.
+        let lean = grid && !self.paths.is_pc();
+        let selected = shelf.index;
         let wants: Vec<FaceWant> = near
             .into_iter()
-            .filter(|&i| shelf.face(i).is_none())
+            .filter(|&i| match shelf.face(i) {
+                None => true,
+                Some(tex) => lean && i == selected && !self.gfx.is_pinned(tex),
+            })
             .map(|i| FaceWant {
                 shelf: self.at,
                 index: i,
-                on_screen: on_screen.contains(&i),
+                // A frame does not wait for the whole face of a cart that
+                // has its small one: it starts its lift at that size, and
+                // the whole one is there before it has grown. (Tests wait
+                // for everything, so their pictures do not depend on it.)
+                on_screen: on_screen.contains(&i)
+                    && (shelf.face(i).is_none() || self.face_wait.is_none()),
                 grid,
             })
             .collect();
@@ -1377,13 +1554,17 @@ impl App {
             self.face_wait,
         );
         for r in ready {
-            let tex = self.gfx.upload(r.face.full);
-            self.gfx.pin_scaled(tex, r.face.side);
-            let interior = r.interior.map(|f| {
-                let t = self.gfx.upload(f.full);
-                self.gfx.pin_scaled(t, f.side);
-                t
-            });
+            let whole = !lean || (r.shelf == self.at && r.index == selected);
+            let mut put = |f: crate::faces::Prepared| match whole {
+                true => {
+                    let t = self.gfx.upload(f.full);
+                    self.gfx.pin_scaled(t, f.side);
+                    t
+                }
+                false => self.gfx.upload(f.side),
+            };
+            let tex = put(r.face);
+            let interior = r.interior.map(&mut put);
             let Some((_, shelf)) = self.shelves.get_mut(r.shelf) else {
                 self.gfx.free(tex);
                 continue;
@@ -1394,6 +1575,14 @@ impl App {
             if let Some(t) = interior {
                 if let Some(old) = shelf.set_interior(r.index, t) {
                     self.gfx.free(old);
+                }
+            }
+        }
+        if let (true, Some((_, shelf))) = (lean, self.shelves.get(self.at)) {
+            // The cart the selection left goes back to its small copy.
+            for i in (0..shelf.carts.len()).filter(|&i| i != selected) {
+                for tex in [shelf.face(i), shelf.interior(i)].into_iter().flatten() {
+                    self.gfx.keep_pinned(tex);
                 }
             }
         }
@@ -1466,6 +1655,7 @@ impl App {
     /// so an idle shelf costs almost nothing (and the caller need not show
     /// it).
     pub fn render(&mut self, canvas: &mut Canvas) -> bool {
+        self.rendered = true;
         self.sync_faces();
         self.sync_text();
         #[cfg(feature = "pc")]
@@ -1484,6 +1674,7 @@ impl App {
                 ground,
                 &self.settings,
                 &self.updater.status(),
+                &self.sync.view(),
                 &mut self.gfx,
                 &mut out,
             ),
@@ -1633,10 +1824,35 @@ impl App {
         if self.wifi {
             draw_wifi_icon(self.percent.printed, self.statics.wifi, out);
         }
+        if let (Some(mark), Some(marks)) = (self.sync_mark, &self.sync_marks) {
+            let mark = match mark {
+                crate::sync::Icon::Synced => slot_mini_ui::SyncMark::Synced,
+                crate::sync::Icon::Syncing => slot_mini_ui::SyncMark::Syncing,
+                crate::sync::Icon::Unreachable => slot_mini_ui::SyncMark::Unreachable,
+                crate::sync::Icon::Conflict => slot_mini_ui::SyncMark::Conflict,
+            };
+            let wifi_w = self.statics.wifi.filter(|_| self.wifi).map(|(_, w, _)| w);
+            slot_mini_ui::draw_sync_icon(self.percent.printed, wifi_w, marks[mark.index()], out);
+        }
+        // The Miyoo's grid names the button that leads back to the shelf.
+        if let (true, Some((tex, w, h))) = (self.grid_on(), self.view_hint) {
+            let x = self.stage.w - VIEW_HINT_EDGE - self.clock.printed.w as f32 - w as f32;
+            out.push(Draw::Tex {
+                x: x.round(),
+                y: slot_mini_ui::FOOTER_Y,
+                w: w as f32,
+                h: h as f32,
+                tex,
+                alpha: 1.0,
+            });
+        }
         #[cfg(feature = "pc")]
         self.draw_pc_footer(out);
     }
 }
+
+/// The footer's margin and the gap between the clock and the grid's legend.
+const VIEW_HINT_EDGE: f32 = 24.0 + 16.0;
 
 fn reprint(gfx: &mut Renderer, p: &mut Printing, text: &str, face: impl Fn(&str) -> UndoFace) {
     if p.text == text {

@@ -110,7 +110,8 @@ fn missing_labels_are_fetched_and_local_files_win() {
         !server.asked().iter().any(|a| a.contains("Emerald")),
         "carts with a local label are not looked up"
     );
-    d.run(200);
+    // Past the shelf's name fading out, however long the fetch took.
+    d.run(8000);
     d.go_to("Metroid Fusion (USA)");
     d.run(1500);
     assert!(d.app.current().unwrap().1.label.is_some());

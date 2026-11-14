@@ -327,6 +327,24 @@ impl Renderer {
         }
     }
 
+    /// Whether `id` has a pre-scaled copy.
+    pub fn is_pinned(&self, id: TexId) -> bool {
+        self.pinned.get(&id.0).is_some_and(|v| !v.is_empty())
+    }
+
+    /// Let go of `id`'s full-size pixels: its pre-scaled copy becomes the
+    /// texture. For a face that will only be drawn at that size (a resting
+    /// cart in the Miyoo's grid), which is a seventh of the memory.
+    pub fn keep_pinned(&mut self, id: TexId) {
+        let Some(small) = self.pinned.remove(&id.0).and_then(|mut v| v.pop()) else {
+            return;
+        };
+        self.generation += 1;
+        if let Some(slot) = self.textures.get_mut(id.0) {
+            *slot = Some(small);
+        }
+    }
+
     pub fn free(&mut self, id: TexId) {
         self.generation += 1;
         if let Some(slot) = self.textures.get_mut(id.0) {
