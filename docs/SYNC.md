@@ -105,18 +105,28 @@ Saves belong to games, not cores: `save:GBA/Golden Sun.srm` is
 `saves/mGBA/Golden Sun.srm` on a PC that runs it on mGBA. The bytes are the
 same format in both.
 
-**Saves need their game.** A save is listed, sent and received only for a
-game whose ROM is on that side (or arrives in the same sync). Without the
-ROM a side cannot tell which core folder the save belongs in, and a save
-folder shared by two systems (Gambatte holds GB and GBC) cannot be told
-apart. The save waits on the other side and arrives with a later sync, once
-the ROM is there.
+**Saves need their game.** A save is sent and received only for a game
+whose ROM is on both sides, or arrives in the same sync. Without the ROM a
+side cannot tell which core folder the save belongs in, and a save folder
+shared by two systems (Gambatte holds GB and GBC) cannot be told apart. The
+save waits where it is and moves with a later sync, once the ROM is there.
+
+A side also lists the saves it holds for games it does **not** have (a ROM
+deleted here, its save left behind): every `<stem>.srm` or `.rtc` in a core
+folder whose stem is no game's here, under each system whose saves would go
+in that folder by default. That is what lets a save go out in the same sync
+that brings its ROM back; on its own such a save moves nothing.
 
 ## Names
 
-- Names travel **verbatim**. A file created by sync has exactly the name
-  the other side gave it, because labels, art and saves find their game by
-  that name.
+- ROM names travel **verbatim**: a ROM created by sync has exactly the
+  name and subfolder the other side gave it.
+- A label, art file, save, shell line or favourite belongs to a game, and
+  is found by the game's name. One that sync creates is named after the
+  **receiving side's spelling of the game** (the stem of its ROM there),
+  which is the other side's spelling whenever the ROM arrived by sync. A
+  side without the game (a label that arrives before its ROM in an `Auto`
+  sync) uses the name it was sent.
 - Names are **compared** by their Unicode NFC form, lower-cased
   (`names::fold`), everywhere: keys from the two sides, the base, text
   entries. So `Pokémon.gba` in NFD on one side and NFC on the other is one
@@ -147,6 +157,7 @@ A **manifest** is one side's list of items for a scope:
   Unix seconds;
 - the games whose ROM is present (always, whatever the scope), so the
   planner can apply "saves need their game" without hashing ROMs;
+- the saves of games that are not present (see [Layouts](#layouts));
 - the shell lines and the favourites.
 
 Changes are detected by hash against the base, never by time. The hint is
@@ -215,8 +226,11 @@ What a **conflict** does depends on the kind:
 
 Before the table is applied, in this order:
 
-1. **Remove everywhere.** Every item of a game with a tombstone this device
-   has not applied becomes a **remove** on the client (see below).
+1. **Remove everywhere.** A game with a tombstone this device has not
+   applied becomes one **remove** on the client (see below), which covers
+   everything the client holds of it. Whatever the hub holds of that game
+   was put there after the removal, and is planned as new: it is pulled
+   after the remove.
 2. **Busy.** Every item of a game the hub has marked busy is skipped and
    the game is listed.
 3. **Saves need their game.** A save whose game is missing on either side,
@@ -225,8 +239,10 @@ Before the table is applied, in this order:
    cannot store, is skipped and listed. Duplicates are listed.
 5. **Space** (pulls of ROMs only): see [Space and busy games](#space-and-busy-games).
 
-Plan order: removes, then labels, art and saves, then ROMs in key order. An
-interruption or a full card therefore costs ROMs first, saves last.
+Plan order: removes, then labels, art and saves in key order, then ROMs in
+key order. The client carries the actions out in that order, whichever way
+each file goes. An interruption or a full card therefore costs ROMs first,
+saves last.
 
 ## Text merges
 
@@ -260,6 +276,14 @@ Favourites, per entry (`<sys>/<stem>`), as a set:
 | yes | yes | – | removed on the client |
 | yes | – | – | forget |
 
+A game with a tombstone the device has not applied loses its favourite on
+both sides, and its shell line unless a game of that stem (in another
+system) is still on either side.
+
+Entries are compared folded, like every name. A line or favourite added to
+a side is written under that side's spelling of its game when it has the
+game, and replaces lines that differ from it only by case.
+
 Each side keeps its own order; a new favourite goes to the end, as a
 toggle does. The files are read and written with slot-mini's own code
 (`slot_mini_store::cart_shell`, `slot_mini_store::Favourites`), so comments
@@ -285,6 +309,11 @@ next time with the same result.
      `states/<core>/<stem>.state.auto`, is renamed the same way.
      RetroArch then starts the game from its title screen and the player
      continues from the in-game save. Nothing is deleted.
+
+   A save that arrives where the same bytes already are is not landed
+   again: nothing is set aside and the auto state stays (it belongs to
+   that very save). This is what happens to the second of a GB and a GBC
+   game of one stem, which share a Gambatte file.
 3. **A conflict keeps both.** The winner is the copy played more recently
    (smaller age; a tie or a missing hint goes to the PC). The conflict copy
    always lives on the **hub**, beside the hub's save, as
@@ -296,7 +325,8 @@ next time with the same result.
      as the conflict copy; then the client receives the hub's save as in
      rule 2 (so its own copy also stays on the card as `.bak_`).
 
-   The hub records the conflict (key, device, stamp, file). The PC app
+   The hub records the conflict (key, device, stamp, file, hash); the
+   same copy is recorded once, however often an interrupted sync repeats. The PC app
    lists them and can **swap** one: the conflict copy becomes the save
    (through rule 2, so the PC's auto state is set aside) and the save
    becomes the conflict copy. The next sync then sees a save changed on
@@ -398,13 +428,13 @@ Errors are `{"error": {"code": "<code>", "message": "<text>"}}`:
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| 400 | `bad-request` | malformed request |
+| 400 | `bad-request` | malformed request, or an action the plan does not have |
 | 401 | `unknown-device` | not paired (or unpaired on the PC): the client forgets the hub |
 | 401 | `bad-auth` | the signature does not verify |
 | 401 | `stale` | timestamp outside the window; the reply carries `now` |
 | 401 | `replay` | nonce already used |
 | 403 | `not-pairing` | the PC is not in pairing mode |
-| 404 | `not-found` | no such endpoint, session or action |
+| 404 | `not-found` | no such endpoint |
 | 409 | `busy` | syncing with another device |
 | 409 | `no-session` | the session is gone (hub restarted, or replaced) |
 | 422 | `hash-mismatch` | an uploaded file is not what the plan said |
@@ -446,7 +476,8 @@ in Unix seconds; `pairing` says whether the PC is in pairing mode.
            "duplicates": [{"key": "rom:GBA/game.gba", "side": "hub"}]}}
 ```
 `key` is the spelling the client must use: its own for a push or an update,
-the hub's for a new file. For a pull, `size` and `hash` are the hub's file;
+the hub's for a new file (which the client stores under its own spelling of
+the game when it is a label, art file or save: see [Names](#names)). For a pull, `size` and `hash` are the hub's file;
 for a push, the client's. For a conflict they are the hub's save, and
 `mine` is the client's hash. `new` says whether the receiving side had the
 item (added or updated, for the report).
@@ -608,7 +639,7 @@ Hub, in `App/slot-mini-pc/data/sync/`:
 | `devices/<id>/base.tsv` | one line per item: folded key, tab, hash or value; appended to during a sync, rewritten at its end |
 | `devices/<id>/acked.txt` | tombstones this device has applied |
 | `tombstones.txt` | one game per line |
-| `conflicts.tsv` | id, key, device name, stamp, file name |
+| `conflicts.tsv` | id, key, device name, stamp, the copy's path under the save folder, its hash |
 | `last_report.json` | the last sync's report |
 | `hashes.tsv` | the hash cache |
 
@@ -637,13 +668,49 @@ in-process `DirectLink`, which is what the property tests use.
 | `Layout` | a side's files: `Layout::device(sd)`, `Layout::pc(root, saves, states, cores)` |
 | `Hub` | the PC's engine and state: pairing, busy, remove everywhere, conflicts, events |
 | `Server` (`server`) | serves a `Hub` over HTTP and answers discovery; `Server::poke` |
-| `Client` | the Miyoo's state: pairing record, `sync(link, layout, scope, events, cancel)` |
+| `Client` | the Miyoo's engine and state: `Client::open(layout)`, pairing, `sync(link, scope, events, cancel)`, `accept_poke` |
 | `HttpLink` (`client`) | the client's connection to a hub |
-| `discover`, `Poked` | UDP discovery and the poke listener |
+| `discover`, `discover_broadcast`, `Poked` | UDP discovery and the poke listener |
+| `Link`, `DirectLink` | the client's view of a hub; `DirectLink` is a hub in the same process |
 | `Scope`, `Event`, `Report`, `SyncError` | what the apps pass in and render |
 
 The client engine never needs the `server` feature and the hub never needs
-`client`. The device binary takes `client` only.
+`client`. The device binary takes `client` only. Linked into the static
+armv7 `slot-mini` (release profile, 0.6.4) the client adds 258,624 bytes:
+5,276,836 becomes 5,535,460, or 4.9%. `ureq`, `ring` and `serde_json` were
+already there.
+
+On the PC (brief 3):
+
+```rust
+let layout = Layout::pc(&library, &retroarch_saves, &retroarch_states, cores);
+let hub = Arc::new(Hub::open(layout, "Desk")?);
+hub.set_events(|event| { /* forward to the UI thread */ });
+let server = Server::start(hub.clone(), "0.0.0.0:24735".parse()?,
+                           Some("0.0.0.0:24735".parse()?))?;   // TCP, UDP discovery
+hub.start_pairing();            // "Pair a device" open; PairingCode arrives
+hub.confirm_pairing();          // the user said yes
+hub.set_busy(Some(game));       // before RetroArch starts; None after
+hub.remove_everywhere(&game)?;
+server.poke(POKE_PORT);         // "Sync now"
+```
+
+On the Miyoo (brief 4), all of it on a worker thread:
+
+```rust
+let mut client = Client::open(Layout::device(sd))?;
+let found = discover_broadcast(Duration::from_secs(2))?;      // or the stored address
+let mut link = HttpLink::new(&found[0].address.to_string());
+let attempt = client.pair(&mut link)?;                        // show attempt.code
+while client.finish_pairing(&mut link, &attempt)? == PairingStatus::Waiting { /* 1 s */ }
+let report = client.sync(&mut link, Scope::Auto, &mut |event| { /* progress */ }, &cancel);
+let ear = Poked::bind(([0, 0, 0, 0], POKE_PORT).into())?;      // blocks in wait()
+if ear.wait().is_some_and(|poke| client.accept_poke(&poke)) { /* Full sync at client.hub().address */ }
+```
+
+`Client::sync` never returns an error: what stopped it is the report's
+`interrupted`. A paired client reconnects to `client.hub().address`, and
+discovers again when that fails.
 
 ## What each UI must show
 
@@ -658,11 +725,17 @@ syncing (the apps run it on a worker thread and forward the events):
 | `Scanning { done, total }` | hashing this side's files, in bytes | a bar; on the Miyoo's first `Full` sync this is the long step |
 | `Planning` | waiting for the hub's plan (the PC is scanning) | "Comparing…" |
 | `Transfer { index, count, key, to_client, done, size }` | one file, in bytes | the game's name, n of m, a bar |
-| `Finished(Report)` | the sync is over | the summary below |
+| `Finished(report)` | the sync is over | the summary below |
 
-The hub emits the same events for its own side (`Hub::set_events`), plus
-`Changed(key)` each time it writes a file, so the PC can redraw a cart,
-and `PairingCode(code)` / `Paired(device)` during pairing.
+The hub tells the PC's UI through `Hub::set_events`, as `HubEvent`s, on the
+thread serving the request:
+
+| `HubEvent` | Meaning |
+| --- | --- |
+| `Sync { device, event }` | a device's sync is at this stage: `Planning`, a `Transfer` as each file starts, `Finished` with the report |
+| `Changed(key)` | the hub wrote this item, so the PC can redraw a cart; `Changed("text")` for shells and favourites |
+| `PairingCode { device_name, code }` | a device wants to pair: show the code and ask |
+| `Paired(device)`, `Unpaired(id)` | the list of devices changed |
 
 **The summary** is `Report`, the same value on both sides (the client
 builds it and sends it with `/sync/done`):
@@ -679,10 +752,11 @@ builds it and sends it with `/sync/done`):
 | `unstorable` | names one side cannot store: key and side |
 | `duplicates` | names that differ only by case on one side: key and side |
 | `failed` | items whose transfer failed: key and the error text |
-| `text_changed` | whether shells or favourites changed on this side |
+| `text_changed` | whether shells or favourites changed on the Miyoo (the hub says `Changed("text")` for its own) |
 | `interrupted` | the error that stopped the sync early, if any |
 
-`Report::is_clean()` is true when nothing needs the player's attention.
+`Report::is_clean()` is true when nothing needs the player's attention;
+`is_noop()` when, besides, nothing moved and nothing changed on the Miyoo.
 The Miyoo should reload its shelf after a sync that added, updated or
 removed anything, or changed text. Conflicts must be visible on the PC
 (`Hub::conflicts()`), with the swap.
@@ -713,7 +787,20 @@ confirm and cancel. **Unpair** on both sides.
   hash would be safe and is left for the maintainer to decide.
 - **A stem shared by GB and GBC** on the same core shares one save file on
   each side (as it already does on the Miyoo); sync treats both keys as
-  that file.
+  that file. When one side has only one of the two games, the save of that
+  one stem still serves both; two different games under one stem are not
+  told apart.
+- **The same game under two ROM paths** (`Game.gba` on one side,
+  `Hacks/Game.gba` on the other) is one game with two ROM files, and after
+  a `Full` sync both sides hold both.
+- **A case-sensitive PC file system.** Sync finds a game's label, art and
+  saves by the ROM's stem. On the Miyoo's FAT card and on Windows any case
+  matches; on Linux a `game.srm` beside `Game.gba` is not that game's save
+  and is not synced. Files sync creates always match.
+- **An unsigned `unknown-device` reply** makes a client forget its hub.
+  Someone on the LAN who can answer in the hub's place can therefore
+  unpair a Miyoo (it must be paired again); they cannot read or change
+  anything by it.
 - **Packed ROMs** (`.zip`, `.7z`) sync as files like any other.
 - **Hub-side space** is not planned; a full PC disk fails the item.
 - **No encryption, keys in plain files** (see Authentication).

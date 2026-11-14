@@ -325,6 +325,7 @@ To ship a new version, bump `version` in `Cargo.toml` and merge to `main`.
 | --- | --- |
 | [PLATFORM.md](docs/PLATFORM.md) | What slot-mini relies on in Onion and the hardware, checked against Onion's and Open MainUI's source |
 | [DESIGN-PARITY.md](docs/DESIGN-PARITY.md) | Every slot screen and effect, how slot-mini reproduces it, and side-by-side images |
+| [SYNC.md](docs/SYNC.md) | How a Miyoo and slot-mini PC keep a library in step: what syncs, the rules, the protocol and the `slot-mini-sync` crate |
 | [DECISIONS.md](docs/DECISIONS.md) | Design decisions and the reasons for them |
 | [PROGRESS.md](docs/PROGRESS.md) | Changes by version, performance figures and open questions |
 | [DEVICE-TESTING.md](docs/DEVICE-TESTING.md) | A step-by-step checklist for a real Mini Plus |
