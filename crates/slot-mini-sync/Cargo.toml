@@ -1,0 +1,31 @@
+[package]
+name = "slot-mini-sync"
+description = "Sync between slot-mini PC and slot-mini on the Miyoo: model, planner, protocol, server and client."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# The Miyoo's side: an HTTP client for the hub (ureq, no TLS: LAN only).
+client = ["dep:ureq"]
+# The PC's side: the HTTP server (tiny_http).
+server = ["dep:tiny_http"]
+
+[dependencies]
+slot-mini-store = { path = "../slot-mini-store" }
+ring = "0.17"
+serde_json = { workspace = true }
+unicode-normalization = "0.1"
+libc = { workspace = true }
+ureq = { version = "3", default-features = false, optional = true }
+tiny_http = { version = "0.12", default-features = false, optional = true }
+
+[dev-dependencies]
+# Tests always have both ends.
+slot-mini-sync = { path = ".", features = ["client", "server"] }
+slot-mini = { path = "../slot-mini" }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
