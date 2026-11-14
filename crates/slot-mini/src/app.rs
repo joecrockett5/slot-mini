@@ -46,6 +46,10 @@ const EMPTY_TEXT: &str = "No games in Roms/GBA, GBC or GB";
 /// shelf holds it over the slot, before an insert and after an eject.
 pub const GRID_LIFT_MS: Millis = 180;
 /// An animation that starts with the next frame shown.
+#[cfg(feature = "pc")]
+#[path = "app_pc.rs"]
+mod pc;
+
 const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
 pub const FACE_WAIT: Duration = Duration::from_millis(500);

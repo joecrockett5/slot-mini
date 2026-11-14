@@ -1,0 +1,45 @@
+[package]
+name = "slot-mini-pc"
+description = "slot-mini for Windows: slot's cartridge shelf in front of a standalone RetroArch."
+# The PC app's own release line (tags `pc-v<version>`), apart from the
+# Miyoo's workspace version.
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+default-run = "slot-mini-pc"
+
+[[bin]]
+name = "slot-mini-pc"
+path = "src/main.rs"
+
+# Stands in for RetroArch in the tests; never shipped.
+[[bin]]
+name = "fake-retroarch"
+path = "src/bin/fake_retroarch.rs"
+test = false
+
+[dependencies]
+slot-mini = { path = "../slot-mini", features = ["pc"] }
+slot-mini-gfx = { path = "../slot-mini-gfx" }
+slot-mini-store = { path = "../slot-mini-store" }
+slot-mini-ui = { path = "../slot-mini-ui" }
+winit = "0.30"
+softbuffer = "0.4"
+gilrs = "0.11"
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+rfd = { version = "0.15", default-features = false }
+tinyaudio = "1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Security", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+png = { workspace = true }
+
+[lints]
+workspace = true

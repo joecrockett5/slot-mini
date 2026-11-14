@@ -1,7 +1,8 @@
 name: CI
 
 # Every push and pull request runs the desktop job (format, clippy, tests,
-# boot shim tests). The armv7 job runs the tests on ARM under qemu:
+# boot shim tests) and the Windows job (the PC app, crates/slot-mini-pc,
+# built and tested where it ships). The armv7 job runs the tests on ARM under qemu:
 # - on pull requests, a light version: the test profile (no fat LTO), and no
 #   device binary or release zip, so nothing fails on main that a PR passed;
 # - on pushes to main, which publish a release, and when started by hand
@@ -24,6 +25,12 @@ jobs:
       - name: Toolchain
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      - name: Libraries for the PC app
+        # gilrs reads controllers through udev. Nothing here opens a window:
+        # the PC app's tests drive it headlessly.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
@@ -49,6 +56,20 @@ jobs:
           name: golden-failures
           path: target/golden-failures/
           if-no-files-found: ignore
+
+  windows:
+    name: Windows build and tests (PC app)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test -p slot-mini-pc --target x86_64-pc-windows-msvc
+      - name: Build
+        run: cargo build --release -p slot-mini-pc --target x86_64-pc-windows-msvc
 
   device:
     name: armv7 musl build
@@ -80,7 +101,12 @@ jobs:
       - name: Test under qemu
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER: qemu-arm-static
-        run: cargo test $([ "$FULL" = true ] && echo --release) --target armv7-unknown-linux-musleabihf --workspace
+        # The PC app is not for the Miyoo and is left out; the grid it
+        # shares with the device's code is tested on ARM all the same.
+        run: |
+          PROFILE=$([ "$FULL" = true ] && echo --release || true)
+          cargo test $PROFILE --target armv7-unknown-linux-musleabihf --workspace --exclude slot-mini-pc
+          cargo test $PROFILE --target armv7-unknown-linux-musleabihf -p slot-mini --features pc --test grid
       - name: Upload failed golden images
         if: failure()
         uses: actions/upload-artifact@v4
