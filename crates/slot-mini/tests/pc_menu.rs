@@ -5,7 +5,7 @@
 mod common;
 
 use common::{golden, Rig};
-use slot_mini::about::{Host, HostRow, Row};
+use slot_mini::about::{Host, HostRow, Offer, Page, PageRow, Row};
 use slot_mini::legend::Glyphs;
 use slot_mini::{Phase, Pointer};
 use slot_mini_gfx::Button;
@@ -23,6 +23,9 @@ fn host() -> Host {
         cores_note: None,
         import: "Import from SD card".into(),
         import_note: None,
+        page: None,
+        remove: None,
+        offer: None,
     }
 }
 
@@ -123,12 +126,53 @@ fn settings_folders_and_sync_are_pages_b_walks_back_through() {
     assert_eq!(d.app.about.as_ref().unwrap().row, 5);
     d.tap(Button::Down);
     d.tap(Button::A);
-    assert_eq!(rows(&d), [Row::Host(HostRow::SyncSoon)]);
+    // Sync's page is the host's to lay out: MENU says the row was chosen.
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Sync));
+    let page = Page {
+        id: 1,
+        rows: vec![
+            PageRow::new("This PC: Desk").note("The name your Miyoo shows for this PC."),
+            PageRow::new("Sync now"),
+        ],
+        ..Page::default()
+    };
+    d.app.set_host(Host {
+        page: Some(page.clone()),
+        ..host()
+    });
+    assert_eq!(
+        rows(&d),
+        [Row::Host(HostRow::Page(0)), Row::Host(HostRow::Page(1))]
+    );
     d.run(100);
     golden("pc_menu_sync", &d.frame);
+    d.tap(Button::Down);
     d.tap(Button::A);
-    assert_eq!(d.app.take_host_action(), None);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Page(1)));
+    d.tap(Button::Left);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::PageTurn(1, false)));
+    // A page with a title is a sheet of its own; the same id keeps the row.
+    d.app.set_host(Host {
+        page: Some(Page {
+            title: Some("Pair with Miyoo Mini?".into()),
+            big: Some("482913".into()),
+            lines: vec!["Check that the Miyoo shows the same code.".into()],
+            ..page.clone()
+        }),
+        ..host()
+    });
+    assert_eq!(d.app.about.as_ref().unwrap().row, 1);
+    d.run(100);
+    golden("pc_menu_sheet", &d.frame);
+    // The mouse finds the sheet's rows where they are drawn.
+    d.app.pointer(Pointer::Move(320.0, 190.0));
+    assert_eq!(d.app.about.as_ref().unwrap().row, 0);
+    // B is the host's too; it takes the page down and settings is back.
     d.tap(Button::B);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::PageBack));
+    d.app.set_host(host());
+    assert_eq!(rows(&d).len(), 7);
+    assert_eq!(d.app.about.as_ref().unwrap().row, 6);
     d.tap(Button::B);
     assert_eq!(rows(&d).len(), 4);
     d.tap(Button::B);
@@ -215,4 +259,46 @@ fn an_empty_library_shows_the_first_run_screen() {
     d.tap(Button::Menu);
     d.run(1000);
     assert_eq!(d.app.phase, Phase::About);
+}
+
+#[test]
+fn where_the_host_syncs_the_first_run_screen_offers_pairing_first() {
+    let rig = Rig::pc();
+    std::fs::remove_dir_all(rig.paths.sd.join("Roms")).unwrap();
+    let mut d = rig.app();
+    let with = |offer: Offer| Host {
+        offer: Some(offer),
+        ..host()
+    };
+    d.app.set_host(with(Offer::default()));
+    d.run(300);
+    assert_eq!(
+        d.app.welcome()[1],
+        "Pair your Miyoo to bring its library over."
+    );
+    golden("pc_first_run_pair", &d.frame);
+    // A pairs; the import is still a press away.
+    d.tap(Button::A);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Pair));
+    d.tap(Button::Start);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Import));
+    d.app.set_glyphs(Glyphs::Mouse);
+    d.run(50);
+    golden("pc_first_run_pair_mouse", &d.frame);
+    d.app.set_glyphs(Glyphs::Pad);
+    // Paired: what to do on the Miyoo, then how its sync is going.
+    let paired = Offer {
+        paired: Some("Miyoo Mini Plus".into()),
+        note: None,
+    };
+    d.app.set_host(with(paired.clone()));
+    d.run(50);
+    golden("pc_first_run_paired", &d.frame);
+    d.app.set_host(with(Offer {
+        note: Some("From Miyoo Mini Plus: 4 of 31, Golden Sun (7.9 MB; 12 MB so far)".into()),
+        ..paired
+    }));
+    d.run(50);
+    assert!(d.app.welcome()[5].starts_with("From Miyoo Mini Plus: 4 of 31"));
+    golden("pc_first_run_seeding", &d.frame);
 }

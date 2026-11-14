@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use slot_mini::status::Status;
 use slot_mini::Pointer;
-use slot_mini_gfx::{SCREEN_H, SCREEN_W};
+use slot_mini_gfx::{Button, SCREEN_H, SCREEN_W};
 use slot_mini_pc::input::{self, Device};
 use slot_mini_pc::pcapp::{PcOptions, MAX_SCALE};
 use slot_mini_pc::present::{present, View};
@@ -314,8 +314,37 @@ impl ApplicationHandler for Shell {
                     }
                     return;
                 }
+                // The PC's name is typed: letters are letters, not
+                // buttons, until Enter or Escape.
+                if down && self.pc.wants_text() {
+                    match code {
+                        KeyCode::Enter
+                        | KeyCode::NumpadEnter
+                        | KeyCode::ArrowUp
+                        | KeyCode::ArrowDown => {}
+                        KeyCode::Escape => {
+                            if !event.repeat {
+                                self.pc.key(input::Key::Button(Button::B), true);
+                                self.pc.key(input::Key::Button(Button::B), false);
+                            }
+                            return;
+                        }
+                        KeyCode::Backspace => return self.pc.backspace(),
+                        _ => {
+                            if let Some(text) = event.text.as_ref() {
+                                self.pc.text(text);
+                            }
+                            return;
+                        }
+                    }
+                }
                 // The app repeats a held button itself.
                 if event.repeat {
+                    return;
+                }
+                // Delete asks about removing the cart on the shelf.
+                if down && code == KeyCode::Delete {
+                    self.pc.remove_current();
                     return;
                 }
                 if let Some(key) = input::key(code) {
@@ -353,6 +382,7 @@ impl ApplicationHandler for Shell {
                         false => Pointer::Click(x, y),
                     });
                 }
+                (MouseButton::Right, Some((x, y))) => self.pc.pointer(Pointer::Context(x, y)),
                 (MouseButton::Right | MouseButton::Back, _) => self.pc.pointer(Pointer::Back),
                 _ => {}
             },
@@ -414,6 +444,8 @@ fn open_pc(now: u64) -> PcApp {
         sound: Some(Box::new(slot_mini_pc::audio::Speakers::new())),
         face_wait: slot_mini::Options::default().face_wait,
         seed,
+        name: slot_mini_pc::sync::computer_name(),
+        sync: Some(slot_mini_pc::sync::Net::lan()),
         releases_url: slot_mini_pc::net::releases_url(slot_mini_pc::net::REPO),
         buildbot: retroarch::BUILDBOT.to_string(),
     };

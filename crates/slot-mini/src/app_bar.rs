@@ -16,6 +16,11 @@ pub enum Item {
     Play,
     /// The first-run screen's offer.
     Import,
+    /// The first-run screen's offer where the host syncs: pair a Miyoo,
+    /// or (`true`) open the Sync page once one is paired.
+    Pair(bool),
+    /// The import beside that offer.
+    Card,
     Fave,
     Studio,
     /// The shelf before and the shelf after.
@@ -32,7 +37,9 @@ impl Item {
     fn label(self) -> &'static str {
         match self {
             Item::Play => "PLAY",
-            Item::Import => "IMPORT",
+            Item::Import | Item::Card => "IMPORT",
+            Item::Pair(false) => "PAIR",
+            Item::Pair(true) => "SYNC",
             Item::Fave => "FAVE",
             Item::Studio => "STUDIO",
             Item::Shelf => "SHELF",
@@ -48,11 +55,11 @@ impl Item {
     /// (crates/slot-mini-pc/src/input.rs).
     fn keys(self) -> (&'static str, &'static str) {
         match self {
-            Item::Play | Item::Import => ("A", "ENTER"),
+            Item::Play | Item::Import | Item::Pair(_) => ("A", "ENTER"),
             Item::Fave => ("Y", "A"),
             Item::Studio => ("X", "BKSP"),
             Item::Shelf => ("L1 R1", "Q W"),
-            Item::Core => ("START", "SPACE"),
+            Item::Core | Item::Card => ("START", "SPACE"),
             Item::Menu => ("SELECT", "ESC"),
             Item::View(_) => ("R2", "TAB"),
             Item::Forget => ("L3", "S"),
@@ -128,7 +135,10 @@ impl App {
     /// What the bar lists for the cart in hand.
     pub fn bar_items(&self) -> Vec<Item> {
         let Some((kind, cart)) = self.current() else {
-            return vec![Item::Import, Item::Menu];
+            return match &self.host.offer {
+                Some(offer) => vec![Item::Pair(offer.paired.is_some()), Item::Card, Item::Menu],
+                None => vec![Item::Import, Item::Menu],
+            };
         };
         let mut items = vec![Item::Play, Item::Fave, Item::Studio];
         if self.shelves.len() > 1 {
@@ -231,7 +241,8 @@ impl App {
                 self.press(Button::A);
                 self.bar.held = true;
             }
-            Item::Import => self.tap(Button::A),
+            Item::Import | Item::Pair(_) => self.tap(Button::A),
+            Item::Card => self.tap(Button::Start),
             Item::Fave => self.tap(Button::Y),
             Item::Studio => self.tap(Button::Select),
             Item::Shelf if right => self.tap(Button::R1),

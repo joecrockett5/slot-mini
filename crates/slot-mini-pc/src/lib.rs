@@ -13,6 +13,7 @@ pub mod net;
 pub mod pcapp;
 pub mod present;
 pub mod retroarch;
+pub mod sync;
 
 pub use config::Config;
 pub use pcapp::{PcApp, Request};

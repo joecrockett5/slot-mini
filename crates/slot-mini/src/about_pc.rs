@@ -21,10 +21,56 @@ pub enum HostRow {
     Library,
     /// Fetch the cores RetroArch is missing.
     Cores,
-    /// Opens the sync page.
+    /// Opens the sync page, which the host lays out (`Host::page`).
     Sync,
-    /// The sync page's only row until sync is built.
-    SyncSoon,
+    /// Remove the cart on the shelf everywhere (the host asks first).
+    Remove,
+    /// The first-run screen's offer was taken: pair a Miyoo.
+    Pair,
+    /// A row of the host's page was chosen (A).
+    Page(usize),
+    /// A row of the host's page was turned: Right is `true`.
+    PageTurn(usize, bool),
+    /// B on the host's page.
+    PageBack,
+}
+
+/// A page the host lays out itself: the shared app draws it and says
+/// which row was chosen. With a `title` it is a sheet of its own, without
+/// the sticker: a question, a code, a list with its story.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Page {
+    /// Which page this is: a different id starts on the page's `start`
+    /// row, the same one keeps the row the player is on.
+    pub id: u32,
+    pub start: usize,
+    pub title: Option<String>,
+    /// Large type under the title: the pairing code.
+    pub big: Option<String>,
+    /// Small type under that, a line each.
+    pub lines: Vec<String>,
+    pub rows: Vec<PageRow>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PageRow {
+    pub label: String,
+    /// The line under the rows while this one is selected.
+    pub note: Option<String>,
+}
+
+impl PageRow {
+    pub fn new(label: impl Into<String>) -> PageRow {
+        PageRow {
+            label: label.into(),
+            note: None,
+        }
+    }
+
+    pub fn note(mut self, note: impl Into<String>) -> PageRow {
+        self.note = Some(note.into());
+        self
+    }
 }
 
 /// What the PC app's rows show.
@@ -47,15 +93,32 @@ pub struct Host {
     /// The import row's text, and how the import is going or what it did.
     pub import: String,
     pub import_note: Option<String>,
+    /// The page the host is showing over MENU's own, if any.
+    pub page: Option<Page>,
+    /// The game MENU was opened over, when it can be removed everywhere.
+    pub remove: Option<String>,
+    /// What the first-run screen says about pairing, when the host syncs.
+    pub offer: Option<Offer>,
+}
+
+/// The first-run screen's offer to bring a Miyoo's library over.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Offer {
+    /// The Miyoo already paired, if one is.
+    pub paired: Option<String>,
+    /// How a sync is going, or how the last one went wrong.
+    pub note: Option<String>,
 }
 
 /// MENU's first page on the PC.
-pub(super) const MAIN: [Row; 4] = [
-    Row::Settings,
-    Row::Host(HostRow::Import),
-    Row::Host(HostRow::Update),
-    Row::Host(HostRow::Quit),
-];
+pub(super) fn main(host: &Host) -> Vec<Row> {
+    let mut rows = vec![Row::Settings, Row::Host(HostRow::Import)];
+    if host.remove.is_some() {
+        rows.push(Row::Host(HostRow::Remove));
+    }
+    rows.extend([Row::Host(HostRow::Update), Row::Host(HostRow::Quit)]);
+    rows
+}
 
 pub(super) const SETTINGS: [Row; 7] = [
     Row::Sounds,
@@ -67,7 +130,12 @@ pub(super) const SETTINGS: [Row; 7] = [
     Row::Host(HostRow::Sync),
 ];
 
-const SYNC: [Row; 1] = [Row::Host(HostRow::SyncSoon)];
+/// A sheet's measures: where its title starts, and the height of the
+/// title, the large type and each small line.
+pub(super) const SHEET_TOP: f32 = 22.0;
+pub(super) const SHEET_TITLE_H: f32 = 40.0;
+pub(super) const SHEET_BIG_H: f32 = 84.0;
+pub(super) const SHEET_LINE_PITCH: f32 = 24.0;
 
 /// A path short enough for the note line: its start and its end.
 pub fn short_path(path: &str) -> String {
@@ -85,7 +153,7 @@ impl About {
     /// MENU for the PC app.
     pub fn for_host(&mut self, host: Host) {
         if self.host.is_none() {
-            self.rows = MAIN.to_vec();
+            self.rows = main(&host);
         }
         self.set_host(host);
     }
@@ -97,7 +165,58 @@ impl About {
             self.rows = folders(&host);
             self.row = self.row.min(self.rows.len() - 1);
         }
+        // So does the row for the game MENU was opened over.
+        if self.rows.contains(&Row::Host(HostRow::Quit)) {
+            self.rows = main(&host);
+            self.row = self.row.min(self.rows.len() - 1);
+        }
+        let rows = |page: &Page| -> Vec<Row> {
+            (0..page.rows.len())
+                .map(|i| Row::Host(HostRow::Page(i)))
+                .collect()
+        };
+        match (&host.page, self.paged) {
+            (Some(page), None) => {
+                self.open(&rows(page));
+                self.row = page.start.min(page.rows.len().saturating_sub(1));
+                self.paged = Some(page.id);
+            }
+            (Some(page), Some(id)) => {
+                self.rows = rows(page);
+                if id != page.id {
+                    self.row = page.start;
+                    self.note = None;
+                }
+                self.row = self.row.min(page.rows.len().saturating_sub(1));
+                self.paged = Some(page.id);
+            }
+            (None, Some(_)) => {
+                self.back();
+                self.paged = None;
+            }
+            (None, None) => {}
+        }
         self.host = Some(host);
+    }
+
+    /// The host's page, while it shows.
+    pub fn page(&self) -> Option<&Page> {
+        self.paged?;
+        self.host.as_ref()?.page.as_ref()
+    }
+
+    /// The host's page when it is a sheet of its own.
+    pub(super) fn sheet(&self) -> Option<&Page> {
+        self.page().filter(|p| p.title.is_some())
+    }
+
+    /// Where a sheet's rows start.
+    pub(super) fn sheet_rows_top(page: &Page) -> f32 {
+        let mut y = SHEET_TOP + SHEET_TITLE_H;
+        if page.big.is_some() {
+            y += SHEET_BIG_H;
+        }
+        y + page.lines.len() as f32 * SHEET_LINE_PITCH + 10.0
     }
 
     pub(super) fn host_press(&mut self, row: HostRow, b: Button) -> Outcome {
@@ -107,8 +226,10 @@ impl About {
                 let rows = self.host.as_ref().map(folders).unwrap_or_default();
                 self.open(&rows);
             }
-            HostRow::Sync if a => self.open(&SYNC),
-            HostRow::Folders | HostRow::Sync | HostRow::SyncSoon => {}
+            HostRow::Folders => {}
+            HostRow::Page(i) if !a => {
+                return Outcome::Host(HostRow::PageTurn(i, b == Button::Right));
+            }
             // Switches turn with Left and Right as well.
             HostRow::Fullscreen | HostRow::Controller => {
                 self.note = None;
@@ -146,7 +267,15 @@ impl About {
             HostRow::Library => "Library folder".into(),
             HostRow::Cores => host.cores.clone().unwrap_or_default(),
             HostRow::Sync => "Sync".into(),
-            HostRow::SyncSoon => "Sync: coming soon".into(),
+            HostRow::Remove => "Remove this game".into(),
+            HostRow::Pair => "Pair a Miyoo".into(),
+            HostRow::Page(i) => host
+                .page
+                .as_ref()
+                .and_then(|p| p.rows.get(i))
+                .map(|r| r.label.clone())
+                .unwrap_or_default(),
+            HostRow::PageTurn(..) | HostRow::PageBack => String::new(),
         }
     }
 
@@ -174,9 +303,12 @@ impl About {
             }),
             HostRow::Library => Some(short_path(&host.library)),
             HostRow::Cores => host.cores_note.clone(),
-            HostRow::SyncSoon | HostRow::Sync => {
-                Some("Saves will sync with your Miyoo in a later release.".into())
-            }
+            HostRow::Sync => Some("Games, labels and saves, shared with your Miyoo.".into()),
+            HostRow::Remove => Some(format!(
+                "{}: from this PC and every paired Miyoo. Asks first.",
+                host.remove.as_deref().unwrap_or_default()
+            )),
+            HostRow::Page(i) => host.page.as_ref()?.rows.get(i)?.note.clone(),
             _ => None,
         }
     }

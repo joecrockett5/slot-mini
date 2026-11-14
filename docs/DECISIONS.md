@@ -591,3 +591,67 @@ built.
       name's `<who>` is a slug two devices can share. Old rows read as
       "from the device, time unknown".
     `docs/SYNC.md` and the crate changed together, in a PR of their own.
+90. **MENU draws pages the PC supplies.** The shared MENU knows nothing
+    of sync: `Host.page` is a `Page` (title, an optional big line, small
+    lines, rows with notes) and A, Left/Right and B on it come back as
+    `HostRow::Page`, `PageTurn` and `PageBack`. The PC crate owns every
+    screen's content and what its rows do (`sync_ui.rs`), so the sync UI
+    is testable through `PcApp` and the Miyoo's MENU is untouched (all of
+    it is feature `pc`). A page with a title is a "sheet": the sticker
+    gives way to a dark ground, which the pairing code and the firewall
+    text need the room for.
+91. **The PC's name is typed.** The row opens an editor; the keyboard
+    types into it, Backspace (or Left, for a controller) rubs out, and
+    Save restarts the server under the new name. A controller alone can
+    shorten a name but not write one: an on-screen keyboard for a name
+    that is set once was not worth its screen.
+92. **Times are relative** ("just now", "3 hours ago", "5 days ago").
+    They read at a glance, need no time zone, and keep the pictures in
+    the tests still.
+93. **The status icon is two arrows and a short word** where the device
+    draws Wi-Fi: dim when idle, "3/12" while syncing, "!" for a conflict,
+    "X" after a sync that failed, nothing before a Miyoo is paired. It
+    clears at the next sync that ends well.
+94. **"No answer" is a wait of 8 seconds.** A poke is a datagram with no
+    reply, so Sync now says "Asking <name>..." and, if no sync has begun
+    by then, "No answer. Is the Miyoo awake, on Wi-Fi, and on its shelf
+    (not in a game)?". A sync that goes quiet for 45 seconds is shown as
+    stopped. The pairing code is shown as its six digits, as the Miyoo
+    shows it.
+95. **Confirmations start on Cancel.** Unpair, dismissing a conflict and
+    Remove everywhere each ask on a sheet of their own that says what
+    will happen, with the cursor on Cancel, so a double press of A does
+    nothing.
+96. **Remove everywhere is a MENU row, a right click and Delete.** The
+    brief offers the studio or a cart menu. The studio's list is already
+    as tall as the window allows, and MENU on the PC is the cart menu in
+    all but name: it opens over the cart on the shelf. So MENU has
+    "Remove this game", named for that cart, between Import and Check
+    for updates; a right click on the selected cart and the Delete key
+    ask the same thing straight from the shelf. A right click anywhere
+    else is still Back, and on another cart it selects it first, so no
+    single click can ask about a game the player was not looking at. The
+    row is there without a network too: the removal is local at once and
+    reaches a Miyoo whenever one next syncs.
+97. **A conflicted cart wears an amber "!" at its top right corner**, on
+    the shelf and in the grid, drawn over the cart by the shared app from
+    a set of stems the PC hands it (`App::set_marked`, `pc`-gated). The
+    label is left alone, since it is the player's own picture.
+98. **The first-run screen offers pairing on A and keeps the import on
+    START.** With sync in the app the first thing an empty library says
+    is "Pair your Miyoo to bring its library over"; A (or PAIR on the
+    bar) opens the pairing screen straight from the shelf. Import from SD
+    card stays one press away (START, Space, or IMPORT on the bar), and
+    in MENU. Once a Miyoo is paired the screen asks for Sync now on the
+    Miyoo, A becomes SYNC (the Sync page), and the last line shows the
+    seeding as it runs. The line that said sync was coming is gone.
+99. **The summary of a sync is a shelf notice, and only when something
+    moved.** "Synced with <name>: 14 games and 1 save in, 2 saves out"
+    shows where the shelf's name goes and fades as a name does. A sync
+    that moved nothing says "In step with <name>" on the Sync page only,
+    so the post-game poke does not put words on the shelf every time.
+100. **Labels and shells that arrive for carts already on the shelf are
+    loaded again at once.** A rescan that finds the same carts used to
+    leave their faces alone; after a sync that brought labels or changed
+    shell lines the shelf is restocked in place (`App::relabel`), with
+    the selection kept.

@@ -20,6 +20,11 @@ use crate::import;
 use crate::input::{Device, Key, Stick};
 use crate::net::{self, PcRelease};
 use crate::retroarch::{self, RetroArch, Run, Screen};
+use crate::sync::{self, Net, Service};
+
+#[path = "sync_ui.rs"]
+pub mod sync_ui;
+pub use sync_ui::SyncUi;
 
 /// Something only the window (or the desktop) can do, asked of `main`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,6 +119,10 @@ pub struct PcOptions {
     pub releases_url: String,
     /// libretro's buildbot folder for this system's cores.
     pub buildbot: String,
+    /// What this PC is called until the library's hub has a name.
+    pub name: String,
+    /// Where the sync hub listens; `None` keeps it off the network.
+    pub sync: Option<Net>,
 }
 
 pub struct PcApp {
@@ -151,6 +160,13 @@ pub struct PcApp {
     /// The library changed under the app: look again once the shelf is
     /// at rest.
     rescan_due: bool,
+    /// A sync brought labels or shells for carts already on the shelf.
+    relabel_due: bool,
+    /// The sync hub over this library; `None` when its state could not be
+    /// opened.
+    pub sync: Option<Service>,
+    /// The Sync pages, the status icon and what the last sync said.
+    pub ui: SyncUi,
 }
 
 impl PcApp {
@@ -180,6 +196,13 @@ impl PcApp {
             },
             now,
         );
+        let sync = match Service::open(library, &opts.name, opts.sync) {
+            Ok(service) => Some(service),
+            Err(e) => {
+                eprintln!("slot-mini-pc: sync: {e}");
+                None
+            }
+        };
         let mut pc = PcApp {
             config,
             config_dir: opts.config_dir,
@@ -205,6 +228,9 @@ impl PcApp {
             import: Import::Idle,
             import_rx: None,
             rescan_due: false,
+            relabel_due: false,
+            sync,
+            ui: SyncUi::default(),
         };
         pc.app.set_glyphs(glyphs(pc.device));
         pc.refresh_host();
@@ -357,7 +383,7 @@ impl PcApp {
     }
 
     /// Tell MENU what its PC rows show now.
-    fn refresh_host(&mut self) {
+    pub fn refresh_host(&mut self) {
         let (update, update_note) = match &self.update {
             Update::Idle => ("Check for updates".to_string(), None),
             Update::Checking => ("Checking for updates...".to_string(), None),
@@ -416,7 +442,11 @@ impl PcApp {
                 Import::Running(done, of) => Some(format!("Importing: {done} of {of} games.")),
                 Import::Said(text) => Some(text.clone()),
             },
+            page: self.sync_page(),
+            remove: self.removable(),
+            offer: self.offer(),
         });
+        self.show_status();
     }
 
     /// A PC row on MENU was chosen.
@@ -445,7 +475,17 @@ impl PcApp {
                 CoresJob::Asked => self.fetch_cores(),
                 CoresJob::Fetching => {}
             },
-            HostRow::Folders | HostRow::Sync | HostRow::SyncSoon => {}
+            HostRow::Folders => {}
+            HostRow::Sync => self.open_sync(),
+            HostRow::Pair => {
+                self.pair_from_shelf();
+            }
+            HostRow::Remove => {
+                self.remove_current();
+            }
+            HostRow::Page(i) => self.page_action(i),
+            HostRow::PageTurn(i, right) => self.page_turn(i, right),
+            HostRow::PageBack => self.page_back(),
         }
         self.refresh_host();
     }
@@ -523,9 +563,18 @@ impl PcApp {
             }
             changed = true;
         }
+        for event in self.sync.as_ref().map(Service::poll).unwrap_or_default() {
+            self.sync_event(event);
+            changed = true;
+        }
+        changed |= self.sync_tick();
         if self.rescan_due && self.app.at_rest() {
             self.rescan_due = false;
-            self.app.rescan();
+            // A rescan that finds the same carts leaves their faces be.
+            if !self.app.rescan() && self.relabel_due {
+                self.app.relabel();
+            }
+            self.relabel_due = false;
         }
         if changed {
             self.refresh_host();
@@ -605,6 +654,9 @@ impl PcApp {
             eprintln!("slot-mini-pc: state: {e}");
         }
         self.app.close_sound();
+        if let Some(sync) = &mut self.sync {
+            sync.stop();
+        }
     }
 
     // ---- frames --------------------------------------------------------
@@ -655,6 +707,20 @@ impl PcApp {
             self.app.set_notice("RetroArch was not found".into());
             return self.app.game_ended();
         };
+        // Marked before RetroArch starts, so that no sync planned from
+        // now on touches the game; one already moving its files finishes
+        // first (docs/SYNC.md, "Space and busy games").
+        let game = sync::game_of(&cart);
+        if let (Some(sync), Some(game)) = (&self.sync, &game) {
+            let hub = sync.hub();
+            hub.set_busy(Some(game.clone()));
+            if hub.is_syncing_game(game) {
+                hub.set_busy(None);
+                self.app
+                    .set_notice("Syncing this game: try again in a moment".into());
+                return self.app.game_ended();
+            }
+        }
         let run = retroarch::plan(&self.app.paths, &ra, &cart, fresh);
         let cfg = self.config_dir.join("launch.cfg");
         let screen = match self.config.fullscreen {
@@ -668,6 +734,7 @@ impl PcApp {
             Err(e) => {
                 eprintln!("slot-mini-pc: {}: {e}", ra.exe.display());
                 self.app.set_notice("RetroArch could not start".into());
+                self.set_idle();
                 return self.app.game_ended();
             }
         };
@@ -704,6 +771,25 @@ impl PcApp {
         };
         for hook in &mut self.hooks {
             hook(&played);
+        }
+        self.after_game();
+    }
+
+    // ---- sync ----------------------------------------------------------
+
+    /// No game is running: sync may touch every game again.
+    fn set_idle(&self) {
+        if let Some(sync) = &self.sync {
+            sync.hub().set_busy(None);
+        }
+    }
+
+    /// RetroArch has gone and its save is on disk: a paired Miyoo on its
+    /// shelf is told, and fetches it without anyone asking.
+    fn after_game(&mut self) {
+        self.set_idle();
+        if let Some(sync) = &self.sync {
+            sync.poke();
         }
     }
 }
@@ -773,6 +859,8 @@ mod tests {
             sound: None,
             face_wait: None,
             seed: 7,
+            name: "Desk".into(),
+            sync: None,
             releases_url: format!("{base}/releases"),
             buildbot: base.to_string(),
         };
@@ -842,7 +930,8 @@ mod tests {
         )]));
         let mut r = rig(&ALL, true, &base);
         assert_eq!(r.pc.app.host().update, "Check for updates");
-        r.taps(&[Menu, Down, Down, A]);
+        // Past Import and the row for the game on the shelf.
+        r.taps(&[Menu, Down, Down, Down, A]);
         r.wait("the check", |pc| pc.update != Update::Checking);
         assert_eq!(r.pc.app.host().update, "Get slot-mini PC 0.10.1");
         assert!(r.pc.requests.is_empty());
@@ -856,7 +945,8 @@ mod tests {
     #[test]
     fn a_failed_check_says_so_and_can_be_tried_again() {
         let mut r = rig(&ALL, true, NOWHERE);
-        r.taps(&[Menu, Down, Down, A]);
+        // Past Import and the row for the game on the shelf.
+        r.taps(&[Menu, Down, Down, Down, A]);
         r.wait("the check", |pc| pc.update != Update::Checking);
         assert_eq!(r.pc.update, Update::Failed("No connection.".into()));
         assert_eq!(r.pc.app.host().update, "Check for updates");
@@ -970,6 +1060,8 @@ mod tests {
             sound: None,
             face_wait: None,
             seed: 7,
+            name: "Desk".into(),
+            sync: None,
             releases_url: NOWHERE.into(),
             buildbot: NOWHERE.into(),
         };
@@ -977,8 +1069,8 @@ mod tests {
         let mut r = Rig { dir, pc, now: 0 };
         r.pc.tick(0);
         assert!(r.pc.app.shelf_kinds().is_empty());
-        // A on the first-run screen asks for the card.
-        r.tap(A);
+        // A on the first-run screen pairs; START asks for the card.
+        r.tap(Button::Start);
         assert_eq!(r.pc.requests, [Request::PickCard]);
         // A folder that is no card is refused, and says why.
         r.pc.chose_card(Some(r.dir.path().join("config")));
@@ -997,7 +1089,7 @@ mod tests {
         assert_eq!(r.pc.app.host().import, "Importing...");
         // A second card while one is being read is ignored.
         r.pc.requests.clear();
-        r.tap(A);
+        r.tap(Button::Start);
         assert!(r.pc.requests.is_empty());
         r.wait("the import", |pc| !matches!(pc.import, Import::Running(..)));
         let Import::Said(summary) = r.pc.import.clone() else {
