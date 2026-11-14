@@ -21,6 +21,8 @@ struct Args {
     input: Vec<(u64, Event)>,
     /// Run as the in-game MENU helper beside RetroArch.
     ingame: bool,
+    /// What the helper is there for.
+    helper: slot_mini::ingame::Helper,
     /// Advance a simulated clock 16 ms per frame instead of real time, and
     /// show a fixed battery and clock (for tests and screenshots).
     sim: bool,
@@ -82,6 +84,10 @@ fn args() -> Args {
         input: Vec::new(),
         sim: false,
         ingame: false,
+        helper: slot_mini::ingame::Helper {
+            menu: true,
+            push: None,
+        },
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -125,6 +131,8 @@ fn args() -> Args {
                 }
             }
             "--ingame" => a.ingame = true,
+            "--no-menu" => a.helper.menu = false,
+            "--push" => a.helper.push = slot_mini::ingame::Helper::parse_push(&v()),
             "--version" => {
                 println!("slot-mini {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
@@ -209,7 +217,7 @@ fn main() {
     if a.ingame {
         let fb = std::env::var("SLOT_MINI_FB").unwrap_or_else(|_| "/dev/fb0".into());
         let ev = std::env::var("SLOT_MINI_INPUT").unwrap_or_else(|_| "/dev/input/event0".into());
-        slot_mini::ingame::run(&paths, fb.as_ref(), ev.as_ref());
+        slot_mini::ingame::run(&paths, fb.as_ref(), ev.as_ref(), &a.helper);
         std::process::exit(0);
     }
     // No game is running while slot-mini is: a helper left from the last one
@@ -247,7 +255,8 @@ fn main() {
     let status: Box<dyn slot_mini::status::Status> = match a.sim {
         true => Box::new(slot_mini::status::FixedStatus {
             battery: Some(76),
-            wifi: false,
+            // Tests of sync run the binary with Wi-Fi up.
+            wifi: std::env::var_os("SLOT_MINI_SIM_WIFI").is_some(),
             clock: (12, 0),
             charging: false,
         }),
@@ -267,7 +276,8 @@ fn main() {
             false => Options::default().face_wait,
         },
     };
-    let mut app = App::new(paths.clone(), status, opts, 0);
+    let mut app =
+        App::new(paths.clone(), status, opts, 0).with_sync(slot_mini::sync::Options::from_env());
     if let Some(n) = kept {
         app.set_notice(n);
     }
@@ -330,6 +340,11 @@ fn main() {
             );
         }
         n += 1;
+        // A simulated clock runs ahead of the network: give a sync under
+        // way real time to move in (tests only).
+        if a.sim && app.sync.busy() {
+            std::thread::sleep(Duration::from_millis(2));
+        }
         if app.exit.is_some() || a.frames.is_some_and(|f| n >= f) {
             break;
         }
@@ -341,6 +356,8 @@ fn main() {
             }
         }
     }
+    // Whatever ends slot-mini, a sync stops where nothing is half written.
+    app.sync.close();
     // Leave the screen on the framebuffer page Onion's programs expect.
     out.close(&frame);
     // A sound player kept ready must not outlive slot-mini.
@@ -365,9 +382,19 @@ fn main() {
             match launch::hand_off(&paths, a.mode, &app.shelf_key(), &cart, fresh) {
                 Ok(cmd) => {
                     eprintln!("slot-mini: launching: {}", cmd.trim_end());
-                    // slot's in-game MENU, on the device only.
-                    if app.settings.ingame_menu && a.backend == "device" && !a.sim {
-                        slot_mini::ingame::spawn(&paths);
+                    // slot's in-game MENU, on the device only. As an Onion
+                    // app nothing of slot-mini runs after the game, so the
+                    // helper also pushes the save to a paired PC then; as
+                    // the launcher slot-mini's own start does.
+                    let device = a.backend == "device" && !a.sim;
+                    let seam = a.sim && std::env::var_os("SLOT_MINI_TEST_HELPER").is_some();
+                    let helper = slot_mini::ingame::Helper {
+                        menu: app.settings.ingame_menu && device,
+                        push: (a.mode == Mode::App && app.settings.auto_sync && app.sync.paired())
+                            .then(|| (cart.platform, cart.stem.clone())),
+                    };
+                    if (device || seam) && helper.wanted() {
+                        slot_mini::ingame::spawn(&paths, &helper);
                     }
                     0
                 }

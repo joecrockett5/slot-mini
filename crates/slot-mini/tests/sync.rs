@@ -4,11 +4,9 @@
 
 mod common;
 
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
+use common::desk::{age, local, online, rom, save, write, Desk};
 use common::{golden, Driver, Rig};
 use slot_mini::app::Phase;
 use slot_mini::status::FixedStatus;
@@ -16,124 +14,17 @@ use slot_mini::sync::{self, Icon, Progress, Stage};
 use slot_mini::Exit;
 use slot_mini_gfx::Button;
 use slot_mini_store::{Favourites, Platform};
-use slot_mini_sync::{
-    Cancel, Client, FixedCore, HttpLink, Hub, Layout, PairingStatus, Scope, Server,
-};
 
 const EMERALD: &str = "Pokemon - Emerald Version (USA, Europe)";
 
-fn local() -> SocketAddr {
-    "127.0.0.1:0".parse().unwrap()
-}
-
-/// slot-mini PC's side: a library, its hub, and the hub's server.
-struct Desk {
-    root: PathBuf,
-    hub: Arc<Hub>,
-    server: Option<Server>,
-}
-
-impl Desk {
-    fn new(rig: &Rig) -> Desk {
-        let root = rig.dir.path().join("pc");
-        std::fs::create_dir_all(&root).unwrap();
-        let layout = Layout::pc(
-            &root,
-            &root.join("RetroArch/saves"),
-            &root.join("RetroArch/states"),
-            Arc::new(FixedCore::default()),
-        );
-        let hub = Arc::new(Hub::open(layout, "Desk").unwrap());
-        let server = Server::start(hub.clone(), local(), Some(local())).unwrap();
-        Desk {
-            root,
-            hub,
-            server: Some(server),
-        }
-    }
-
-    fn server(&self) -> &Server {
-        self.server.as_ref().unwrap()
-    }
-
-    /// Where the Miyoo looks for PCs and listens for pokes.
-    fn options(&self) -> sync::Options {
-        sync::Options {
-            discover: self.server().discovery_addr().into_iter().collect(),
-            poke: Some(local()),
-        }
-    }
-
-    /// The PC goes away.
-    fn unplug(&mut self) {
-        self.server = None;
-    }
-
-    fn layout(&self) -> &Layout {
-        self.hub.layout()
-    }
-
-    /// Pair the card as the Sync page would, the PC's user saying yes.
-    fn pair(&self, rig: &Rig) {
-        let mut client = Client::open(sync::layout(&rig.paths.sd)).unwrap();
-        let mut link = HttpLink::new(&self.server().addr().to_string());
-        self.hub.start_pairing();
-        let attempt = client.pair(&mut link).unwrap();
-        assert_eq!(
-            client.finish_pairing(&mut link, &attempt).unwrap(),
-            PairingStatus::Waiting
-        );
-        assert!(self.hub.confirm_pairing());
-        assert_eq!(
-            client.finish_pairing(&mut link, &attempt).unwrap(),
-            PairingStatus::Paired
-        );
-        self.hub.stop_pairing();
-    }
-
-    /// Pair, then sync everything once, so both sides hold the same games.
-    fn pair_and_seed(&self, rig: &Rig) {
-        self.pair(rig);
-        let mut client = Client::open(sync::layout(&rig.paths.sd)).unwrap();
-        let mut link = HttpLink::new(&self.server().addr().to_string());
-        let report = client.sync(&mut link, Scope::Full, &mut |_| {}, &Cancel::new());
-        assert!(report.is_clean(), "{report:?}");
-    }
-}
-
-fn online() -> FixedStatus {
-    FixedStatus {
-        battery: Some(76),
-        wifi: true,
-        clock: (12, 0),
-        charging: false,
-    }
-}
-
-fn write(path: &Path, bytes: &[u8]) {
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(path, bytes).unwrap();
-}
-
-/// Make a file look written `secs` ago.
-fn age(path: &Path, secs: u64) {
-    let file = std::fs::File::options().write(true).open(path).unwrap();
-    file.set_modified(SystemTime::now() - Duration::from_secs(secs))
-        .unwrap();
-}
-
-fn save(fill: u8) -> Vec<u8> {
-    let mut bytes = vec![fill; 64];
-    bytes[0] = fill.wrapping_add(1);
-    bytes
-}
-
-fn rom(len: usize, fill: u8) -> Vec<u8> {
-    (0..len).map(|n| (n * 31 % 251) as u8 ^ fill).collect()
-}
-
 fn stage(d: &Driver) -> Stage {
     d.app.sync.view().stage
+}
+
+/// A shelf picture that does not depend on how long the network took:
+/// the system's name has come and gone.
+fn still(d: &mut Driver) {
+    d.run(8000);
 }
 
 /// Wait for the sync worker to have nothing left to do.
@@ -368,6 +259,7 @@ fn sync_now_moves_games_and_saves_both_ways() {
     };
     assert_eq!(lines[0], "To this Miyoo: 1 added.");
     assert!(lines[1].starts_with("To the PC: "), "{lines:?}");
+    d.run(32);
     golden("sync_summary", &d.frame);
 
     // The game is on the card, the save on the PC.
@@ -386,6 +278,7 @@ fn sync_now_moves_games_and_saves_both_ways() {
     assert_eq!(d.app.carts().len(), carts + 1);
     assert!(d.app.carts().iter().any(|c| c.stem == "Desk Quest"));
     assert_eq!(d.app.sync.icon(), Some(Icon::Synced));
+    still(&mut d);
     golden("shelf_synced", &d.frame);
 
     // The screens a sync passes through, held still for their pictures.
@@ -449,6 +342,7 @@ fn b_stops_a_sync_safely() {
         unreachable!()
     };
     assert_eq!(lines[0], "Sync stopped. Nothing is half done.");
+    d.run(32);
     golden("sync_stopped", &d.frame);
     // Whatever arrived is whole, and nothing is left in pieces.
     for n in 0..6u8 {
@@ -482,11 +376,13 @@ fn a_pc_that_cannot_be_reached_is_said_plainly_and_quickly() {
     d.tap(Button::A);
     d.wait_until("the answer", |d| matches!(stage(d), Stage::Failed(_)));
     assert!(start.elapsed() < Duration::from_secs(8), "quickly");
+    d.run(32);
     golden("sync_unreachable", &d.frame);
     d.tap(Button::B);
     d.tap(Button::B);
     d.run(64);
     assert_eq!(d.app.sync.icon(), Some(Icon::Unreachable));
+    still(&mut d);
     golden("shelf_sync_unreachable", &d.frame);
     // The mark is remembered across a game.
     drop(d);
@@ -587,6 +483,7 @@ fn a_conflict_shows_until_it_is_settled() {
     });
     d.run(64);
     assert_eq!(desk.hub.conflicts().len(), 1);
+    still(&mut d);
     golden("shelf_sync_conflict", &d.frame);
 }
 

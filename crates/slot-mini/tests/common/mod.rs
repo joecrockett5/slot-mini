@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod desk;
+
 use std::path::{Path, PathBuf};
 
 use slot_mini::status::FixedStatus;
