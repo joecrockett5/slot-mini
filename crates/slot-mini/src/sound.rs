@@ -6,12 +6,14 @@
 //! WAV file and played by Onion's own `ffplay` with `libpadsp.so` preloaded
 //! (see docs/PLATFORM.md, Audio). Off unless `sounds = on`.
 
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::process::{Child, Command, Stdio};
 
 const INSERT: &[u8] = include_bytes!("../assets/insert.pcm");
 const EJECT: &[u8] = include_bytes!("../assets/eject.pcm");
-const RATE: u32 = 48_000;
+pub const RATE: u32 = 48_000;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Clip {
@@ -20,7 +22,8 @@ pub enum Clip {
 }
 
 impl Clip {
-    fn pcm(self) -> &'static [u8] {
+    /// The clip: 16-bit stereo PCM at [`RATE`].
+    pub fn pcm(self) -> &'static [u8] {
         match self {
             Clip::Insert => INSERT,
             Clip::Eject => EJECT,
@@ -37,6 +40,7 @@ impl Clip {
         }
     }
 
+    #[cfg(unix)]
     fn name(self) -> &'static str {
         match self {
             Clip::Insert => "insert.wav",
@@ -102,12 +106,14 @@ pub fn wav(pcm: &[u8]) -> Vec<u8> {
 /// with (`miyoo/lib:/config/lib:/lib`) leaves out: as the boot launcher,
 /// slot-mini runs as MainUI, and `ffplay` then failed to load (exit 127,
 /// seen on a device with 0.4.4).
+#[cfg(unix)]
 pub fn onion_library_path(sd: &Path) -> String {
     let sd = sd.display();
     format!("/lib:/config/lib:{sd}/miyoo/lib:{sd}/.tmp_update/lib:{sd}/.tmp_update/lib/parasyte")
 }
 
 /// Plays a clip by running an external player on a WAV file.
+#[cfg(unix)]
 pub struct Player {
     program: PathBuf,
     args: Vec<String>,
@@ -130,6 +136,7 @@ pub struct Player {
 }
 
 /// A player started ahead of time, waiting on its FIFO for a clip.
+#[cfg(unix)]
 struct Armed {
     fifo: PathBuf,
     pid: u32,
@@ -138,8 +145,10 @@ struct Armed {
 }
 
 /// How long a clip waits for a player still starting before giving up.
+#[cfg(unix)]
 const READY_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
+#[cfg(unix)]
 impl Player {
     /// Onion's ffplay through libpadsp.so, with clips cached in `dir`.
     /// The player's own errors go to slot-mini's log (`-loglevel error`).
@@ -303,6 +312,7 @@ impl Player {
     }
 }
 
+#[cfg(unix)]
 impl Sound for Player {
     fn report(&self) -> Option<String> {
         self.last.lock().ok()?.clone()
@@ -370,6 +380,7 @@ impl Sound for Player {
 /// Write a clip into a waiting player's FIFO. The player may still be
 /// starting (not yet reading): wait for it a little, then give up and stop
 /// it, so nothing is left waiting for ever.
+#[cfg(unix)]
 fn hand_over(a: Armed, bytes: &[u8], last: &std::sync::Mutex<Option<String>>) {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
@@ -416,6 +427,7 @@ fn hand_over(a: Armed, bytes: &[u8], last: &std::sync::Mutex<Option<String>>) {
 /// Wait for a player, copy what it printed to the log, and record how it
 /// ended: the exit status and its first line of output if it failed. A
 /// player kept ready times from when its clip was handed over.
+#[cfg(unix)]
 fn reap(
     mut child: Child,
     name: &str,
@@ -458,7 +470,7 @@ fn reap(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

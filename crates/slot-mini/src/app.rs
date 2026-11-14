@@ -226,10 +226,14 @@ impl App {
         let sound_given = opts.sound.is_some();
         let sound: Box<dyn crate::sound::Sound> = match opts.sound {
             Some(s) => s,
+            #[cfg(unix)]
             None => Box::new(
                 crate::sound::Player::onion(&paths.sd, paths.cache().join("sounds"))
                     .warm(paths.tmp.join("slot-mini-sfx")),
             ),
+            // Only Onion has its player; other hosts hand a sink in.
+            #[cfg(not(unix))]
+            None => Box::new(crate::sound::Silent),
         };
         let mut app = App {
             paths,

@@ -17,6 +17,7 @@ pub mod cores;
 pub mod cpufreq;
 pub mod faces;
 pub mod fixture;
+#[cfg(unix)]
 pub mod ingame;
 pub mod label_cache;
 pub mod launch;

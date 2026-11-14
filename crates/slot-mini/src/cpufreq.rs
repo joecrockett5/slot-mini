@@ -81,7 +81,10 @@ impl CpuUse {
         let (t0, at) = previous?;
         let secs = now.duration_since(at).as_secs_f32();
         // SAFETY: sysconf has no side effects.
+        #[cfg(unix)]
         let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) }.max(1) as f32;
+        #[cfg(not(unix))]
+        let hz = 100.0;
         (secs > 0.0).then(|| (ticks.saturating_sub(t0) as f32 / hz) / secs * 100.0)
     }
 }

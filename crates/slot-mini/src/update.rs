@@ -365,6 +365,12 @@ fn update_dir(paths: &Paths) -> PathBuf {
     paths.app().join("update")
 }
 
+#[cfg(not(unix))]
+fn set_mode(_: &Path, _: bool) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
 fn set_mode(p: &Path, exec: bool) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mode = if exec { 0o755 } else { 0o644 };
@@ -373,7 +379,10 @@ fn set_mode(p: &Path, exec: bool) -> std::io::Result<()> {
 
 fn sync() {
     // SAFETY: sync(2) takes no arguments and cannot fail.
-    unsafe { libc::sync() };
+    #[cfg(unix)]
+    unsafe {
+        libc::sync()
+    };
 }
 
 /// Run `bin --version` with a time limit and return what it printed.
