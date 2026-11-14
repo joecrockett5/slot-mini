@@ -114,6 +114,56 @@ impl App {
     /// Mark the carts `marked` says yes to (a save conflict to settle).
     pub fn set_marked(&mut self, marked: impl Fn(&Cart) -> bool + 'static) {
         self.marked = Some(Box::new(marked));
+        if self.mark_face.is_none() {
+            self.mark_face = Some(self.gfx.upload(mark_face()));
+        }
+    }
+
+    /// Whether a cart of this stem is on any shelf.
+    pub fn has_cart(&self, stem: &str) -> bool {
+        self.shelves
+            .iter()
+            .any(|(_, s)| s.carts.iter().any(|c| c.stem == stem))
+    }
+
+    /// Whether the host marks this cart.
+    pub fn is_marked(&self, cart: &Cart) -> bool {
+        self.marked.as_ref().is_some_and(|m| m(cart))
+    }
+
+    /// The badge on each marked cart in view, at its top right corner.
+    pub(super) fn draw_marks(&self, shelf: &slot_mini_ui::Shelf, grid: bool, out: &mut Vec<Draw>) {
+        let (Some(marked), Some(tex)) = (&self.marked, self.mark_face) else {
+            return;
+        };
+        let placed: Vec<(usize, [f32; 4], f32)> = match grid {
+            true => self
+                .grid
+                .on_screen(shelf, self.stage)
+                .into_iter()
+                .map(|i| {
+                    let rect = match i == shelf.index {
+                        true => self.grid.selected_rect(shelf, self.stage),
+                        false => self.grid.cell(shelf, self.stage, i),
+                    };
+                    (i, rect, 1.0)
+                })
+                .collect(),
+            false => shelf.placed(self.stage),
+        };
+        for (i, [x, y, w, _], alpha) in placed {
+            if !shelf.carts.get(i).is_some_and(marked) {
+                continue;
+            }
+            out.push(Draw::Tex {
+                x: (x + w - MARK_PX * 0.75).round(),
+                y: (y - MARK_PX * 0.25).round(),
+                w: MARK_PX,
+                h: MARK_PX,
+                tex,
+                alpha,
+            });
+        }
     }
 
     /// What the PC app's rows on MENU show.
@@ -353,7 +403,7 @@ impl App {
             // Other screens are lists: the wheel walks them and the right
             // button goes back.
             match p {
-                Pointer::Back => self.tap(Button::B),
+                Pointer::Back | Pointer::Context(..) => self.tap(Button::B),
                 Pointer::Wheel(_, _, lines) => {
                     let b = if lines > 0 { Button::Down } else { Button::Up };
                     for _ in 0..lines.unsigned_abs().min(8) {
@@ -386,6 +436,34 @@ impl App {
         let grid = self.grid_on();
         match p {
             Pointer::Back | Pointer::Release => {}
+            Pointer::Context(x, y) => {
+                let Some((_, shelf)) = self.shelves.get_mut(self.at) else {
+                    return;
+                };
+                // The cart under the pointer; one to the side is brought
+                // to the middle first, as a click does.
+                let on_selected = match grid {
+                    true => self.grid.hit(shelf, stage, x, y).map(|i| {
+                        if i != shelf.index {
+                            shelf.select(i);
+                            self.grid_settle = None;
+                        }
+                        true
+                    }),
+                    false => shelf.hit(stage, x, y).map(|slot| {
+                        for _ in 0..slot.abs() {
+                            match slot < 0 {
+                                true => shelf.left(),
+                                false => shelf.right(),
+                            }
+                        }
+                        slot == 0
+                    }),
+                };
+                if on_selected == Some(true) {
+                    self.host_action = Some(HostRow::Remove);
+                }
+            }
             Pointer::Move(x, y) => {
                 // Only the grid follows the pointer: on the shelf every
                 // cart that came under it would pull the next one along.
@@ -494,6 +572,39 @@ impl App {
     }
 }
 
+/// The size a cart's badge is drawn at.
+const MARK_PX: f32 = 22.0;
+
+/// The badge: an amber disc with a dark rim and an exclamation mark,
+/// drawn at four times its size so a scaled-up frame keeps it round.
+fn mark_face() -> Sprite {
+    const N: u32 = 88;
+    let mut rgba = vec![0u8; (N * N * 4) as usize];
+    let mid = (N as f32 - 1.0) / 2.0;
+    for y in 0..N {
+        for x in 0..N {
+            let (dx, dy) = (x as f32 - mid, y as f32 - mid);
+            let r = (dx * dx + dy * dy).sqrt();
+            // The mark: a bar and a dot, 10 wide.
+            let bar = dx.abs() <= 5.0 && (-24.0..=8.0).contains(&dy);
+            let dot = dx * dx + (dy - 22.0) * (dy - 22.0) <= 36.0;
+            let (colour, alpha) = if r > 43.0 {
+                continue;
+            } else if r > 42.0 {
+                ([0x20, 0x16, 0x08], (43.0 - r) * 255.0)
+            } else if r > 37.0 || bar || dot {
+                ([0x20, 0x16, 0x08], 255.0)
+            } else {
+                ([0xF5, 0xB3, 0x1F], 255.0)
+            };
+            let at = ((y * N + x) * 4) as usize;
+            rgba[at..at + 3].copy_from_slice(&colour);
+            rgba[at + 3] = alpha as u8;
+        }
+    }
+    Sprite::from_rgba(N, N, &rgba)
+}
+
 /// What the mouse did, in the frame's pixels. A double click arrives as a
 /// `Click` and then a `Double`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -506,6 +617,9 @@ pub enum Pointer {
     Wheel(f32, f32, i32),
     /// The right button: back, like B.
     Back,
+    /// The right button on the shelf: the cart under it is asked about
+    /// (Remove everywhere). Anywhere else it is `Back`.
+    Context(f32, f32),
     /// The left button came up (after a `Click`).
     Release,
 }

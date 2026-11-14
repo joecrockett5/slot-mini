@@ -557,6 +557,25 @@ impl Shelf {
         })
     }
 
+    /// The carts on the row as `draw_row` places them at rest: index,
+    /// `[x, y, w, h]` and alpha. For what the PC draws over them.
+    #[cfg(feature = "pc")]
+    pub fn placed(&self, canvas: Canvas) -> Vec<(usize, [f32; 4], f32)> {
+        let target = self.scroll_target();
+        (-SLOTS..=SLOTS)
+            .filter_map(|slot| {
+                let i = self.cart_at_offset(slot)?;
+                let offset = target + slot as f32 - self.scroll;
+                let scale = shrink(offset);
+                let alpha = 1.0 + (SIDE_ALPHA - 1.0) * offset.abs().min(1.0);
+                let (cw, ch) = cart_box(self.carts[i].platform);
+                let (w, h) = (cw as f32 * scale, ch as f32 * scale);
+                let x = self.centre(canvas, slot) - w / 2.0;
+                (x + w > 0.0 && x < canvas.w).then(|| (i, [x, foot_y(ch as f32) - h, w, h], alpha))
+            })
+            .collect()
+    }
+
     pub fn draw_row(
         &self,
         canvas: Canvas,

@@ -239,6 +239,9 @@ pub struct App {
     /// Which carts the host marks (a save conflict to settle).
     #[cfg(feature = "pc")]
     marked: Option<Box<dyn Fn(&Cart) -> bool>>,
+    /// The badge a marked cart wears.
+    #[cfg(feature = "pc")]
+    mark_face: Option<TexId>,
     /// What the PC app's rows on MENU show, and the one last chosen.
     #[cfg(feature = "pc")]
     host: crate::about::Host,
@@ -341,6 +344,8 @@ impl App {
             status_icon: None,
             #[cfg(feature = "pc")]
             marked: None,
+            #[cfg(feature = "pc")]
+            mark_face: None,
             #[cfg(feature = "pc")]
             host: crate::about::Host::default(),
             #[cfg(feature = "pc")]
@@ -553,6 +558,8 @@ impl App {
                     }
                     _ => self.grid.draw(shelf, stage, light, None, 1.0, out),
                 }
+                #[cfg(feature = "pc")]
+                self.draw_marks(shelf, true, out);
                 slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
                 #[cfg(feature = "pc")]
                 self.draw_bar(out);
@@ -1557,6 +1564,8 @@ impl App {
                     return;
                 }
                 shelf.draw(stage, 0.0, self.slot_faces(), out);
+                #[cfg(feature = "pc")]
+                self.draw_marks(shelf, false, out);
                 #[cfg(feature = "pc")]
                 self.draw_bar(out);
                 draw_slot_title(stage, self.title.printed, self.title_alpha(), out);

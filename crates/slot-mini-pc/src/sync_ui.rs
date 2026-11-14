@@ -115,6 +115,8 @@ pub struct SyncUi {
     icon: Option<(Option<Status>, [u8; 3])>,
     /// The games with a conflict open, as the shelf last heard.
     marked: Vec<GameId>,
+    /// The game MENU's rows were last laid out over.
+    over: Option<String>,
 }
 
 impl SyncUi {
@@ -286,7 +288,6 @@ impl PcApp {
     }
 
     /// Open MENU from the shelf straight onto `screen`.
-    #[allow(dead_code)] // Remove everywhere and the first run open it (phases 3, 4).
     pub(super) fn open_solo(&mut self, screen: Screen) -> bool {
         if !self.app.at_rest() {
             return false;
@@ -298,6 +299,37 @@ impl PcApp {
         self.ui.solo = true;
         self.refresh_host();
         self.app.open_menu()
+    }
+
+    /// Ask about removing the cart on the shelf everywhere: from MENU's
+    /// row, a right click on the cart, or Delete.
+    pub fn remove_current(&mut self) -> bool {
+        if self.sync.is_none() || self.in_game() {
+            return false;
+        }
+        let Some((_, cart)) = self.app.current() else {
+            return false;
+        };
+        let Some(game) = sync::game_of(cart) else {
+            return false;
+        };
+        let screen = Screen::Remove(game, slot_mini_ui::label_text(cart));
+        if self.app.about.is_some() {
+            // From MENU: B leads back to it.
+            self.ui.stack = vec![screen];
+            self.ui.solo = false;
+            self.refresh_host();
+            return true;
+        }
+        self.open_solo(screen)
+    }
+
+    /// The game MENU's "Remove this game" row is about.
+    pub(super) fn removable(&self) -> Option<String> {
+        self.sync.as_ref()?;
+        let (_, cart) = self.app.current()?;
+        sync::game_of(cart)?;
+        Some(slot_mini_ui::label_text(cart))
     }
 
     fn push(&mut self, screen: Screen) {
@@ -748,7 +780,10 @@ impl PcApp {
                     Some(Ok(())) => format!("Removed {}", game.stem),
                     Some(Err(e)) => format!("Not removed: {e}"),
                 };
-                self.page_back();
+                // Back to the shelf, which is about to lose the cart: MENU
+                // was opened over it.
+                self.leave_pages();
+                self.app.close_menu();
                 self.rescan_due = true;
                 self.app.set_notice(said);
             }
@@ -846,6 +881,12 @@ impl PcApp {
     /// Time passing: a Miyoo that never answered, a sync that stopped.
     pub(super) fn sync_tick(&mut self) -> bool {
         let mut changed = false;
+        // MENU's "Remove this game" follows the cart on the shelf.
+        let over = self.removable();
+        if over != self.ui.over {
+            self.ui.over = over;
+            changed = true;
+        }
         if self.ui.asked.is_some_and(|t| self.now >= t + ANSWER_MS) {
             self.ui.asked = None;
             self.ui.last = Some(

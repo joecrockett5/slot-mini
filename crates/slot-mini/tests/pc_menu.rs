@@ -24,6 +24,7 @@ fn host() -> Host {
         import: "Import from SD card".into(),
         import_note: None,
         page: None,
+        remove: None,
     }
 }
 

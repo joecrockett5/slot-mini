@@ -10,7 +10,7 @@ Decisions are in `docs/DECISIONS.md` under "Brief 3", from #89.
 | 0. Hub additions the PC needs (contract PR) | merged, joecrockett5/slot-mini#30 |
 | 1. Hub wiring | done |
 | 2. The Sync page, pairing and status | done |
-| 3. Post-game poke, conflicts, Remove everywhere | the poke is wired (phase 1); the rest to do |
+| 3. Post-game poke, conflicts, Remove everywhere | done |
 | 4. First run and results | to do |
 | 5. Docs and release | to do |
 
@@ -61,15 +61,35 @@ start.
 - The status icon is `App::set_status` with `status_face` (decision #93).
 - Typing reaches the name editor from `main.rs` (`wants_text`, `text`,
   `backspace`).
-- The Conflicts, Conflict, Dismiss and Remove screens exist but nothing
-  tests them yet, and nothing opens Remove: phase 3. `App::set_marked`
-  stores which carts are in conflict; drawing the badge is phase 3.
 
 Exit tests: `crates/slot-mini-pc/tests/sync_pages.rs` (pairing through
 the screens with the real client, Deny, Unpair, the name, Sync now with
 and without an answer, the icon), with a picture of each screen in
 `crates/slot-mini-pc/tests/golden/sync_*.png`; and
 `crates/slot-mini/tests/pc_menu.rs` for the page mechanics.
+
+## Phase 3: conflicts and Remove everywhere
+
+- The post-game poke was wired in phase 1 (`game_over`).
+- Conflicts: the Conflicts list, a conflict's sheet (both copies, whose
+  each is, when each was last played), "Use the other copy" (the hub's
+  `swap_conflict`, which keeps the auto-state rule) and "Keep this one",
+  which asks first. The badge is `App::draw_marks` in
+  `crates/slot-mini/src/app_pc.rs` (decision #97), placed with
+  `Shelf::placed` on the shelf and the grid's own cells.
+- Remove everywhere (decision #96): `PcApp::remove_current` from the
+  Delete key (`main.rs`), `Pointer::Context` for a right click on the
+  selected cart, and MENU's "Remove this game" row (`Host::remove`,
+  `HostRow::Remove`). The sheet says what goes and where the save is
+  kept; afterwards the shelf rescans and a notice says so.
+- `PcOptions::sync: None` still opens the hub, off the network, so the
+  row is there in the unit tests too.
+
+Exit tests: `crates/slot-mini-pc/tests/sync_games.rs`: a conflict made
+with the real client is badged, listed, swapped (the auto state set
+aside with the save that leaves, the Miyoo given the chosen save) and
+dismissed after a Cancel; Remove everywhere from each of its three ways
+in, gone from the PC at once and from the Miyoo at its next sync.
 
 ## How to run
 

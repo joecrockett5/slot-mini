@@ -342,6 +342,11 @@ impl ApplicationHandler for Shell {
                 if event.repeat {
                     return;
                 }
+                // Delete asks about removing the cart on the shelf.
+                if down && code == KeyCode::Delete {
+                    self.pc.remove_current();
+                    return;
+                }
                 if let Some(key) = input::key(code) {
                     self.pc.key(key, down);
                 }
@@ -377,6 +382,7 @@ impl ApplicationHandler for Shell {
                         false => Pointer::Click(x, y),
                     });
                 }
+                (MouseButton::Right, Some((x, y))) => self.pc.pointer(Pointer::Context(x, y)),
                 (MouseButton::Right | MouseButton::Back, _) => self.pc.pointer(Pointer::Back),
                 _ => {}
             },

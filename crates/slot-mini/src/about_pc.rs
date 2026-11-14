@@ -23,6 +23,8 @@ pub enum HostRow {
     Cores,
     /// Opens the sync page, which the host lays out (`Host::page`).
     Sync,
+    /// Remove the cart on the shelf everywhere (the host asks first).
+    Remove,
     /// A row of the host's page was chosen (A).
     Page(usize),
     /// A row of the host's page was turned: Right is `true`.
@@ -91,15 +93,19 @@ pub struct Host {
     pub import_note: Option<String>,
     /// The page the host is showing over MENU's own, if any.
     pub page: Option<Page>,
+    /// The game MENU was opened over, when it can be removed everywhere.
+    pub remove: Option<String>,
 }
 
 /// MENU's first page on the PC.
-pub(super) const MAIN: [Row; 4] = [
-    Row::Settings,
-    Row::Host(HostRow::Import),
-    Row::Host(HostRow::Update),
-    Row::Host(HostRow::Quit),
-];
+pub(super) fn main(host: &Host) -> Vec<Row> {
+    let mut rows = vec![Row::Settings, Row::Host(HostRow::Import)];
+    if host.remove.is_some() {
+        rows.push(Row::Host(HostRow::Remove));
+    }
+    rows.extend([Row::Host(HostRow::Update), Row::Host(HostRow::Quit)]);
+    rows
+}
 
 pub(super) const SETTINGS: [Row; 7] = [
     Row::Sounds,
@@ -134,7 +140,7 @@ impl About {
     /// MENU for the PC app.
     pub fn for_host(&mut self, host: Host) {
         if self.host.is_none() {
-            self.rows = MAIN.to_vec();
+            self.rows = main(&host);
         }
         self.set_host(host);
     }
@@ -144,6 +150,11 @@ impl About {
         // The cores row comes and goes with the cores.
         if self.rows.contains(&Row::Host(HostRow::RetroArch)) {
             self.rows = folders(&host);
+            self.row = self.row.min(self.rows.len() - 1);
+        }
+        // So does the row for the game MENU was opened over.
+        if self.rows.contains(&Row::Host(HostRow::Quit)) {
+            self.rows = main(&host);
             self.row = self.row.min(self.rows.len() - 1);
         }
         let rows = |page: &Page| -> Vec<Row> {
@@ -243,6 +254,7 @@ impl About {
             HostRow::Library => "Library folder".into(),
             HostRow::Cores => host.cores.clone().unwrap_or_default(),
             HostRow::Sync => "Sync".into(),
+            HostRow::Remove => "Remove this game".into(),
             HostRow::Page(i) => host
                 .page
                 .as_ref()
@@ -278,6 +290,10 @@ impl About {
             HostRow::Library => Some(short_path(&host.library)),
             HostRow::Cores => host.cores_note.clone(),
             HostRow::Sync => Some("Games, labels and saves, shared with your Miyoo.".into()),
+            HostRow::Remove => Some(format!(
+                "{}: from this PC and every paired Miyoo. Asks first.",
+                host.remove.as_deref().unwrap_or_default()
+            )),
             HostRow::Page(i) => host.page.as_ref()?.rows.get(i)?.note.clone(),
             _ => None,
         }

@@ -622,3 +622,18 @@ built.
     Remove everywhere each ask on a sheet of their own that says what
     will happen, with the cursor on Cancel, so a double press of A does
     nothing.
+96. **Remove everywhere is a MENU row, a right click and Delete.** The
+    brief offers the studio or a cart menu. The studio's list is already
+    as tall as the window allows, and MENU on the PC is the cart menu in
+    all but name: it opens over the cart on the shelf. So MENU has
+    "Remove this game", named for that cart, between Import and Check
+    for updates; a right click on the selected cart and the Delete key
+    ask the same thing straight from the shelf. A right click anywhere
+    else is still Back, and on another cart it selects it first, so no
+    single click can ask about a game the player was not looking at. The
+    row is there without a network too: the removal is local at once and
+    reaches a Miyoo whenever one next syncs.
+97. **A conflicted cart wears an amber "!" at its top right corner**, on
+    the shelf and in the grid, drawn over the cart by the shared app from
+    a set of stems the PC hands it (`App::set_marked`, `pc`-gated). The
+    label is left alone, since it is the player's own picture.

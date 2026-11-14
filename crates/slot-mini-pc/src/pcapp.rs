@@ -440,6 +440,7 @@ impl PcApp {
                 Import::Said(text) => Some(text.clone()),
             },
             page: self.sync_page(),
+            remove: self.removable(),
         });
         self.show_status();
     }
@@ -472,6 +473,9 @@ impl PcApp {
             },
             HostRow::Folders => {}
             HostRow::Sync => self.open_sync(),
+            HostRow::Remove => {
+                self.remove_current();
+            }
             HostRow::Page(i) => self.page_action(i),
             HostRow::PageTurn(i, right) => self.page_turn(i, right),
             HostRow::PageBack => self.page_back(),
@@ -915,7 +919,8 @@ mod tests {
         )]));
         let mut r = rig(&ALL, true, &base);
         assert_eq!(r.pc.app.host().update, "Check for updates");
-        r.taps(&[Menu, Down, Down, A]);
+        // Past Import and the row for the game on the shelf.
+        r.taps(&[Menu, Down, Down, Down, A]);
         r.wait("the check", |pc| pc.update != Update::Checking);
         assert_eq!(r.pc.app.host().update, "Get slot-mini PC 0.10.1");
         assert!(r.pc.requests.is_empty());
@@ -929,7 +934,8 @@ mod tests {
     #[test]
     fn a_failed_check_says_so_and_can_be_tried_again() {
         let mut r = rig(&ALL, true, NOWHERE);
-        r.taps(&[Menu, Down, Down, A]);
+        // Past Import and the row for the game on the shelf.
+        r.taps(&[Menu, Down, Down, Down, A]);
         r.wait("the check", |pc| pc.update != Update::Checking);
         assert_eq!(r.pc.update, Update::Failed("No connection.".into()));
         assert_eq!(r.pc.app.host().update, "Check for updates");
