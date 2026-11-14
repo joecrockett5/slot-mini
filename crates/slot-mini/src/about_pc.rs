@@ -44,6 +44,9 @@ pub struct Host {
     /// The cores row's text and note; no row while every core is there.
     pub cores: Option<String>,
     pub cores_note: Option<String>,
+    /// The import row's text, and how the import is going or what it did.
+    pub import: String,
+    pub import_note: Option<String>,
 }
 
 /// MENU's first page on the PC.
@@ -125,7 +128,7 @@ impl About {
             return String::new();
         };
         match row {
-            HostRow::Import => "Import from SD card".into(),
+            HostRow::Import => host.import.clone(),
             HostRow::Update => host.update.clone(),
             HostRow::Quit => "Quit".into(),
             HostRow::Fullscreen => {
@@ -154,9 +157,9 @@ impl About {
             return None;
         };
         match row {
-            HostRow::Import => {
-                Some("Copies games, labels, art and saves from an Onion card.".into())
-            }
+            HostRow::Import => Some(host.import_note.clone().unwrap_or_else(|| {
+                "Copies games, labels, art and saves from an Onion card.".into()
+            })),
             HostRow::Update => host.update_note.clone(),
             HostRow::Controller => Some(
                 match host.xbox {

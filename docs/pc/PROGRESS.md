@@ -50,9 +50,14 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
   (`name_missing_core`), and the studio works by mouse (`studio_view::hit`);
   tests in `crates/slot-mini/tests/mouse.rs`.
 
+## Phase 6: first run and import — done
+
+- DECISIONS #76, #77. `crates/slot-mini-pc/src/import.rs` (tests inside),
+  `PcApp::chose_card`, the welcome screen in `app_pc.rs`
+  (`pc_first_run*.png`).
+
 ## Next
 
-6. First-run screen and Import from SD card (`PcApp::chose_card` is a stub).
 7. Packaging and release (`pc-v<version>`, `update.rs` tag hardening with
    the workspace bump to 0.6.5, CLAUDE.md release lines, icon, single
    instance, long paths).

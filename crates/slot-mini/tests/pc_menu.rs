@@ -21,6 +21,8 @@ fn host() -> Host {
         update_note: None,
         cores: None,
         cores_note: None,
+        import: "Import from SD card".into(),
+        import_note: None,
     }
 }
 
@@ -185,4 +187,32 @@ fn the_legends_name_the_keyboards_keys() {
     d.run(1500);
     assert_eq!(d.app.phase, Phase::Studio);
     golden("pc_studio_keyboard", &d.frame);
+}
+
+#[test]
+fn an_empty_library_shows_the_first_run_screen() {
+    let rig = Rig::pc();
+    std::fs::remove_dir_all(rig.paths.sd.join("Roms")).unwrap();
+    let mut d = rig.app();
+    d.app.set_host(host());
+    d.run(300);
+    assert!(d.app.shelf_kinds().is_empty());
+    golden("pc_first_run", &d.frame);
+    // The keyboard is named when it is the device in hand, and the import's
+    // progress takes the place of the offer.
+    d.app.set_glyphs(Glyphs::Keyboard);
+    d.run(50);
+    golden("pc_first_run_keyboard", &d.frame);
+    d.tap(Button::A);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Import));
+    d.app.set_host(Host {
+        import_note: Some("Importing: 12 of 40 games.".into()),
+        ..host()
+    });
+    d.run(50);
+    golden("pc_first_run_importing", &d.frame);
+    // MENU still opens.
+    d.tap(Button::Menu);
+    d.run(1000);
+    assert_eq!(d.app.phase, Phase::About);
 }

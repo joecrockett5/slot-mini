@@ -58,21 +58,27 @@ impl App {
     /// ROMs, labels and art show up without a restart. Only while the shelf
     /// is at rest.
     pub fn rescan(&mut self) -> bool {
-        let quiet = self.phase == Phase::Shelf
-            && self.studio.is_none()
-            && self.about.is_none()
-            && self.core.is_none();
-        if !quiet {
+        if !self.at_rest() {
             return false;
         }
         let carts = library::scan(&self.paths);
-        if carts == self.carts {
+        let favourites = crate::settings::Favourites::read(&self.paths);
+        if carts == self.carts && favourites == self.favourites {
             return false;
         }
         self.carts = carts;
+        self.favourites = favourites;
         self.restock();
         self.refresh_view();
         true
+    }
+
+    /// Whether nothing is open or moving over the shelf.
+    pub fn at_rest(&self) -> bool {
+        self.phase == Phase::Shelf
+            && self.studio.is_none()
+            && self.about.is_none()
+            && self.core.is_none()
     }
 
     /// RetroArch was found, moved or lost: where its cores are now.
@@ -225,6 +231,76 @@ impl App {
         });
     }
 
+    /// The first-run screen's lines: where games go, the import, and that
+    /// sync is still to come.
+    fn welcome_lines(&self) -> Vec<String> {
+        if !self.paths.is_pc() || !self.shelves.is_empty() {
+            return Vec::new();
+        }
+        let sep = std::path::MAIN_SEPARATOR;
+        let import = match &self.host.import_note {
+            Some(note) => note.clone(),
+            None => format!(
+                "or press {} to import them from your Miyoo's SD card.",
+                self.glyphs.cap("A")
+            ),
+        };
+        vec![
+            "Welcome to slot-mini".into(),
+            "Your games live here, laid out like an Onion SD card:".into(),
+            crate::about::short_path(&self.host.library),
+            format!("Put ROMs in Roms{sep}GBA, Roms{sep}GBC or Roms{sep}GB there,"),
+            import,
+            "Saves do not sync with the Miyoo yet: that is coming.".into(),
+        ]
+    }
+
+    /// Print the first-run screen's lines again when they change.
+    pub(super) fn print_welcome(&mut self) {
+        let lines = self.welcome_lines();
+        if lines == self.welcome.1 {
+            return;
+        }
+        for (tex, _, _) in self.welcome.0.drain(..) {
+            self.gfx.free(tex);
+        }
+        for (i, line) in lines.iter().enumerate() {
+            let face = match i {
+                0 => slot_mini_ui::title_line_face(line),
+                _ => slot_mini_ui::line_ink(line, [0xf6, 0xf4, 0xef], WELCOME_W),
+            };
+            let tex = self.gfx.upload_rgba(face.w, face.h, &face.rgba);
+            self.welcome.0.push((tex, face.w, face.h));
+        }
+        self.welcome.1 = lines;
+    }
+
+    pub(super) fn draw_welcome(&self, out: &mut Vec<Draw>) {
+        // The title, a gap, then the lines in pairs.
+        let tops = [96.0, 168.0, 196.0, 244.0, 272.0, 320.0];
+        if self.welcome.0.is_empty() {
+            return;
+        }
+        // A wallpaper can be anything: the words get a ground of their own.
+        out.push(Draw::Rect {
+            x: 12.0,
+            y: 76.0,
+            w: self.stage.w - 24.0,
+            h: 284.0,
+            colour: [0.0, 0.0, 0.0, 0.6],
+        });
+        for ((tex, w, h), top) in self.welcome.0.iter().zip(tops) {
+            out.push(Draw::Tex {
+                x: ((self.stage.w - *w as f32) / 2.0).round(),
+                y: top,
+                w: *w as f32,
+                h: *h as f32,
+                tex: *tex,
+                alpha: 1.0,
+            });
+        }
+    }
+
     /// Whether the app is on the plain shelf, where the mouse picks carts.
     fn on_shelf(&self) -> bool {
         self.phase == Phase::Shelf && self.core.is_none()
@@ -255,6 +331,13 @@ impl App {
                     }
                 }
                 _ => {}
+            }
+            return;
+        }
+        if self.shelves.is_empty() {
+            // The first-run screen: a click takes its offer, as A does.
+            if matches!(p, Pointer::Click(..)) {
+                self.tap(Button::A);
             }
             return;
         }
@@ -388,6 +471,8 @@ pub enum Pointer {
 const EDGE: f32 = 24.0;
 const GAP: f32 = 14.0;
 const VIEW_PX: u32 = 18;
+/// The widest a line of the first-run screen may be.
+const WELCOME_W: f32 = 600.0;
 
 /// The view button's two faces: a grid of carts (shown on the shelf) and a
 /// row of them with the middle one large (shown on the grid).

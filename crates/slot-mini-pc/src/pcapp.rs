@@ -16,6 +16,7 @@ use slot_mini_gfx::{Button, Canvas, Event, Sprite, SCREEN_H, SCREEN_W};
 use slot_mini_store::{Cart, Core};
 
 use crate::config::Config;
+use crate::import;
 use crate::input::{Device, Key, Stick};
 use crate::net::{self, PcRelease};
 use crate::retroarch::{self, RetroArch, Run};
@@ -61,6 +62,21 @@ pub enum CoresJob {
     Asked,
     Fetching,
     Failed(String),
+}
+
+/// MENU > Import from SD card.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Import {
+    Idle,
+    /// Games done, and how many there are.
+    Running(usize, usize),
+    /// What the last import came to, or why it did not start.
+    Said(String),
+}
+
+enum ImportNews {
+    Step(usize, usize),
+    Done(Box<import::Report>),
 }
 
 /// A game that has just ended, for whoever listens (brief 3's sync).
@@ -119,6 +135,11 @@ pub struct PcApp {
     pub cores_job: CoresJob,
     cores_rx: Option<Receiver<Result<(), String>>>,
     buildbot: String,
+    pub import: Import,
+    import_rx: Option<Receiver<ImportNews>>,
+    /// The library changed under the app: look again once the shelf is
+    /// at rest.
+    rescan_due: bool,
 }
 
 impl PcApp {
@@ -168,6 +189,9 @@ impl PcApp {
             cores_job: CoresJob::Idle,
             cores_rx: None,
             buildbot: opts.buildbot,
+            import: Import::Idle,
+            import_rx: None,
+            rescan_due: false,
         };
         pc.app.set_glyphs(glyphs(pc.device));
         pc.refresh_host();
@@ -339,6 +363,15 @@ impl PcApp {
             update_note,
             cores,
             cores_note,
+            import: match self.import {
+                Import::Running(..) => "Importing...".to_string(),
+                _ => "Import from SD card".to_string(),
+            },
+            import_note: match &self.import {
+                Import::Idle => None,
+                Import::Running(done, of) => Some(format!("Importing: {done} of {of} games.")),
+                Import::Said(text) => Some(text.clone()),
+            },
         });
     }
 
@@ -348,6 +381,7 @@ impl PcApp {
             self.cores_job = CoresJob::Idle;
         }
         match row {
+            HostRow::Import if matches!(self.import, Import::Running(..)) => {}
             HostRow::Import => self.requests.push(Request::PickCard),
             HostRow::Quit => self.requests.push(Request::Quit),
             HostRow::Fullscreen => self.toggle_fullscreen(),
@@ -434,6 +468,21 @@ impl PcApp {
             self.app.cores_changed();
             changed = true;
         }
+        while let Some(news) = self.import_rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            match news {
+                ImportNews::Step(done, of) => self.import = Import::Running(done, of),
+                ImportNews::Done(report) => {
+                    self.import = Import::Said(report.summary());
+                    self.import_rx = None;
+                    self.rescan_due = true;
+                }
+            }
+            changed = true;
+        }
+        if self.rescan_due && self.app.at_rest() {
+            self.rescan_due = false;
+            self.app.rescan();
+        }
         if changed {
             self.refresh_host();
         }
@@ -454,9 +503,34 @@ impl PcApp {
 
     /// The folder dialog's answer: the Onion card to import from.
     pub fn chose_card(&mut self, card: Option<PathBuf>) {
-        let Some(_card) = card else {
+        let Some(card) = card else {
             return;
         };
+        if matches!(self.import, Import::Running(..)) {
+            return;
+        }
+        if let Some(why) = import::refuse(&card, self.library()) {
+            self.import = Import::Said(why.to_string());
+            return self.refresh_host();
+        }
+        let library = self.app.paths.clone();
+        let (tx, rx) = mpsc::channel();
+        let started = std::thread::Builder::new()
+            .name("slot-mini-pc-import".into())
+            .spawn(move || {
+                let report = import::run(&card, &library, |done, of| {
+                    let _ = tx.send(ImportNews::Step(done, of));
+                });
+                let _ = tx.send(ImportNews::Done(Box::new(report)));
+            });
+        match started {
+            Ok(_) => {
+                self.import = Import::Running(0, 0);
+                self.import_rx = Some(rx);
+            }
+            Err(e) => self.import = Import::Said(format!("Could not start: {e}")),
+        }
+        self.refresh_host();
     }
 
     /// The file dialog's answer: where RetroArch is.
@@ -824,6 +898,64 @@ mod tests {
         r.pc.chose_library(Some(other.clone()));
         assert_eq!(r.pc.requests, [Request::Reopen]);
         assert_eq!(r.config().library, Some(other));
+    }
+
+    #[test]
+    fn an_empty_library_offers_the_import_and_the_games_arrive() {
+        let dir = tempfile::tempdir().unwrap();
+        let card = dir.path().join("card");
+        slot_mini::fixture::build(&card, true).unwrap();
+        let opts = PcOptions {
+            config_dir: dir.path().join("config"),
+            places: Vec::new(),
+            status: Box::new(FixedStatus {
+                battery: None,
+                wifi: true,
+                clock: (12, 0),
+                charging: false,
+            }),
+            sound: None,
+            face_wait: None,
+            seed: 7,
+            releases_url: NOWHERE.into(),
+            buildbot: NOWHERE.into(),
+        };
+        let pc = PcApp::new(&dir.path().join("library"), opts, 0);
+        let mut r = Rig { dir, pc, now: 0 };
+        r.pc.tick(0);
+        assert!(r.pc.app.shelf_kinds().is_empty());
+        // A on the first-run screen asks for the card.
+        r.tap(A);
+        assert_eq!(r.pc.requests, [Request::PickCard]);
+        // A folder that is no card is refused, and says why.
+        r.pc.chose_card(Some(r.dir.path().join("config")));
+        assert!(matches!(&r.pc.import, Import::Said(why) if why.contains("Roms")));
+        assert!(r
+            .pc
+            .app
+            .host()
+            .import_note
+            .as_deref()
+            .unwrap()
+            .contains("Roms"));
+        r.pc.chose_card(None);
+        r.pc.chose_card(Some(card));
+        assert_eq!(r.pc.import, Import::Running(0, 0));
+        assert_eq!(r.pc.app.host().import, "Importing...");
+        // A second card while one is being read is ignored.
+        r.pc.requests.clear();
+        r.tap(A);
+        assert!(r.pc.requests.is_empty());
+        r.wait("the import", |pc| !matches!(pc.import, Import::Running(..)));
+        let Import::Said(summary) = r.pc.import.clone() else {
+            panic!("{:?}", r.pc.import);
+        };
+        assert!(summary.starts_with("Imported "), "{summary}");
+        assert_eq!(r.pc.app.host().import_note, Some(summary));
+        assert!(
+            !r.pc.app.shelf_kinds().is_empty(),
+            "the games are on the shelf"
+        );
     }
 
     #[test]

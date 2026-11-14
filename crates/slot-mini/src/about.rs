@@ -21,7 +21,7 @@ use crate::update::{Status, Updater};
 #[path = "about_pc.rs"]
 mod pc;
 #[cfg(feature = "pc")]
-pub use pc::{Host, HostRow};
+pub use pc::{short_path, Host, HostRow};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Row {

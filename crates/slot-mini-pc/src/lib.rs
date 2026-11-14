@@ -7,6 +7,7 @@
 pub mod audio;
 pub mod config;
 pub mod desktop;
+pub mod import;
 pub mod input;
 pub mod net;
 pub mod pcapp;

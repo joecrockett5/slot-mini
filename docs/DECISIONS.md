@@ -475,3 +475,24 @@ built.
     elsewhere they answer "nothing chosen", which is what headless tests
     and CI need. Changing the library folder rebuilds the app
     (`Request::Reopen`) rather than re-pointing a live one.
+76. **First run.** A library with no games shows a welcome screen in the
+    shelf's own type instead of the Miyoo's "No games" line: where the
+    library is, where ROMs go, that A (or a click) imports from an Onion
+    card, and that sync is still to come. It sits on a dimmed panel because
+    a wallpaper can be anything. The import's progress and result replace
+    the offer line, so the first import needs no trip into MENU.
+77. **Import from SD card** (`import.rs`) copies what the card's scan
+    finds: each ROM, its label, its `Imgs` art and its save. The save is
+    read from the folder of the core the Miyoo runs the game on (then the
+    other cores for that system) and written to the folder of the core the
+    PC runs it on, so RetroArch on the PC finds it. Shell choices and
+    favourites are merged line by line. Nothing in the library is ever
+    replaced: a file that is already there is counted, shown in the summary
+    and listed in `App/slot-mini-pc/import.txt`. States are not copied
+    (they belong to one build of one core), and neither are Onion's own
+    files or per-game core settings (the PC's core choice is its own). A
+    file lands as `<name>.importing` and is renamed when whole, so a card
+    pulled half way leaves nothing that looks like a game. A name Windows
+    cannot hold fails that one file and is listed; the rest carries on.
+    It runs on a worker thread; the shelf rescans (games and favourites)
+    once it is at rest.

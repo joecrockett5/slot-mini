@@ -179,6 +179,11 @@ pub struct App {
     /// A message shown where the platform name goes, e.g. why a cart
     /// cannot be launched.
     notice: Option<String>,
+    /// The PC's first-run screen (no games yet): its lines, and what they
+    /// were printed for.
+    #[cfg(feature = "pc")]
+    welcome: (Vec<(TexId, u32, u32)>, Vec<String>),
+
     pub phase: Phase,
     a_held: Option<Millis>,
     status: Box<dyn Status>,
@@ -290,6 +295,9 @@ impl App {
             percent: Printing::default(),
             shelf_named: None,
             notice: None,
+            #[cfg(feature = "pc")]
+            welcome: Default::default(),
+
             phase: Phase::Shelf,
             a_held: None,
             status,
@@ -816,6 +824,12 @@ impl App {
             return self.core_press(b);
         }
         let now = self.now;
+        #[cfg(feature = "pc")]
+        if self.paths.is_pc() && self.shelves.is_empty() && b == Button::A {
+            // The first-run screen offers the import.
+            self.host_action = Some(crate::about::HostRow::Import);
+            return;
+        }
         if self.grid_on() && self.grid_press(b) {
             return;
         }
@@ -1374,6 +1388,8 @@ impl App {
 
     /// Re-print text faces whose words changed.
     fn sync_text(&mut self) {
+        #[cfg(feature = "pc")]
+        self.print_welcome();
         let title = match &self.notice {
             Some(n) => n.clone(),
             None => self
@@ -1477,6 +1493,13 @@ impl App {
         let stage = self.stage;
         self.draw_background(out);
         let Some(shelf) = self.shelf() else {
+            #[cfg(feature = "pc")]
+            if self.paths.is_pc() {
+                self.draw_welcome(out);
+                slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+                self.draw_footer(out);
+                return;
+            }
             let (tex, w, h) = self.statics.empty;
             out.push(Draw::Tex {
                 x: ((stage.w - w as f32) / 2.0).round(),
