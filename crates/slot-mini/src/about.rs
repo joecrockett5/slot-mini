@@ -21,7 +21,7 @@ use crate::update::{Status, Updater};
 #[path = "about_pc.rs"]
 mod pc;
 #[cfg(feature = "pc")]
-pub use pc::{short_path, Host, HostRow};
+pub use pc::{short_path, Host, HostRow, Page, PageRow};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Row {
@@ -71,6 +71,9 @@ pub struct About {
     /// What the PC app shows on its rows; `None` on the Miyoo.
     #[cfg(feature = "pc")]
     pub host: Option<Host>,
+    /// The id of the host's page, while it shows.
+    #[cfg(feature = "pc")]
+    paged: Option<u32>,
     /// Whether slot-mini is installed as the boot launcher, and a message
     /// from the last attempt to change that.
     pub launcher: bool,
@@ -95,6 +98,9 @@ enum Style {
     Title,
     /// Small type up to nearly the screen's width.
     Note,
+    /// A sheet's large type: the pairing code.
+    #[cfg(feature = "pc")]
+    Big,
 }
 
 /// The widest MENU's note line may be.
@@ -142,6 +148,8 @@ impl About {
             glyphs: Glyphs::default(),
             #[cfg(feature = "pc")]
             host: None,
+            #[cfg(feature = "pc")]
+            paged: None,
             launcher: crate::switch::installed(paths),
             boot_screen: crate::bootscreen::installed(paths),
             note: None,
@@ -199,6 +207,14 @@ impl About {
         // Leaving mid-install would hide the restart that follows it.
         if updater.busy() && matches!(b, Button::B | Button::Menu) {
             return Outcome::Stay;
+        }
+        #[cfg(feature = "pc")]
+        if self.paged.is_some() && (b == Button::B || n == 0) {
+            return match b {
+                Button::B => Outcome::Host(HostRow::PageBack),
+                Button::Menu => Outcome::Close,
+                _ => Outcome::Stay,
+            };
         }
         match b {
             Button::Up => self.row = (self.row + n - 1) % n,
@@ -302,7 +318,16 @@ impl About {
             Style::Title => title_line_face(text),
             // Notes can be a sentence: nearly the screen's width.
             Style::Note => line_ink(text, [0xf6, 0xf4, 0xef], NOTE_W),
+            #[cfg(feature = "pc")]
+            Style::Big => slot_mini_ui::code_face(text),
         };
+        // A host's page can count as it goes: its old lines are let go.
+        #[cfg(feature = "pc")]
+        if self.faces.len() >= 160 {
+            for (_, t, ..) in self.faces.drain(..) {
+                gfx.free(t);
+            }
+        }
         let t = gfx.upload_rgba(f.w, f.h, &f.rgba);
         self.faces.push((key, t, f.w, f.h));
         (t, f.w, f.h)
@@ -451,7 +476,13 @@ impl About {
         out: &mut Vec<Draw>,
     ) {
         draw_backdrop(stage, ground, out);
-        self.draw_sticker(stage, now, battery, gfx, out);
+        #[cfg(feature = "pc")]
+        let sheet = self.sheet().cloned();
+        #[cfg(not(feature = "pc"))]
+        let sheet: Option<()> = None;
+        if sheet.is_none() {
+            self.draw_sticker(stage, now, battery, gfx, out);
+        }
         let put = |out: &mut Vec<Draw>, (tex, w, h): (TexId, u32, u32), y: f32, alpha: f32| {
             out.push(Draw::Tex {
                 x: ((stage.w - w as f32) / 2.0).round(),
@@ -463,6 +494,35 @@ impl About {
             });
         };
         let mut y = STICKER_Y + sticker_size().1 + 8.0;
+        #[cfg(feature = "pc")]
+        if let Some(page) = &sheet {
+            // A wallpaper can be anything: the words get a ground of
+            // their own.
+            out.push(Draw::Rect {
+                x: 12.0,
+                y: 12.0,
+                w: stage.w - 24.0,
+                h: FOOTER_Y - 30.0,
+                colour: [0.0, 0.0, 0.0, 0.6],
+            });
+            let mut top = pc::SHEET_TOP;
+            let f = self.face(gfx, page.title.as_deref().unwrap_or(""), Style::Title);
+            put(out, f, top, 1.0);
+            top += pc::SHEET_TITLE_H;
+            if let Some(big) = &page.big {
+                let f = self.face(gfx, big, Style::Big);
+                put(out, f, top, 1.0);
+                top += pc::SHEET_BIG_H;
+            }
+            for line in &page.lines {
+                if !line.is_empty() {
+                    let f = self.face(gfx, line, Style::Note);
+                    put(out, f, top, 0.9);
+                }
+                top += pc::SHEET_LINE_PITCH;
+            }
+            y = About::sheet_rows_top(page);
+        }
         for (i, row) in self.rows.clone().into_iter().enumerate() {
             let text = self.label(row, settings, update);
             let f = self.face(gfx, &text, Style::Title);
@@ -525,6 +585,8 @@ impl About {
     /// The row drawn at height `y` of the screen, for the mouse.
     pub fn row_at(&self, y: f32) -> Option<usize> {
         let top = STICKER_Y + sticker_size().1 + 8.0;
+        #[cfg(feature = "pc")]
+        let top = self.sheet().map_or(top, About::sheet_rows_top);
         let i = ((y - top) / ROW_PITCH).floor();
         (i >= 0.0 && (i as usize) < self.rows.len()).then_some(i as usize)
     }

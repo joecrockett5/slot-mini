@@ -172,6 +172,91 @@ impl Rig {
     }
 }
 
+impl Rig {
+    /// The page MENU shows, if the host has one up.
+    pub fn page(&self) -> slot_mini::about::Page {
+        let about = self.pc.app.about.as_ref().expect("MENU");
+        about.page().expect("a host page").clone()
+    }
+
+    /// The labels of the page's rows.
+    pub fn rows(&self) -> Vec<String> {
+        self.page().rows.into_iter().map(|r| r.label).collect()
+    }
+
+    /// The line under the rows for the selected one.
+    pub fn note(&self) -> String {
+        let row = self.pc.app.about.as_ref().expect("MENU").row;
+        self.page().rows[row].note.clone().unwrap_or_default()
+    }
+
+    /// MENU, Settings, Sync.
+    pub fn open_sync(&mut self) {
+        self.tap(Button::Menu);
+        self.frames(60);
+        self.tap(Button::A);
+        self.taps(&[Button::Up, Button::A]);
+        assert_eq!(self.rows()[1], "Sync now");
+    }
+
+    /// Choose the row labelled `label` on the page.
+    pub fn choose(&mut self, label: &str) {
+        let rows = self.rows();
+        let at = rows
+            .iter()
+            .position(|r| r == label)
+            .unwrap_or_else(|| panic!("no row {label:?} in {rows:?}"));
+        for _ in 0..rows.len() {
+            if self.pc.app.about.as_ref().unwrap().row == at {
+                break;
+            }
+            self.tap(Button::Down);
+        }
+        self.tap(Button::A);
+    }
+
+    /// Compare the frame with `tests/golden/<name>.png`, and keep a copy
+    /// to look at.
+    pub fn golden(&mut self, name: &str) {
+        self.frames(4);
+        self.shot(name);
+        golden(name, &self.pc.frame);
+    }
+}
+
+/// Compare against `tests/golden/<name>.png`; `UPDATE_GOLDEN=1` writes it
+/// instead. Small differences pass, as in the shared app's tests.
+pub fn golden(name: &str, frame: &slot_mini_gfx::Canvas) {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
+    let path = dir.join(format!("{name}.png"));
+    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+        std::fs::create_dir_all(&dir).unwrap();
+        slot_mini_gfx::save_png(frame, &path).unwrap();
+        return;
+    }
+    let file = std::fs::File::open(&path)
+        .unwrap_or_else(|_| panic!("no golden {} (run with UPDATE_GOLDEN=1)", path.display()));
+    let mut reader = png::Decoder::new(file).read_info().unwrap();
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).unwrap();
+    assert_eq!(
+        (info.width, info.height),
+        (frame.w, frame.h),
+        "{name}: size"
+    );
+    let got = frame.to_rgba();
+    let off = buf[..info.buffer_size()]
+        .chunks_exact(4)
+        .zip(got.chunks_exact(4))
+        .filter(|(a, b)| (0..3).any(|i| a[i].abs_diff(b[i]) > 24))
+        .count();
+    let limit = (frame.w * frame.h) as usize / 500;
+    assert!(
+        off <= limit,
+        "{name}: {off} pixels differ (limit {limit}); see target/pc-sync/{name}.png"
+    );
+}
+
 pub fn at_rest(r: &Rig) -> bool {
     matches!(r.pc.app.phase, Phase::Shelf)
 }

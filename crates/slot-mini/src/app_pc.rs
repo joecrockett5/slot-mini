@@ -111,6 +111,11 @@ impl App {
         });
     }
 
+    /// Mark the carts `marked` says yes to (a save conflict to settle).
+    pub fn set_marked(&mut self, marked: impl Fn(&Cart) -> bool + 'static) {
+        self.marked = Some(Box::new(marked));
+    }
+
     /// What the PC app's rows on MENU show.
     pub fn set_host(&mut self, host: Host) {
         if host == self.host {
@@ -129,6 +134,23 @@ impl App {
     /// The PC row chosen on MENU since this was last asked.
     pub fn take_host_action(&mut self) -> Option<HostRow> {
         self.host_action.take()
+    }
+
+    /// Open MENU from the shelf, onto the host's page if it has one up.
+    pub fn open_menu(&mut self) -> bool {
+        if !self.at_rest() {
+            return false;
+        }
+        self.open_about();
+        true
+    }
+
+    /// Close MENU, as B on its first page does.
+    pub fn close_menu(&mut self) {
+        if let Some(about) = self.about.take() {
+            about.close(&mut self.gfx);
+            self.phase = Phase::Shelf;
+        }
     }
 
     /// A line under MENU's rows (what a host row came to).

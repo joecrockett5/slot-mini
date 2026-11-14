@@ -201,6 +201,31 @@ fn capped_width(label: &str, max_w: f32) -> u32 {
     (ink.ceil() as u32).clamp(1, max_w as u32)
 }
 
+/// Large type for a short code (slot-mini addition): the six digits two
+/// screens are compared by.
+#[cfg(feature = "pc")]
+pub fn code_face(text: &str) -> UndoFace {
+    const PX: f32 = 64.0;
+    const H: u32 = 80;
+    let Some(font) = text::label_font() else {
+        return UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
+    };
+    let layout = text::fit(font, text, TITLE_LINE_MAX_W, 1, PX, 24.0);
+    let ink = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let w = (ink.ceil() as u32).clamp(1, TITLE_LINE_MAX_W as u32);
+    let mut rgba = vec![0u8; (w * H * 4) as usize];
+    text::draw_centred(&mut rgba, w, H, &layout, [0xff, 0xff, 0xff]);
+    UndoFace { rgba, w, h: H }
+}
+
 pub fn title_line_face(text: &str) -> UndoFace {
     let Some(font) = text::label_font() else {
         return UndoFace {

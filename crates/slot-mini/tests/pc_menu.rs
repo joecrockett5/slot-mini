@@ -5,7 +5,7 @@
 mod common;
 
 use common::{golden, Rig};
-use slot_mini::about::{Host, HostRow, Row};
+use slot_mini::about::{Host, HostRow, Page, PageRow, Row};
 use slot_mini::legend::Glyphs;
 use slot_mini::{Phase, Pointer};
 use slot_mini_gfx::Button;
@@ -23,6 +23,7 @@ fn host() -> Host {
         cores_note: None,
         import: "Import from SD card".into(),
         import_note: None,
+        page: None,
     }
 }
 
@@ -123,12 +124,53 @@ fn settings_folders_and_sync_are_pages_b_walks_back_through() {
     assert_eq!(d.app.about.as_ref().unwrap().row, 5);
     d.tap(Button::Down);
     d.tap(Button::A);
-    assert_eq!(rows(&d), [Row::Host(HostRow::SyncSoon)]);
+    // Sync's page is the host's to lay out: MENU says the row was chosen.
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Sync));
+    let page = Page {
+        id: 1,
+        rows: vec![
+            PageRow::new("This PC: Desk").note("The name your Miyoo shows for this PC."),
+            PageRow::new("Sync now"),
+        ],
+        ..Page::default()
+    };
+    d.app.set_host(Host {
+        page: Some(page.clone()),
+        ..host()
+    });
+    assert_eq!(
+        rows(&d),
+        [Row::Host(HostRow::Page(0)), Row::Host(HostRow::Page(1))]
+    );
     d.run(100);
     golden("pc_menu_sync", &d.frame);
+    d.tap(Button::Down);
     d.tap(Button::A);
-    assert_eq!(d.app.take_host_action(), None);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Page(1)));
+    d.tap(Button::Left);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::PageTurn(1, false)));
+    // A page with a title is a sheet of its own; the same id keeps the row.
+    d.app.set_host(Host {
+        page: Some(Page {
+            title: Some("Pair with Miyoo Mini?".into()),
+            big: Some("482913".into()),
+            lines: vec!["Check that the Miyoo shows the same code.".into()],
+            ..page.clone()
+        }),
+        ..host()
+    });
+    assert_eq!(d.app.about.as_ref().unwrap().row, 1);
+    d.run(100);
+    golden("pc_menu_sheet", &d.frame);
+    // The mouse finds the sheet's rows where they are drawn.
+    d.app.pointer(Pointer::Move(320.0, 190.0));
+    assert_eq!(d.app.about.as_ref().unwrap().row, 0);
+    // B is the host's too; it takes the page down and settings is back.
     d.tap(Button::B);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::PageBack));
+    d.app.set_host(host());
+    assert_eq!(rows(&d).len(), 7);
+    assert_eq!(d.app.about.as_ref().unwrap().row, 6);
     d.tap(Button::B);
     assert_eq!(rows(&d).len(), 4);
     d.tap(Button::B);

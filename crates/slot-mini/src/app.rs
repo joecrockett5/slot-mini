@@ -236,6 +236,9 @@ pub struct App {
     /// status, when it has one).
     #[cfg(feature = "pc")]
     status_icon: Option<(TexId, u32, u32)>,
+    /// Which carts the host marks (a save conflict to settle).
+    #[cfg(feature = "pc")]
+    marked: Option<Box<dyn Fn(&Cart) -> bool>>,
     /// What the PC app's rows on MENU show, and the one last chosen.
     #[cfg(feature = "pc")]
     host: crate::about::Host,
@@ -336,6 +339,8 @@ impl App {
             l2_held: false,
             #[cfg(feature = "pc")]
             status_icon: None,
+            #[cfg(feature = "pc")]
+            marked: None,
             #[cfg(feature = "pc")]
             host: crate::about::Host::default(),
             #[cfg(feature = "pc")]

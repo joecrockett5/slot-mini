@@ -9,7 +9,7 @@ Decisions are in `docs/DECISIONS.md` under "Brief 3", from #89.
 | --- | --- |
 | 0. Hub additions the PC needs (contract PR) | merged, joecrockett5/slot-mini#30 |
 | 1. Hub wiring | done |
-| 2. The Sync page, pairing and status | next |
+| 2. The Sync page, pairing and status | done |
 | 3. Post-game poke, conflicts, Remove everywhere | the poke is wired (phase 1); the rest to do |
 | 4. First run and results | to do |
 | 5. Docs and release | to do |
@@ -46,6 +46,30 @@ stand-in RetroArch is reported busy and its save left alone; the Miyoo's
 poke listener hears the poke after the game; discovery answers while the
 app runs and stops with it; a game whose save is mid-transfer does not
 start.
+
+## Phase 2: the Sync page, pairing and status
+
+- The shared MENU draws a `Page` the host supplies (decision #90):
+  `crates/slot-mini/src/about_pc.rs` (`Page`, `PageRow`, `HostRow::Page`,
+  `PageTurn`, `PageBack`) and the drawing in `about.rs`. All `pc`-gated.
+- `crates/slot-mini-pc/src/sync_ui.rs` is the PC's side: a stack of
+  `Screen`s (Main, Name, Pairing, Devices, Device, Unpair, Conflicts,
+  Conflict, Dismiss, Remove, Firewall), each turned into a `Page` by
+  `sync_page`, and `page_action` for what a row does. `sync_event` turns
+  hub events into pairing state, progress and the summary; `sync_tick`
+  notices a poke nobody answered and a sync that stalled.
+- The status icon is `App::set_status` with `status_face` (decision #93).
+- Typing reaches the name editor from `main.rs` (`wants_text`, `text`,
+  `backspace`).
+- The Conflicts, Conflict, Dismiss and Remove screens exist but nothing
+  tests them yet, and nothing opens Remove: phase 3. `App::set_marked`
+  stores which carts are in conflict; drawing the badge is phase 3.
+
+Exit tests: `crates/slot-mini-pc/tests/sync_pages.rs` (pairing through
+the screens with the real client, Deny, Unpair, the name, Sync now with
+and without an answer, the icon), with a picture of each screen in
+`crates/slot-mini-pc/tests/golden/sync_*.png`; and
+`crates/slot-mini/tests/pc_menu.rs` for the page mechanics.
 
 ## How to run
 

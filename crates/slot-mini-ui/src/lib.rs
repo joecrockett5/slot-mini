@@ -63,12 +63,12 @@ pub use footer::{draw_corners, draw_footer, draw_wifi_icon, Printed, FOOTER_Y};
 pub use grid::{between, Grid, Step, GRID_COLS, GRID_SCALE};
 pub use hud::{footer_ink, Millis, HUD_INK, PLATE_H};
 pub use icon::{badge_face, heart_face, icon_box, icon_face, warm_fonts, Badge, Icon};
-#[cfg(feature = "pc")]
-pub use plate::button_face;
 pub use plate::{
     arrows_hint_face, hint_face, hint_row, hint_width, line_ink, title_face, title_line_face,
     word_face, word_ink, Hint, UndoFace, HINT_H,
 };
+#[cfg(feature = "pc")]
+pub use plate::{button_face, code_face};
 pub use refusal::Refusal;
 pub use shelf::{
     box_size, foot_y, repeat_gap, rest_y, Shelf, HEART_INK, HEART_SCALE, REPEAT_DELAY_MS,

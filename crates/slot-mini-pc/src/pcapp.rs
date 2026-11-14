@@ -21,7 +21,10 @@ use crate::input::{Device, Key, Stick};
 use crate::net::{self, PcRelease};
 use crate::retroarch::{self, RetroArch, Run, Screen};
 use crate::sync::{self, Net, Service};
-use slot_mini_sync::HubEvent;
+
+#[path = "sync_ui.rs"]
+pub mod sync_ui;
+pub use sync_ui::SyncUi;
 
 /// Something only the window (or the desktop) can do, asked of `main`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -160,6 +163,8 @@ pub struct PcApp {
     /// The sync hub over this library; `None` when its state could not be
     /// opened.
     pub sync: Option<Service>,
+    /// The Sync pages, the status icon and what the last sync said.
+    pub ui: SyncUi,
 }
 
 impl PcApp {
@@ -222,6 +227,7 @@ impl PcApp {
             import_rx: None,
             rescan_due: false,
             sync,
+            ui: SyncUi::default(),
         };
         pc.app.set_glyphs(glyphs(pc.device));
         pc.refresh_host();
@@ -374,7 +380,7 @@ impl PcApp {
     }
 
     /// Tell MENU what its PC rows show now.
-    fn refresh_host(&mut self) {
+    pub fn refresh_host(&mut self) {
         let (update, update_note) = match &self.update {
             Update::Idle => ("Check for updates".to_string(), None),
             Update::Checking => ("Checking for updates...".to_string(), None),
@@ -433,7 +439,9 @@ impl PcApp {
                 Import::Running(done, of) => Some(format!("Importing: {done} of {of} games.")),
                 Import::Said(text) => Some(text.clone()),
             },
+            page: self.sync_page(),
         });
+        self.show_status();
     }
 
     /// A PC row on MENU was chosen.
@@ -462,7 +470,11 @@ impl PcApp {
                 CoresJob::Asked => self.fetch_cores(),
                 CoresJob::Fetching => {}
             },
-            HostRow::Folders | HostRow::Sync | HostRow::SyncSoon => {}
+            HostRow::Folders => {}
+            HostRow::Sync => self.open_sync(),
+            HostRow::Page(i) => self.page_action(i),
+            HostRow::PageTurn(i, right) => self.page_turn(i, right),
+            HostRow::PageBack => self.page_back(),
         }
         self.refresh_host();
     }
@@ -544,6 +556,7 @@ impl PcApp {
             self.sync_event(event);
             changed = true;
         }
+        changed |= self.sync_tick();
         if self.rescan_due && self.app.at_rest() {
             self.rescan_due = false;
             self.app.rescan();
@@ -762,18 +775,6 @@ impl PcApp {
         self.set_idle();
         if let Some(sync) = &self.sync {
             sync.poke();
-        }
-    }
-
-    /// The hub said something (on one of its own threads, a moment ago).
-    fn sync_event(&mut self, event: HubEvent) {
-        match event {
-            // A game, label or save arrived, or went.
-            HubEvent::Changed(_) => self.rescan_due = true,
-            HubEvent::Sync { .. }
-            | HubEvent::PairingCode { .. }
-            | HubEvent::Paired(_)
-            | HubEvent::Unpaired(_) => {}
         }
     }
 }

@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use slot_mini::status::Status;
 use slot_mini::Pointer;
-use slot_mini_gfx::{SCREEN_H, SCREEN_W};
+use slot_mini_gfx::{Button, SCREEN_H, SCREEN_W};
 use slot_mini_pc::input::{self, Device};
 use slot_mini_pc::pcapp::{PcOptions, MAX_SCALE};
 use slot_mini_pc::present::{present, View};
@@ -313,6 +313,30 @@ impl ApplicationHandler for Shell {
                         self.pc.toggle_fullscreen();
                     }
                     return;
+                }
+                // The PC's name is typed: letters are letters, not
+                // buttons, until Enter or Escape.
+                if down && self.pc.wants_text() {
+                    match code {
+                        KeyCode::Enter
+                        | KeyCode::NumpadEnter
+                        | KeyCode::ArrowUp
+                        | KeyCode::ArrowDown => {}
+                        KeyCode::Escape => {
+                            if !event.repeat {
+                                self.pc.key(input::Key::Button(Button::B), true);
+                                self.pc.key(input::Key::Button(Button::B), false);
+                            }
+                            return;
+                        }
+                        KeyCode::Backspace => return self.pc.backspace(),
+                        _ => {
+                            if let Some(text) = event.text.as_ref() {
+                                self.pc.text(text);
+                            }
+                            return;
+                        }
+                    }
                 }
                 // The app repeats a held button itself.
                 if event.repeat {

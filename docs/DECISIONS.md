@@ -591,3 +591,34 @@ built.
       name's `<who>` is a slug two devices can share. Old rows read as
       "from the device, time unknown".
     `docs/SYNC.md` and the crate changed together, in a PR of their own.
+90. **MENU draws pages the PC supplies.** The shared MENU knows nothing
+    of sync: `Host.page` is a `Page` (title, an optional big line, small
+    lines, rows with notes) and A, Left/Right and B on it come back as
+    `HostRow::Page`, `PageTurn` and `PageBack`. The PC crate owns every
+    screen's content and what its rows do (`sync_ui.rs`), so the sync UI
+    is testable through `PcApp` and the Miyoo's MENU is untouched (all of
+    it is feature `pc`). A page with a title is a "sheet": the sticker
+    gives way to a dark ground, which the pairing code and the firewall
+    text need the room for.
+91. **The PC's name is typed.** The row opens an editor; the keyboard
+    types into it, Backspace (or Left, for a controller) rubs out, and
+    Save restarts the server under the new name. A controller alone can
+    shorten a name but not write one: an on-screen keyboard for a name
+    that is set once was not worth its screen.
+92. **Times are relative** ("just now", "3 hours ago", "5 days ago").
+    They read at a glance, need no time zone, and keep the pictures in
+    the tests still.
+93. **The status icon is two arrows and a short word** where the device
+    draws Wi-Fi: dim when idle, "3/12" while syncing, "!" for a conflict,
+    "X" after a sync that failed, nothing before a Miyoo is paired. It
+    clears at the next sync that ends well.
+94. **"No answer" is a wait of 8 seconds.** A poke is a datagram with no
+    reply, so Sync now says "Asking <name>..." and, if no sync has begun
+    by then, "No answer. Is the Miyoo awake, on Wi-Fi, and on its shelf
+    (not in a game)?". A sync that goes quiet for 45 seconds is shown as
+    stopped. The pairing code is shown as its six digits, as the Miyoo
+    shows it.
+95. **Confirmations start on Cancel.** Unpair, dismissing a conflict and
+    Remove everywhere each ask on a sheet of their own that says what
+    will happen, with the cursor on Cancel, so a double press of A does
+    nothing.
