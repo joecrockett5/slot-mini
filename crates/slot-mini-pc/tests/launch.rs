@@ -161,12 +161,14 @@ fn a_game_runs_in_retroarch_and_comes_back_to_its_cart() {
     assert!(log.contains(cart.rom.to_str().unwrap()), "{log}");
     let saves = rig.library().join("Saves/CurrentProfile/saves");
     let states = rig.library().join("Saves/CurrentProfile/states");
+    // RetroArch's config takes forward slashes on every system.
+    let cfg_path = |p: &Path| p.display().to_string().replace('\\', "/");
     assert!(
-        log.contains(&format!("savefile_directory = \"{}\"", saves.display())),
+        log.contains(&format!("savefile_directory = \"{}\"", cfg_path(&saves))),
         "{log}"
     );
     assert!(
-        log.contains(&format!("savestate_directory = \"{}\"", states.display())),
+        log.contains(&format!("savestate_directory = \"{}\"", cfg_path(&states))),
         "{log}"
     );
     assert!(log.contains("sort_savefiles_enable = \"true\""), "{log}");
