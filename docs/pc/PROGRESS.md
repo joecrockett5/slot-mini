@@ -56,12 +56,27 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
   `PcApp::chose_card`, the welcome screen in `app_pc.rs`
   (`pc_first_run*.png`).
 
-## Next
+## Phase 7: packaging and release — done
 
-7. Packaging and release (`pc-v<version>`, `update.rs` tag hardening with
-   the workspace bump to 0.6.5, CLAUDE.md release lines, icon, single
-   instance, long paths).
-8. README section, `docs/pc/TESTING.md`.
+- DECISIONS #78 to #81. `build.rs` (icon, version, manifest),
+  `main.rs` `instance` (one at a time), `scripts/package-pc.sh`,
+  `scripts/release-pc.sh`, `scripts/third-party.py --pc`, CI jobs
+  `windows` -> `pc-package` -> `release`. `package/pc/` holds the zip's
+  README and credits.
+- The Miyoo's updater takes only `v<x.y.z>` tags from 0.6.5
+  (`update::device_tag`).
+
+## Phase 8: docs — done
+
+- README "slot-mini PC", `docs/pc/TESTING.md`, CLAUDE.md's release lines.
+
+## Not done, and why
+
+- No sync: brief 3. The seams are the MENU Sync page, the status icon
+  slot, `PcApp::on_game_exit` (`Played`), and the per-game core choice.
+- Never run on a real Windows desktop by a person: CI builds and tests it
+  there headlessly. `docs/pc/TESTING.md` is the checklist.
+- The exe is unsigned (SmartScreen note in the READMEs).
 
 ## How to check
 
@@ -70,4 +85,5 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
     cargo check -p slot-mini --lib --features pc --target x86_64-pc-windows-gnu
     cargo test -p slot-mini-pc        # the PC app, headless
     cargo check -p slot-mini-pc --all-targets --target x86_64-pc-windows-gnu
+    SLOT_MINI_PC_EXE=target/x86_64-pc-windows-gnu/release/slot-mini-pc.exe scripts/package-pc.sh   # after a mingw cross build
     cargo run -p slot-mini-pc --example fake_library -- /tmp/lib   # games to try it on

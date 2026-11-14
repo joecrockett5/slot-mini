@@ -496,3 +496,34 @@ built.
     cannot hold fails that one file and is listed; the rest carries on.
     It runs on a worker thread; the shelf rescans (games and favourites)
     once it is at rest.
+78. **Two release lines.** The PC app is versioned on its own
+    (`crates/slot-mini-pc`, 0.1.0) and released as `pc-v<version>` with
+    `slot-mini-pc-<version>-windows-x64.zip`, always with `--latest=false`:
+    the Miyoo's updater asks GitHub for the latest release and must keep
+    getting a `v<version>` one. As a second lock, from 0.6.5 the device
+    takes a release only when its tag is exactly `v<x.y.z>`
+    (`update::device_tag`), so `pc-v...`, `main-latest` or a suffixed tag
+    is never offered even if it were marked latest. Devices on 0.6.4 or
+    older rely on the first lock alone.
+79. **The PC zip is put together on Linux** (`scripts/package-pc.sh`, the
+    `pc-package` job) around the exe the Windows job built. The script
+    reads the exe's PE header and refuses one that is not x64, not the
+    Windows subsystem, or without its version resource and manifest, so a
+    broken build script cannot ship. The licence notice is the device's
+    script with `--pc` (`slot-mini-pc`'s dependencies for
+    `x86_64-pc-windows-msvc`). The zip holds one folder; text files get
+    CRLF line ends for Notepad. The device release now also waits for the
+    Windows build, since one `release` job publishes both.
+80. **Icon, version and manifest** come from `build.rs` through
+    `winresource`, an unconditional build dependency because a build
+    script is compiled for the host; it does nothing for other targets.
+    The icon is the Miyoo app icon (`package/app/icon.png`) resampled into
+    `assets/icon.ico`. The manifest declares Windows 10/11, long-path
+    awareness and the v6 common controls. Long paths still need Windows'
+    own `LongPathsEnabled` switch for what RetroArch is handed; Rust's
+    file calls already cope without it.
+81. **One instance.** A named mutex (`Local\slot-mini-pc.one-instance`)
+    decides; a second start finds the first window by its class name and
+    brings it forward, then exits. If that window is hidden because a game
+    is running, it is left hidden: showing the shelf over RetroArch would
+    be worse than doing nothing.

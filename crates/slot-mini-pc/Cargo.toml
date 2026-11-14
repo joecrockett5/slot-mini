@@ -38,7 +38,9 @@ rfd = { version = "0.15", default-features = false }
 tinyaudio = "1"
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Security", "Win32_UI_WindowsAndMessaging"] }
 
-[target.'cfg(windows)'.build-dependencies]
+# Used by build.rs for Windows targets only. Not under cfg(windows): a
+# build script is compiled for the machine doing the build.
+[build-dependencies]
 winresource = "0.1"
 
 [dev-dependencies]

@@ -117,6 +117,17 @@ impl Shell {
         if self.pc.config.fullscreen {
             attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
         }
+        #[cfg(windows)]
+        {
+            use winit::platform::windows::{IconExtWindows, WindowAttributesExtWindows};
+            // The exe's own icon (build.rs), and a class name a second
+            // slot-mini can find this window by.
+            let icon = winit::window::Icon::from_resource(1, None).ok();
+            attrs = attrs
+                .with_class_name(instance::CLASS)
+                .with_window_icon(icon.clone())
+                .with_taskbar_icon(icon);
+        }
         let window = match el.create_window(attrs) {
             Ok(w) => Rc::new(w),
             Err(e) => {
@@ -377,7 +388,55 @@ fn open_pc(now: u64) -> PcApp {
     PcApp::new(&library, opts, now)
 }
 
+/// One slot-mini at a time: two would write the same config, shells and
+/// favourites, and both would wait on RetroArch.
+#[cfg(windows)]
+mod instance {
+    use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows_sys::Win32::System::Threading::CreateMutexW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, IsIconic, IsWindowVisible, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+
+    /// The window's class name.
+    pub const CLASS: &str = "slot-mini-pc";
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain([0]).collect()
+    }
+
+    /// Whether this is the only slot-mini in this Windows session. When it
+    /// is not, the one already running is brought to the front, unless it
+    /// is hidden behind a game, which is left alone.
+    pub fn only() -> bool {
+        let name = wide("Local\\slot-mini-pc.one-instance");
+        // SAFETY: plain Win32 calls on NUL-terminated strings that outlive
+        // them. The mutex handle is kept until the process ends, which is
+        // what holds the name.
+        unsafe {
+            let handle = CreateMutexW(std::ptr::null(), 0, name.as_ptr());
+            if handle.is_null() || GetLastError() != ERROR_ALREADY_EXISTS {
+                // Ours, or mutexes are broken: either way, run.
+                return true;
+            }
+            let class = wide(CLASS);
+            let window = FindWindowW(class.as_ptr(), std::ptr::null());
+            if !window.is_null() && IsWindowVisible(window) != 0 {
+                if IsIconic(window) != 0 {
+                    ShowWindow(window, SW_RESTORE);
+                }
+                SetForegroundWindow(window);
+            }
+            false
+        }
+    }
+}
+
 fn main() {
+    #[cfg(windows)]
+    if !instance::only() {
+        return;
+    }
     let start = Instant::now();
     let mut shell = Shell {
         pc: open_pc(0),
