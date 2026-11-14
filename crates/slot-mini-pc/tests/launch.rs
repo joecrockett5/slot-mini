@@ -62,6 +62,8 @@ impl Rig {
             sound: None,
             face_wait: None,
             seed: 7,
+            name: "Desk".into(),
+            sync: None,
             releases_url: "http://127.0.0.1:9/releases".into(),
             buildbot: "http://127.0.0.1:9".into(),
         };

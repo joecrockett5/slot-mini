@@ -414,6 +414,8 @@ fn open_pc(now: u64) -> PcApp {
         sound: Some(Box::new(slot_mini_pc::audio::Speakers::new())),
         face_wait: slot_mini::Options::default().face_wait,
         seed,
+        name: slot_mini_pc::sync::computer_name(),
+        sync: Some(slot_mini_pc::sync::Net::lan()),
         releases_url: slot_mini_pc::net::releases_url(slot_mini_pc::net::REPO),
         buildbot: retroarch::BUILDBOT.to_string(),
     };

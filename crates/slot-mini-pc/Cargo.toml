@@ -24,6 +24,7 @@ slot-mini = { path = "../slot-mini", features = ["pc"] }
 slot-mini-gfx = { path = "../slot-mini-gfx" }
 slot-mini-store = { path = "../slot-mini-store" }
 slot-mini-ui = { path = "../slot-mini-ui" }
+slot-mini-sync = { path = "../slot-mini-sync", features = ["server"] }
 winit = "0.30"
 softbuffer = "0.4"
 gilrs = "0.11"
@@ -43,6 +44,7 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_
 winresource = "0.1"
 
 [dev-dependencies]
+slot-mini-sync = { path = "../slot-mini-sync", features = ["server", "client"] }
 tempfile = { workspace = true }
 png = { workspace = true }
 
