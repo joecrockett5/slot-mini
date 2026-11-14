@@ -80,6 +80,17 @@ impl App {
         if let Some(pc) = self.paths.pc.as_mut() {
             pc.cores = cores;
         }
+        self.cores_changed();
+    }
+
+    /// Cores were installed (or RetroArch moved): what the shelf says
+    /// about a missing one is checked again.
+    pub fn cores_changed(&mut self) {
+        let had = self.notice.take();
+        self.name_missing_core();
+        if self.notice != had {
+            self.shelf_named = Some(self.now);
+        }
     }
 
     /// The wallpaper behind the shelf on screen, for the window's borders.
@@ -161,6 +172,59 @@ impl App {
         }
     }
 
+    /// The mouse in the cart studio: the row under it is selected and a
+    /// click opens it; a click picks a colour chip (twice on Custom opens
+    /// it); anywhere else a click is A.
+    fn studio_pointer(&mut self, p: Pointer) {
+        use crate::studio::Screen;
+        use crate::studio_view::{hit, Hit};
+        let (Pointer::Move(x, y) | Pointer::Click(x, y)) = p else {
+            return;
+        };
+        let click = matches!(p, Pointer::Click(..));
+        let w = self.stage.w;
+        let Some(ui) = self.studio.as_mut() else {
+            return;
+        };
+        if ui.applying() {
+            return;
+        }
+        let studio = &mut ui.studio;
+        match (hit(studio, w, x, y), studio.screen) {
+            (Some(Hit::Row(row)), _) => {
+                studio.screen = Screen::List { row };
+                if click {
+                    self.tap(Button::A);
+                }
+            }
+            (Some(Hit::Chip(i)), Screen::Chips { at, .. }) if click => match i == at {
+                true => self.tap(Button::A),
+                false => studio.chips_jump(i),
+            },
+            (None, Screen::Sheet { .. } | Screen::Custom { .. } | Screen::Hex { .. }) if click => {
+                self.tap(Button::A)
+            }
+            _ => {}
+        }
+    }
+
+    /// On a system's shelf, say so when the core its games run on is not
+    /// in RetroArch's cores folder (or RetroArch was not found).
+    pub(super) fn name_missing_core(&mut self) {
+        let Some((crate::library::ShelfKind::System(platform), _)) = self.shelves.get(self.at)
+        else {
+            return;
+        };
+        let core = crate::cores::pc_default(*platform);
+        if crate::cores::installed(&self.paths, core.libretro()) {
+            return;
+        }
+        self.notice = Some(match self.paths.pc_cores() {
+            Some(_) => format!("{}: {} is not installed", platform.name(), core.text()),
+            None => format!("{}: RetroArch was not found", platform.name()),
+        });
+    }
+
     /// Whether the app is on the plain shelf, where the mouse picks carts.
     fn on_shelf(&self) -> bool {
         self.phase == Phase::Shelf && self.core.is_none()
@@ -175,6 +239,9 @@ impl App {
     pub fn pointer(&mut self, p: Pointer) {
         if self.phase == Phase::About && matches!(p, Pointer::Move(..) | Pointer::Click(..)) {
             return self.about_pointer(p);
+        }
+        if self.phase == Phase::Studio && matches!(p, Pointer::Move(..) | Pointer::Click(..)) {
+            return self.studio_pointer(p);
         }
         if !self.on_shelf() {
             // Other screens are lists: the wheel walks them and the right

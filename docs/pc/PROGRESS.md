@@ -35,9 +35,9 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
 
 - Grid: DECISIONS #67, #68. Mouse: #69 (`App::pointer` in `app_pc.rs`).
 
-## Phase 5: feature parity — in progress
+## Phase 5: feature parity — done
 
-Done (DECISIONS #70 to #75):
+(DECISIONS #70 to #75):
 
 - MENU's PC rows (`crates/slot-mini/src/about_pc.rs`), goldens
   `pc_menu*.png`, tests `crates/slot-mini/tests/pc_menu.rs`; `PcApp` carries
@@ -46,11 +46,9 @@ Done (DECISIONS #70 to #75):
 - Sound (`audio.rs`), update check and core download (`net.rs`), dialogs
   and the browser (`desktop.rs`), the status icon slot.
 
-Left in phase 5:
-
-- A shelf whose core is missing should say so before a game is inserted
-  (today only the insert notice does).
-- The cart studio by mouse.
+- A shelf whose core is missing says so when it comes up
+  (`name_missing_core`), and the studio works by mouse (`studio_view::hit`);
+  tests in `crates/slot-mini/tests/mouse.rs`.
 
 ## Next
 

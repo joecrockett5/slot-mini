@@ -661,6 +661,10 @@ impl App {
             let _ = s.write(&self.paths);
         }
         self.shelf_named = Some(self.now);
+        #[cfg(feature = "pc")]
+        if self.paths.is_pc() {
+            self.name_missing_core();
+        }
     }
 
     pub fn state(&self) -> State {
@@ -718,6 +722,10 @@ impl App {
         self.at = (self.at as i32 + by).rem_euclid(n) as usize;
         self.shelf_named = Some(self.now);
         self.notice = None;
+        #[cfg(feature = "pc")]
+        if self.paths.is_pc() {
+            self.name_missing_core();
+        }
         self.refresh_view();
     }
 

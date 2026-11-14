@@ -431,6 +431,7 @@ impl PcApp {
                 Ok(()) => CoresJob::Idle,
                 Err(e) => CoresJob::Failed(e),
             };
+            self.app.cores_changed();
             changed = true;
         }
         if changed {
