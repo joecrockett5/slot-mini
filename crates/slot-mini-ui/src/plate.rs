@@ -79,17 +79,38 @@ pub fn hint_face(key: &str, label: &str) -> UndoFace {
 }
 
 pub fn hint_coloured(key: &str, label: &str, ink: [u8; 3]) -> UndoFace {
+    hint_inked(key, label, ink, INK, CAP_INK)
+}
+
+/// A hint for the shelf's footer, which is light in the light appearance:
+/// the cap and the label in the footer's ink, the key in what reads on it.
+pub fn footer_hint_face(key: &str, label: &str, ink: [u8; 3]) -> UndoFace {
+    let dark = ink.iter().map(|c| *c as u32).sum::<u32>() < 3 * 128;
+    let key_ink = match dark {
+        true => INK,
+        false => CAP_INK,
+    };
+    hint_inked(key, label, ink, ink, key_ink)
+}
+
+fn hint_inked(
+    key: &str,
+    label: &str,
+    ink: [u8; 3],
+    cap_fill: [u8; 3],
+    key_ink: [u8; 3],
+) -> UndoFace {
     let w = hint_width(key, label);
     let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
 
     let cap_w = cap_width(key);
     let mut cap = Vec::with_capacity((cap_w * CAP * 4) as usize);
     for _ in 0..cap_w * CAP {
-        cap.extend_from_slice(&[INK[0], INK[1], INK[2], 255]);
+        cap.extend_from_slice(&[cap_fill[0], cap_fill[1], cap_fill[2], 255]);
     }
     if let Some(font) = text::label_font() {
         let layout = text::fit(font, key, cap_w as f32, 1, KEY_PX, KEY_PX);
-        text::draw_centred(&mut cap, cap_w, CAP, &layout, CAP_INK);
+        text::draw_centred(&mut cap, cap_w, CAP, &layout, key_ink);
     }
     blit(&mut rgba, w, &cap, cap_w, CAP, 0, (HINT_H - CAP) / 2);
 

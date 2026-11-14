@@ -58,6 +58,10 @@ pub mod bar;
 const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
 pub const FACE_WAIT: Duration = Duration::from_millis(500);
+/// The Miyoo's grid (DECISIONS #68): a second row of faces built ahead of
+/// the view, and a held Up or Down kept to one row in this long.
+const GRID_AHEAD: u8 = 1;
+const GRID_ROW_GAP_MS: Millis = 110;
 /// Faces kept decoded either side of the selected cart.
 const NEAR: i32 = 4;
 /// The longest note MENU shows on its one line.
@@ -228,6 +232,12 @@ pub struct App {
     /// use it, whether the one on screen does, its rows and lift, and when a
     /// cart ejected into it began flying back to its cell.
     views: Views,
+    /// The Miyoo's footer legend on the grid (`R2 ROW`), and whether the
+    /// shared faces have their copy at the grid's scale: both made the
+    /// first time a shelf shows as a grid, so a Miyoo that never does
+    /// pays nothing for it.
+    view_hint: Option<(TexId, u32, u32)>,
+    grid_ready: bool,
     grid_mode: bool,
     grid: Grid,
     grid_settle: Option<Millis>,
@@ -347,6 +357,8 @@ impl App {
             core_statics: None,
             restart_at: None,
             views: Views::default(),
+            view_hint: None,
+            grid_ready: false,
             grid_mode: false,
             grid: Grid::new(),
             grid_settle: None,
@@ -371,9 +383,7 @@ impl App {
             rendered: false,
             exit: None,
         };
-        if app.paths.is_pc() {
-            app.views = Views::read(&app.paths);
-        }
+        app.views = Views::read(&app.paths);
         app.restock();
         app.restore(&state);
         app.refresh_view();
@@ -511,22 +521,23 @@ impl App {
 
     // ---- the grid view -------------------------------------------------
 
-    /// Whether the shelf on screen shows as a grid. Only the PC has the
-    /// grid for now, so the device build drops everything behind this.
+    /// Whether the shelf on screen shows as a grid.
     #[inline]
     pub fn grid_on(&self) -> bool {
-        self.paths.is_pc() && self.grid_mode
+        self.grid_mode
     }
 
-    /// Take up the view the shelf on screen was left in.
+    /// Take up the view the shelf on screen was left in: the PC opens a
+    /// shelf as a grid, the Miyoo as slot's scrolling shelf.
     fn refresh_view(&mut self) {
-        if !self.paths.is_pc() {
-            return;
-        }
         let was = self.grid_mode;
+        let default = self.paths.is_pc();
         self.grid_mode = self
             .current_shelf_key()
-            .is_some_and(|k| self.views.is_grid(&k, true));
+            .is_some_and(|k| self.views.is_grid(&k, default));
+        if self.grid_mode {
+            self.ready_grid();
+        }
         self.grid_settle = None;
         if let Some((_, shelf)) = self.shelves.get(self.at) {
             self.grid.snap(shelf);
@@ -535,6 +546,39 @@ impl App {
             // Faces are pre-scaled for the view they were built for.
             self.drop_faces();
         }
+    }
+
+    /// What the grid needs of the Miyoo beyond the shelf's: the shared
+    /// shadows and backings at the grid's scale, and its footer legend.
+    /// (The PC makes its own at start.)
+    fn ready_grid(&mut self) {
+        if self.grid_ready || self.paths.is_pc() {
+            return;
+        }
+        self.grid_ready = true;
+        self.grid.paced(GRID_AHEAD, GRID_ROW_GAP_MS);
+        let faces = [
+            cart_shadow(),
+            gb_cart_shadow(GbShell::Notched),
+            gb_cart_shadow(GbShell::Rounded),
+            cart_backing(None),
+            cart_backing(Some(GbShell::Notched)),
+            cart_backing(Some(GbShell::Rounded)),
+        ];
+        let texes = self
+            .statics
+            .shadows
+            .into_iter()
+            .chain(self.statics.backings);
+        for (tex, f) in texes.zip(faces) {
+            let cell = Sprite::from_rgba(f.w, f.h, &f.rgba).resized(
+                (f.w as f32 * slot_mini_ui::GRID_SCALE).round() as u32,
+                (f.h as f32 * slot_mini_ui::GRID_SCALE).round() as u32,
+            );
+            self.gfx.pin_scaled(tex, cell);
+        }
+        let hint = slot_mini_ui::footer_hint_face("R2", "ROW", self.theme.footer_ink);
+        self.view_hint = Some((upload(&mut self.gfx, &hint), hint.w, hint.h));
     }
 
     fn drop_faces(&mut self) {
@@ -554,7 +598,8 @@ impl App {
     /// Switch the shelf on screen between the scrolling shelf and the grid,
     /// and remember it for that shelf.
     pub fn toggle_view(&mut self) {
-        if !self.paths.is_pc() || self.phase != Phase::Shelf || self.core.is_some() {
+        // From the shelf (R2, the PC's button) or from MENU's Settings row.
+        if !matches!(self.phase, Phase::Shelf | Phase::About) || self.core.is_some() {
             return;
         }
         let Some(key) = self.current_shelf_key() else {
@@ -1095,6 +1140,11 @@ impl App {
         let mut about = crate::about::About::new(&self.paths);
         about.diag = self.cpu.clone();
         about.glyphs = self.glyphs;
+        // The Miyoo's Settings has a row for the view of the shelf on
+        // screen; the PC has its button in the footer.
+        if !self.paths.is_pc() && self.current_shelf_key().is_some() {
+            about.grid = Some(self.grid_on());
+        }
         #[cfg(feature = "pc")]
         if self.paths.is_pc() {
             about.for_host(self.host.clone());
@@ -1758,10 +1808,25 @@ impl App {
             let wifi_w = self.statics.wifi.filter(|_| self.wifi).map(|(_, w, _)| w);
             slot_mini_ui::draw_sync_icon(self.percent.printed, wifi_w, marks[mark.index()], out);
         }
+        // The Miyoo's grid names the button that leads back to the shelf.
+        if let (true, Some((tex, w, h))) = (self.grid_on(), self.view_hint) {
+            let x = self.stage.w - VIEW_HINT_EDGE - self.clock.printed.w as f32 - w as f32;
+            out.push(Draw::Tex {
+                x: x.round(),
+                y: slot_mini_ui::FOOTER_Y,
+                w: w as f32,
+                h: h as f32,
+                tex,
+                alpha: 1.0,
+            });
+        }
         #[cfg(feature = "pc")]
         self.draw_pc_footer(out);
     }
 }
+
+/// The footer's margin and the gap between the clock and the grid's legend.
+const VIEW_HINT_EDGE: f32 = 24.0 + 16.0;
 
 fn reprint(gfx: &mut Renderer, p: &mut Printing, text: &str, face: impl Fn(&str) -> UndoFace) {
     if p.text == text {

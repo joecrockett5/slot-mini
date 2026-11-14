@@ -58,10 +58,10 @@ const SETTINGS: [Row; 8] = [
     Row::Sounds,
     Row::IngameMenu,
     Row::Recents,
-    Row::View,
     Row::BootLauncher,
     Row::BootScreen,
     Row::OnlineLabels,
+    Row::View,
     Row::Sync,
 ];
 /// The sync page before pairing, and after.

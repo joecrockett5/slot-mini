@@ -160,20 +160,23 @@ fn main() {
     studio(&paths);
     menu(&paths);
     #[cfg(feature = "pc")]
-    grid(&paths);
+    {
+        let cores = paths.tmp.join("cores");
+        std::fs::create_dir_all(&cores).unwrap();
+        let pc = Paths::pc(
+            paths.sd.clone(),
+            paths.tmp.clone(),
+            slot_mini::paths::Pc { cores: Some(cores) },
+        );
+        grid("grid (pc)", pc);
+    }
+    // The Miyoo's grid: the same shelf, turned into a grid with R2.
+    grid("grid (miyoo)", paths.clone());
 }
 
-/// The grid view (PC only until brief 4): the same library scrolled a row
-/// at a time with Down held, every frame drawn.
-#[cfg(feature = "pc")]
-fn grid(paths: &Paths) {
-    let cores = paths.tmp.join("cores");
-    std::fs::create_dir_all(&cores).unwrap();
-    let pc = Paths::pc(
-        paths.sd.clone(),
-        paths.tmp.clone(),
-        slot_mini::paths::Pc { cores: Some(cores) },
-    );
+/// The grid view: the same library scrolled a row at a time with Down
+/// held, every frame drawn.
+fn grid(what: &str, paths: Paths) {
     let status = FixedStatus {
         battery: Some(80),
         wifi: true,
@@ -186,15 +189,33 @@ fn grid(paths: &Paths) {
         seed: 1,
     };
     let t0 = Instant::now();
-    let mut app = App::new(pc, Box::new(status), opts, 0);
+    let mut app = App::new(paths, Box::new(status), opts, 0);
     let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
     app.tick(0);
     app.render(&mut frame);
     let first = t0.elapsed();
+    let (mut now, mut frames) = (0u64, 0u32);
+    if !app.grid_on() {
+        let t = Instant::now();
+        app.handle(Event::Press(Button::R2));
+        app.handle(Event::Release(Button::R2));
+        now += 16;
+        app.tick(now);
+        app.render(&mut frame);
+        println!(
+            "{what}: the frame that turns the shelf into a grid {:.1} ms",
+            t.elapsed().as_secs_f64() * 1000.0
+        );
+        for _ in 0..60 {
+            now += 16;
+            app.tick(now);
+            app.render(&mut frame);
+        }
+    }
     assert!(app.grid_on());
     app.handle(Event::Press(Button::Down));
-    let (mut now, mut frames) = (0u64, 0u32);
     let (mut worst, mut total) = (Duration::ZERO, Duration::ZERO);
+    let mut over = 0u32;
     let mut last = String::new();
     let mut still = 0;
     while still < 90 && frames < 20_000 {
@@ -206,17 +227,41 @@ fn grid(paths: &Paths) {
         worst = worst.max(dt);
         total += dt;
         frames += 1;
+        if dt > Duration::from_micros(16_667) {
+            over += 1;
+        }
         let here = app.current().unwrap().1.stem.clone();
         still = if here == last { still + 1 } else { 0 };
         last = here;
     }
     app.handle(Event::Release(Button::Down));
+    // At rest, every frame drawn in full (two canvases in turn).
+    let mut pair = [
+        Canvas::new(SCREEN_W, SCREEN_H),
+        Canvas::new(SCREEN_W, SCREEN_H),
+    ];
+    for _ in 0..60 {
+        now += 16;
+        app.tick(now);
+        app.render(&mut pair[0]);
+    }
+    let t = Instant::now();
+    for i in 0..60 {
+        now += 16;
+        app.tick(now);
+        app.render(&mut pair[i % 2]);
+    }
     println!(
-        "grid: first frame {:.0} ms, scroll {} frames, avg {:.2} ms, worst {:.2} ms, textures {:.1} MB",
+        "{what}: a whole frame at rest {:.2} ms",
+        t.elapsed().as_secs_f64() * 1000.0 / 60.0
+    );
+    println!(
+        "{what}: first frame {:.0} ms, scroll {} frames, avg {:.2} ms, worst {:.2} ms, {} over 16.7 ms, textures {:.1} MB",
         first.as_secs_f64() * 1000.0,
         frames,
         total.as_secs_f64() * 1000.0 / frames as f64,
         worst.as_secs_f64() * 1000.0,
+        over,
         app.gfx.bytes() as f64 / 1e6,
     );
 }
