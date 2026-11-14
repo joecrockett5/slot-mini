@@ -576,7 +576,10 @@ Save and Load State worked on the device. Fixed:
 - Tests: new golden `about_settings`; MENU tests step into Settings. Not
   checked on a device (DEVICE-TESTING section 18).
 
-## 0.6.5: only `v<x.y.z>` is an update
+## 0.6.6: only `v<x.y.z>` is an update
+
+0.6.5 was the sync core's release (brief 1, `docs/sync/PROGRESS.md`);
+nothing in the launcher changed in it.
 
 - Check for updates takes a release only when its tag is exactly
   `v<x.y.z>` (`update::device_tag`, decision 78): the PC app's

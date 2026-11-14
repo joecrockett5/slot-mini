@@ -63,7 +63,7 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
   `scripts/release-pc.sh`, `scripts/third-party.py --pc`, CI jobs
   `windows` -> `pc-package` -> `release`. `package/pc/` holds the zip's
   README and credits.
-- The Miyoo's updater takes only `v<x.y.z>` tags from 0.6.5
+- The Miyoo's updater takes only `v<x.y.z>` tags from 0.6.6
   (`update::device_tag`).
 
 ## Phase 8: docs — done

@@ -372,7 +372,8 @@ mod tests {
         assert!(!all.iter().any(|f| f.contains("states")), "{all:?}");
         assert!(!all.iter().any(|f| f.ends_with(".importing")));
         assert!(!all.iter().any(|f| f.starts_with("Emu/")), "only games");
-        let favs = slot_mini::settings::Favourites::read(&library);
+        let favs =
+            slot_mini::settings::Favourites::read(&slot_mini::settings::favourites_file(&library));
         assert_eq!(favs.list.len(), 1);
         let log = std::fs::read_to_string(library.app().join("import.txt")).unwrap();
         assert!(log.contains("2 saves copied"), "{log}");

@@ -62,7 +62,8 @@ impl App {
             return false;
         }
         let carts = library::scan(&self.paths);
-        let favourites = crate::settings::Favourites::read(&self.paths);
+        let favourites =
+            crate::settings::Favourites::read(&crate::settings::favourites_file(&self.paths));
         if carts == self.carts && favourites == self.favourites {
             return false;
         }

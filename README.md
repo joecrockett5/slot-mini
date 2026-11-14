@@ -365,7 +365,7 @@ The PC app has its own release line. The Windows job builds `slot-mini-pc.exe`, 
 ([`scripts/package-pc.sh`](scripts/package-pc.sh)), and on `main`
 [`scripts/release-pc.sh`](scripts/release-pc.sh) publishes `pc-v<version>` from
 `crates/slot-mini-pc/Cargo.toml` when that version has no release yet. PC releases are never marked as GitHub's
-latest release, which is what the Miyoo's updater asks for; from 0.6.5 the Miyoo also ignores any tag that is not
+latest release, which is what the Miyoo's updater asks for; from 0.6.6 the Miyoo also ignores any tag that is not
 exactly `v<x.y.z>`.
 
 ## Documentation

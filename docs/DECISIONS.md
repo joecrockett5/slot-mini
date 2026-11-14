@@ -500,10 +500,10 @@ built.
     (`crates/slot-mini-pc`, 0.1.0) and released as `pc-v<version>` with
     `slot-mini-pc-<version>-windows-x64.zip`, always with `--latest=false`:
     the Miyoo's updater asks GitHub for the latest release and must keep
-    getting a `v<version>` one. As a second lock, from 0.6.5 the device
+    getting a `v<version>` one. As a second lock, from 0.6.6 the device
     takes a release only when its tag is exactly `v<x.y.z>`
     (`update::device_tag`), so `pc-v...`, `main-latest` or a suffixed tag
-    is never offered even if it were marked latest. Devices on 0.6.4 or
+    is never offered even if it were marked latest. Devices on 0.6.5 or
     older rely on the first lock alone.
 79. **The PC zip is put together on Linux** (`scripts/package-pc.sh`, the
     `pc-package` job) around the exe the Windows job built. The script

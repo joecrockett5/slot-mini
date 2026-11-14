@@ -73,6 +73,13 @@ pub fn installed(paths: &Paths, core: &str) -> bool {
 /// The core this cart runs on now, as one of slot's cores: its own setting,
 /// else the system's default, else mGBA (`saves::device_core`).
 pub fn chosen(paths: &Paths, cart: &Cart) -> Core {
+    if paths.is_pc() {
+        // The PC has no launch scripts to read a default from.
+        return per_game(cart)
+            .and_then(|c| Core::from_libretro(&c))
+            .filter(|c| c.runs(cart.platform))
+            .unwrap_or(pc_default(cart.platform));
+    }
     saves::device_core(&paths.sd, cart.platform, Some(&cart.rom))
 }
 
