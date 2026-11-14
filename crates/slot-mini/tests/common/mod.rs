@@ -61,12 +61,17 @@ impl Rig {
     }
 
     pub fn app_with(&self, status: FixedStatus) -> Driver {
+        self.app_sync(status, slot_mini::sync::Options::default())
+    }
+
+    /// The app with sync looking for PCs where `sync` says (a local hub).
+    pub fn app_sync(&self, status: FixedStatus, sync: slot_mini::sync::Options) -> Driver {
         let opts = Options {
             sound: None,
             face_wait: None,
             seed: 7,
         };
-        let app = App::new(self.paths.clone(), Box::new(status), opts, 0);
+        let app = App::new(self.paths.clone(), Box::new(status), opts, 0).with_sync(sync);
         let mut d = Driver {
             app,
             frame: Canvas::new(SCREEN_W, SCREEN_H),

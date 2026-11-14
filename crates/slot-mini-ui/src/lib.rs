@@ -33,8 +33,10 @@ mod silhouette;
 mod slot_chrome;
 pub mod sticker;
 pub mod sticker_curl;
+mod sync_icon;
 pub mod text;
 mod wifi;
+pub use sync_icon::{draw_sync_icon, sync_face, SyncMark};
 pub use wifi::wifi_face;
 
 pub use art::decode as decode_png;

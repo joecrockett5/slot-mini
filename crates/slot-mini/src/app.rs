@@ -252,6 +252,16 @@ pub struct App {
     bar: bar::Bar,
     /// The buttons the legends name.
     glyphs: crate::legend::Glyphs,
+    /// Sync with slot-mini PC. Inert until the player pairs.
+    pub sync: crate::sync::Sync,
+    /// The footer's sync marks, made the first time one is shown.
+    sync_marks: Option<[(TexId, u32, u32); 4]>,
+    /// What the footer shows of sync, read once a tick.
+    sync_mark: Option<crate::sync::Icon>,
+    /// The sync that follows the first frame (and Wi-Fi coming up) is
+    /// still owed.
+    start_sync_due: bool,
+    rendered: bool,
     pub exit: Option<Exit>,
 }
 
@@ -285,6 +295,7 @@ impl App {
             #[cfg(not(unix))]
             None => Box::new(crate::sound::Silent),
         };
+        let paths_for_sync = paths.clone();
         let mut app = App {
             paths,
             settings,
@@ -353,6 +364,11 @@ impl App {
             #[cfg(feature = "pc")]
             bar: bar::Bar::default(),
             glyphs: crate::legend::Glyphs::default(),
+            sync: crate::sync::Sync::new(&paths_for_sync, crate::sync::Options::default()),
+            sync_marks: None,
+            sync_mark: None,
+            start_sync_due: true,
+            rendered: false,
             exit: None,
         };
         if app.paths.is_pc() {
@@ -367,6 +383,77 @@ impl App {
             app.sound.prepare();
         }
         app
+    }
+
+    /// Look for hubs and listen for pokes somewhere other than the
+    /// network's defaults (tests).
+    pub fn with_sync(mut self, opts: crate::sync::Options) -> App {
+        self.sync = crate::sync::Sync::new(&self.paths, opts);
+        self
+    }
+
+    // ---- sync ----------------------------------------------------------
+
+    /// Every cart in the library (tests).
+    pub fn carts(&self) -> &[Cart] {
+        &self.carts
+    }
+
+    /// Whether a game is hearted (tests).
+    pub fn is_favourite(&self, platform: Platform, stem: &str) -> bool {
+        self.favourites.contains(platform, stem)
+    }
+
+    /// Whether nothing is open or moving over the shelf.
+    fn resting(&self) -> bool {
+        self.phase == Phase::Shelf
+            && self.studio.is_none()
+            && self.about.is_none()
+            && self.core.is_none()
+    }
+
+    /// Whether syncs may start by themselves.
+    fn auto_sync(&self) -> bool {
+        self.settings.auto_sync && self.wifi && self.sync.paired()
+    }
+
+    /// Sync's share of a tick: nothing while unpaired.
+    fn sync_tick(&mut self) {
+        if self.paths.is_pc() {
+            return;
+        }
+        self.sync_mark = self.sync.icon();
+        if self.sync_mark.is_none() {
+            return;
+        }
+        if self.sync_marks.is_none() {
+            let ink = self.theme.footer_ink;
+            self.sync_marks = Some(slot_mini_ui::SyncMark::ALL.map(|m| {
+                let f = slot_mini_ui::sync_face(m, ink);
+                (upload(&mut self.gfx, &f), f.w, f.h)
+            }));
+        }
+        if !self.resting() || !self.rendered {
+            return;
+        }
+        // A sync changed the library: show it, between frames of a shelf
+        // that is standing still.
+        if let Some(fresh) = self.sync.take_fresh() {
+            self.carts = fresh.carts;
+            self.favourites = fresh.favourites;
+            self.restock();
+            self.refresh_view();
+        }
+        if !self.auto_sync() {
+            return;
+        }
+        self.sync.listen();
+        if self.start_sync_due {
+            self.start_sync_due = false;
+            self.sync.auto();
+        } else if self.sync.has_poke() {
+            self.sync.poked();
+        }
     }
 
     // ---- wallpapers ----------------------------------------------------
@@ -1022,7 +1109,14 @@ impl App {
             return;
         };
         let (sounds, recents) = (self.settings.sounds, self.settings.recents);
-        let outcome = about.press(b, &mut self.settings, &self.paths, &mut self.updater);
+        let outcome = about.press(
+            b,
+            &mut self.settings,
+            &self.paths,
+            &mut self.updater,
+            &mut self.sync,
+            self.wifi,
+        );
         if recents != self.settings.recents {
             self.restock();
         }
@@ -1047,6 +1141,7 @@ impl App {
                 self.phase = Phase::Shelf;
             }
             crate::about::Outcome::ExitToOnion => self.exit = Some(Exit::ToOnion),
+            crate::about::Outcome::ToggleView => self.toggle_view(),
             #[cfg(feature = "pc")]
             crate::about::Outcome::Host(row) => self.host_action = Some(row),
         }
@@ -1122,8 +1217,13 @@ impl App {
             return;
         }
         let stem = cart.stem.clone();
+        let game = slot_mini_sync::GameId::new(cart.platform, &cart.stem);
         if let Some(s) = self.shelf_mut() {
             s.release_hold();
+        }
+        // The PC may hold a newer save: fetch it while the cart goes in.
+        if !self.paths.is_pc() && self.auto_sync() {
+            self.sync.launching(game);
         }
         // From the grid the cart first flies to where the shelf holds it.
         let lift = match self.grid_on() {
@@ -1192,6 +1292,7 @@ impl App {
             }
         }
         self.sync_fetched();
+        self.sync_tick();
         // An installed update: let "Restarting" show, then start it.
         if let crate::update::Status::Installed(_) = self.updater.status() {
             let at = *self.restart_at.get_or_insert(now);
@@ -1217,15 +1318,27 @@ impl App {
             self.insert_sounded = true;
             self.play(crate::sound::Clip::Insert);
         }
-        match &self.phase {
-            Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => {
+        // The pull of this game's save may take a little longer than the
+        // cart does (`sync::LAUNCH_CAP`); the launch waits no longer.
+        let seated = match &self.phase {
+            Phase::Inserting { at, fresh, .. } if self.secs_since(*at) >= INSERT_S => Some(*fresh),
+            _ => None,
+        };
+        match seated {
+            Some(_) if self.exit.is_none() && self.sync.launch_waits() => {}
+            Some(fresh) if self.exit.is_none() => {
+                // Nothing may be half written when the game starts.
+                self.sync.close();
                 if let Some((_, cart)) = self.current() {
                     self.exit = Some(Exit::Launch {
                         cart: cart.clone(),
-                        fresh: *fresh,
+                        fresh,
                     });
                 }
             }
+            _ => {}
+        }
+        match &self.phase {
             Phase::Ejecting { at, .. } if self.secs_since(*at) >= EJECT_S => {
                 self.phase = Phase::Shelf;
                 if self.grid_on() {
@@ -1466,6 +1579,7 @@ impl App {
     /// so an idle shelf costs almost nothing (and the caller need not show
     /// it).
     pub fn render(&mut self, canvas: &mut Canvas) -> bool {
+        self.rendered = true;
         self.sync_faces();
         self.sync_text();
         #[cfg(feature = "pc")]
@@ -1484,6 +1598,7 @@ impl App {
                 ground,
                 &self.settings,
                 &self.updater.status(),
+                &self.sync.view(),
                 &mut self.gfx,
                 &mut out,
             ),
@@ -1632,6 +1747,16 @@ impl App {
         );
         if self.wifi {
             draw_wifi_icon(self.percent.printed, self.statics.wifi, out);
+        }
+        if let (Some(mark), Some(marks)) = (self.sync_mark, &self.sync_marks) {
+            let mark = match mark {
+                crate::sync::Icon::Synced => slot_mini_ui::SyncMark::Synced,
+                crate::sync::Icon::Syncing => slot_mini_ui::SyncMark::Syncing,
+                crate::sync::Icon::Unreachable => slot_mini_ui::SyncMark::Unreachable,
+                crate::sync::Icon::Conflict => slot_mini_ui::SyncMark::Conflict,
+            };
+            let wifi_w = self.statics.wifi.filter(|_| self.wifi).map(|(_, w, _)| w);
+            slot_mini_ui::draw_sync_icon(self.percent.printed, wifi_w, marks[mark.index()], out);
         }
         #[cfg(feature = "pc")]
         self.draw_pc_footer(out);
