@@ -39,6 +39,7 @@ pub use layout::{CoreChoice, FixedCore, Layout};
 pub use link::{DirectLink, Link};
 pub use model::{Item, Manifest};
 pub use names::NameRules;
+pub use plan::RESERVE;
 pub use report::{Cancel, Event, Moved, Report, Scope, Side};
 
 #[cfg(feature = "client")]
