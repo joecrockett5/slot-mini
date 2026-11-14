@@ -22,6 +22,21 @@ mod platform;
 pub mod saves;
 mod scan;
 
+/// The app's folder under the card or library root, `App/slot-mini` unless
+/// the host says otherwise (the PC app keeps its own beside it, so a library
+/// that is also a card's mirror never mixes the two).
+pub fn app_dir() -> &'static str {
+    APP_DIR.get().copied().unwrap_or("App/slot-mini")
+}
+
+/// Name the app's folder for this process. Only the first call counts, and
+/// it has to come before anything reads the folder.
+pub fn set_app_dir(dir: &'static str) {
+    let _ = APP_DIR.set(dir);
+}
+
+static APP_DIR: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
 pub use atomic::{atomic_write, sweep_temps, AtomicFile};
 pub use cart_shell::{Outline, ShellChoice, ShellFinish, CART_SHELL_FILE, LABELS_SHELL_FILE};
 pub use core::Core;

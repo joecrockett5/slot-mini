@@ -1,0 +1,251 @@
+//! The PC's mouse on the shelf and the grid: hover, click, double click,
+//! wheel and the view button. Needs the `pc` feature.
+#![cfg(feature = "pc")]
+
+mod common;
+
+use common::{golden, Rig};
+use slot_mini::{Exit, Phase, Pointer};
+use slot_mini_gfx::Button;
+
+/// The middle of the grid's cell in `col`, `row` (see `grid_gba.png`).
+fn cell(col: usize, row: usize) -> (f32, f32) {
+    (98.0 + 148.0 * col as f32, 80.0 + 113.0 * row as f32)
+}
+
+/// The view button, left of the clock.
+const VIEW: (f32, f32) = (543.0, 451.0);
+
+#[test]
+fn the_grid_follows_the_pointer_and_a_click_stays_there() {
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.run(500);
+    let first = d.selected();
+    let (x, y) = cell(2, 0);
+    d.app.pointer(Pointer::Move(x, y));
+    d.run(500);
+    let third = d.selected();
+    assert_ne!(third, first);
+    let (x, y) = cell(1, 1);
+    d.app.pointer(Pointer::Click(x, y));
+    d.run(500);
+    assert_ne!(d.selected(), third);
+    // Between carts and below the last one nothing changes.
+    let here = d.selected();
+    d.app.pointer(Pointer::Move(320.0, 400.0));
+    d.app.pointer(Pointer::Click(3.0, 300.0));
+    assert_eq!(d.selected(), here);
+    golden("mouse_grid_hover", &d.frame);
+}
+
+#[test]
+fn a_double_click_puts_the_cart_in() {
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.run(500);
+    let (x, y) = cell(1, 0);
+    d.app.pointer(Pointer::Click(x, y));
+    d.app.pointer(Pointer::Double(x, y));
+    let stem = d.selected();
+    assert!(matches!(&d.app.phase, Phase::Inserting { stem: s, .. } if *s == stem));
+    d.wait_until("the cart to go in", |d| d.app.exit.is_some());
+    assert!(matches!(&d.app.exit, Some(Exit::Launch { cart, fresh: false }) if cart.stem == stem));
+}
+
+#[test]
+fn the_wheel_moves_a_row_in_the_grid_and_a_cart_on_the_shelf() {
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.run(500);
+    let first = d.selected();
+    d.app.pointer(Pointer::Wheel(320.0, 200.0, 1));
+    d.run(500);
+    let below = d.selected();
+    assert_ne!(below, first);
+    d.app.pointer(Pointer::Wheel(320.0, 200.0, -1));
+    assert_eq!(d.selected(), first);
+
+    d.tap(Button::R2);
+    assert!(!d.app.grid_on());
+    d.run(500);
+    d.app.pointer(Pointer::Wheel(320.0, 200.0, 1));
+    d.run(500);
+    let next = d.selected();
+    assert_ne!(next, first);
+    assert_ne!(next, below, "one cart along, not one row");
+    d.app.pointer(Pointer::Wheel(320.0, 200.0, -1));
+    assert_eq!(d.selected(), first);
+}
+
+#[test]
+fn on_the_shelf_a_click_brings_a_cart_to_the_middle_and_hovering_does_not() {
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.tap(Button::R2);
+    d.run(800);
+    let first = d.selected();
+    // The cart to the right of the one over the slot.
+    d.app.pointer(Pointer::Move(560.0, 260.0));
+    d.run(100);
+    assert_eq!(d.selected(), first);
+    d.app.pointer(Pointer::Click(560.0, 260.0));
+    d.run(800);
+    let second = d.selected();
+    assert_ne!(second, first);
+    d.app.pointer(Pointer::Click(80.0, 260.0));
+    d.run(800);
+    assert_eq!(d.selected(), first);
+    // A double click on a side cart only brings it over; on the middle
+    // one it goes in.
+    d.app.pointer(Pointer::Double(560.0, 260.0));
+    assert_eq!(d.app.phase, Phase::Shelf);
+    d.run(800);
+    d.app.pointer(Pointer::Double(320.0, 240.0));
+    assert!(matches!(d.app.phase, Phase::Inserting { .. }));
+}
+
+#[test]
+fn the_view_button_switches_between_the_shelf_and_the_grid() {
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.run(500);
+    assert!(d.app.grid_on());
+    assert!(d.app.view_button(VIEW.0, VIEW.1));
+    assert!(!d.app.view_button(40.0, 451.0));
+    d.app.pointer(Pointer::Click(VIEW.0, VIEW.1));
+    assert!(!d.app.grid_on());
+    d.run(2500);
+    golden("mouse_view_button_shelf", &d.frame);
+    d.app.pointer(Pointer::Click(VIEW.0, VIEW.1));
+    assert!(d.app.grid_on());
+}
+
+#[test]
+fn the_right_button_goes_back_and_the_wheel_walks_a_menu() {
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.tap(Button::Menu);
+    assert_eq!(d.app.phase, Phase::About);
+    // Clicks on the shelf behind it do nothing.
+    let (x, y) = cell(2, 0);
+    let was = d.selected();
+    d.app.pointer(Pointer::Click(x, y));
+    d.app.pointer(Pointer::Back);
+    d.run(100);
+    assert_eq!(d.app.phase, Phase::Shelf);
+    assert_eq!(d.selected(), was);
+}
+
+#[test]
+fn the_studio_works_by_mouse() {
+    use slot_mini::studio::Screen;
+    let rig = Rig::pc();
+    let mut d = rig.app();
+    d.run(500);
+    d.tap(Button::Select);
+    d.run(1500);
+    assert_eq!(d.app.phase, Phase::Studio);
+    let screen = |d: &common::Driver| d.app.studio.as_ref().unwrap().studio.screen;
+    let rows = d.app.studio.as_ref().unwrap().studio.rows().len();
+    assert!(rows >= 2);
+    // The rows are stacked around the middle of the screen: point at the
+    // last one, then click it.
+    let first = screen(&d);
+    let mut y = 400.0;
+    while screen(&d) == first && y > 200.0 {
+        d.app.pointer(Pointer::Move(480.0, y));
+        y -= 10.0;
+    }
+    assert_eq!(screen(&d), Screen::List { row: rows - 1 });
+    // Shell colour is always a row: find it and open it.
+    for y in (0..420).step_by(8) {
+        d.app.pointer(Pointer::Move(480.0, y as f32));
+        if d.app.studio.as_ref().unwrap().studio.row() == Some(slot_mini::studio::Row::Color) {
+            d.app.pointer(Pointer::Click(480.0, y as f32));
+            break;
+        }
+    }
+    let Screen::Chips { at, .. } = screen(&d) else {
+        panic!("the chips did not open: {:?}", screen(&d));
+    };
+    d.run(300);
+    // Click every chip on screen: each becomes the one picked.
+    let mut picked = std::collections::BTreeSet::new();
+    for y in (70..410).step_by(12) {
+        for x in (330..620).step_by(12) {
+            d.app.pointer(Pointer::Move(x as f32, y as f32));
+            assert!(
+                matches!(screen(&d), Screen::Chips { .. }),
+                "hovering changes nothing"
+            );
+            if let Some(slot_mini::studio_view::Hit::Chip(i)) = slot_mini::studio_view::hit(
+                &d.app.studio.as_ref().unwrap().studio,
+                640.0,
+                x as f32,
+                y as f32,
+            ) {
+                if i != at && picked.insert(i) && picked.len() == 1 {
+                    d.app.pointer(Pointer::Click(x as f32, y as f32));
+                    assert!(matches!(screen(&d), Screen::Chips { at, .. } if at == i));
+                }
+            }
+        }
+    }
+    assert!(picked.len() > 3, "chips under the pointer: {picked:?}");
+    d.run(300);
+    golden("mouse_studio_chip", &d.frame);
+    // The right button backs out, twice, to the shelf.
+    d.app.pointer(Pointer::Back);
+    assert!(matches!(screen(&d), Screen::List { .. }));
+    d.app.pointer(Pointer::Back);
+    d.run(1500);
+    assert_eq!(d.app.phase, Phase::Shelf);
+}
+
+#[test]
+fn a_shelf_whose_core_is_missing_says_so() {
+    let rig = Rig::pc();
+    let cores = rig.paths.pc_cores().unwrap().to_path_buf();
+    for entry in std::fs::read_dir(&cores).unwrap() {
+        let path = entry.unwrap().path();
+        if path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("gambatte")
+        {
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+    let mut d = rig.app();
+    d.run(300);
+    let mut said = Vec::new();
+    for _ in 0..d.app.shelf_kinds().len() {
+        said.push(d.app.notice().map(str::to_string));
+        if d.app.notice().is_some_and(|n| n.starts_with("Game Boy:")) {
+            d.run(400);
+            golden("pc_shelf_core_missing", &d.frame);
+        }
+        d.tap(Button::R1);
+        d.run(300);
+    }
+    assert!(
+        said.contains(&Some("Game Boy: Gambatte is not installed".into())),
+        "{said:?}"
+    );
+    assert!(said.contains(&None), "shelves with their core say nothing");
+    // The cores arrive while that shelf is up: it goes back to its name.
+    for _ in 0..d.app.shelf_kinds().len() {
+        if d.app.notice().is_some() {
+            break;
+        }
+        d.tap(Button::R1);
+        d.run(100);
+    }
+    assert!(d.app.notice().is_some());
+    let name = format!("gambatte_libretro{}", std::env::consts::DLL_SUFFIX);
+    std::fs::write(cores.join(name), b"").unwrap();
+    d.app.cores_changed();
+    assert_eq!(d.app.notice(), None);
+}

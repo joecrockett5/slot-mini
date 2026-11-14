@@ -1,6 +1,8 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/shelf.rs
-// Changes: SIDE_SCALE is public (slot-mini pre-scales faces to it); imports
+// Changes: SIDE_SCALE is public (slot-mini pre-scales faces to it);
+//   `draw_cart_faded`, `heart_on` and `shell_of` added for the grid view and
+//   `hit` for the PC's mouse; imports
 //   point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage,
 //   slot_store -> slot_mini_store)
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
@@ -516,6 +518,43 @@ impl Shelf {
 
     pub fn draw_cart_at(&self, i: usize, rect: [f32; 4], out: &mut Vec<Draw>) {
         self.layers(i, rect, 1.0, out);
+    }
+
+    pub fn draw_cart_faded(&self, i: usize, rect: [f32; 4], alpha: f32, out: &mut Vec<Draw>) {
+        self.layers(i, rect, alpha, out);
+    }
+
+    /// The heart sticker and its size, if cart `i` is a favourite.
+    pub fn heart_on(&self, i: usize) -> Option<(TexId, f32, f32)> {
+        self.hearted
+            .get(i)
+            .copied()
+            .unwrap_or(false)
+            .then_some(self.heart)
+            .flatten()
+    }
+
+    pub fn shell_of(&self, i: usize) -> Option<GbShell> {
+        self.shell(i)
+    }
+
+    /// The cart under a point, as its place along the shelf (0 is the
+    /// selected cart, -1 the one to its left). The selected cart is on top.
+    pub fn hit(&self, canvas: Canvas, x: f32, y: f32) -> Option<i32> {
+        let target = self.scroll_target();
+        let mut slots: Vec<i32> = (-SLOTS..=SLOTS).collect();
+        slots.sort_by_key(|s| s.abs());
+        slots.into_iter().find(|&slot| {
+            let Some(i) = self.cart_at_offset(slot) else {
+                return false;
+            };
+            let scale = shrink(target + slot as f32 - self.scroll);
+            let (cw, ch) = cart_box(self.carts[i].platform);
+            let (w, h) = (cw as f32 * scale, ch as f32 * scale);
+            let left = self.centre(canvas, slot) - w / 2.0;
+            let top = foot_y(ch as f32) - h;
+            x >= left && x < left + w && y >= top && y < top + h
+        })
     }
 
     pub fn draw_row(

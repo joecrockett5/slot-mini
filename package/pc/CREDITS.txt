@@ -1,0 +1,34 @@
+slot-mini for Windows
+=====================
+
+slot-mini recreates the look and feel of slot, a cartridge frontend for the
+Anbernic RG SP. This is its Windows version: the same shelf, in front of a
+standalone RetroArch. Most of what you see is slot's code and art, copied
+and drawn in software.
+
+slot
+    https://github.com/BrandonKowalski/slot
+    by Brandon Kowalski. GPL-3.0-or-later (licenses/slot-GPL-3.0.txt).
+    Shelf, cartridge faces, shells, slot chrome, footer, cart studio,
+    label service client, ROM scanning, the cart_shell.txt and label formats,
+    insert and eject sounds, the "slot." boot logo.
+
+slot's skeuomorphic art
+    Markus (https://github.com/MarkusMaribu), as credited by slot.
+
+Fonts
+    Open Sans (slot's label.ttf), SIL Open Font License 1.1
+    (licenses/OpenSans-OFL-1.1.txt).
+    Symbols Nerd Font Mono, MIT (licenses/NerdFontsSymbols-LICENSE.txt).
+
+RetroArch and the libretro cores
+    https://www.retroarch.com. Not included: slot-mini starts the copy you
+    installed, and downloads cores from libretro's buildbot only when you
+    ask it to.
+
+Onion OS
+    https://github.com/OnionUI/Onion. The library folder follows its SD
+    card layout; no Onion code is included.
+
+Rust crates
+    licenses/THIRD-PARTY.txt.

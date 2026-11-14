@@ -98,12 +98,22 @@ pub fn installed(paths: &Paths) -> bool {
 
 fn sync() {
     // SAFETY: sync(2) takes no arguments and cannot fail.
-    unsafe { libc::sync() };
+    #[cfg(unix)]
+    unsafe {
+        libc::sync()
+    };
 }
 
+#[cfg(unix)]
 fn set_exec(p: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755))
+}
+
+/// Only Onion (Linux) runs the shim; elsewhere there is no mode to set.
+#[cfg(not(unix))]
+fn set_exec(_: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// Write `bytes` to `path` without ever leaving a half-written `path`:

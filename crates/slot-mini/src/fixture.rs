@@ -104,7 +104,9 @@ pub const GAMES: &[(Platform, &str, &str, &str, u8)] = &[
     ),
 ];
 
-fn rom_bytes(platform: Platform, title: &str, code: &str, cgb: u8) -> Vec<u8> {
+/// A ROM that is only its header: enough for the shelf to read a title,
+/// a game code and a shell colour.
+pub fn rom_bytes(platform: Platform, title: &str, code: &str, cgb: u8) -> Vec<u8> {
     let mut rom = vec![0u8; 0x8000];
     match platform {
         Platform::Gba | Platform::Gbav => {

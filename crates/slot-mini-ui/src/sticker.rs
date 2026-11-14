@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/sticker.rs
-// Changes: slot-mini's own model rows, credits and origin (the maintainer's wording); the Anbernic wordmark and its SVG are dropped; the sticker bitmap comes from slot-mini-ui's bitmaps
+// Changes: slot-mini's own model rows, credits and origin (the maintainer's wording); the Anbernic wordmark and its SVG are dropped; the sticker bitmap comes from slot-mini-ui's bitmaps;
+//   `pc` prints the PC app's rows, credits and origin instead
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use slot_mini_gfx::{Draw, TexId};
@@ -33,6 +34,27 @@ pub struct StickerFields<'a> {
     pub serial: &'a str,
     pub version: &'a str,
     pub baseos: Option<&'a str>,
+    /// The PC app's sticker: the same label for a different machine.
+    pub pc: bool,
+}
+
+/// The credits as the PC app prints them: its games run in the player's
+/// own RetroArch.
+pub fn credits(pc: bool) -> [&'static str; 12] {
+    let mut lines = CREDITS;
+    if pc {
+        lines[4] = "YOUR OWN RETROARCH. TYPE IS";
+        lines[10] = "SLOT, RETROARCH OR MIYOO.";
+    }
+    lines
+}
+
+/// Who the sticker says it is for.
+pub fn origin(pc: bool) -> [&'static str; 2] {
+    match pc {
+        true => ["SLOT-MINI PC", "FOR WINDOWS"],
+        false => ORIGIN,
+    }
 }
 
 pub const CREDITS: [&str; 12] = [
@@ -57,6 +79,16 @@ pub const COPYRIGHT: &str = "\u{a9} 2026 BRANDON T. KOWALSKI";
 pub const HOME: &str = "SEE README.";
 
 pub fn head_rows(f: &StickerFields) -> [String; 3] {
+    if f.pc {
+        return [
+            "MODEL NO. SLOT-MINI PC".into(),
+            "FOR WINDOWS PC".into(),
+            match f.battery {
+                Some(p) => format!("BATTERY : LI-ION ({p}%)"),
+                None => "POWER : FROM THE WALL".to_string(),
+            },
+        ];
+    }
     [
         "MODEL NO. SLOT-MINI".into(),
         "FOR MIYOO MINI PLUS".into(),
@@ -80,8 +112,8 @@ fn version_lines(f: &StickerFields) -> Vec<String> {
 
 pub fn sticker_lines(f: &StickerFields) -> Vec<String> {
     let mut out: Vec<String> = head_rows(f).into();
-    out.extend(CREDITS.iter().map(|s| s.to_string()));
-    out.extend(ORIGIN.iter().map(|s| s.to_string()));
+    out.extend(credits(f.pc).iter().map(|s| s.to_string()));
+    out.extend(origin(f.pc).iter().map(|s| s.to_string()));
     let (body, check) = split_check(f.serial);
     out.push(format!("{body} {check}"));
     out.push(COPYRIGHT.to_string());
@@ -218,14 +250,15 @@ pub fn sticker_face(f: &StickerFields) -> UndoFace {
         y = c.print(left, y, line, HEAD_PX, WHITE);
     }
     y += 3.0;
-    for line in CREDITS {
+    for line in credits(f.pc) {
         y = c.print(left, y, line, BODY_PX, WHITE);
     }
     y += 3.0;
     let col_right = panel_x as f32 - MARGIN;
-    c.print(left, y, ORIGIN[0], BODY_PX, WHITE);
-    let maker_w = c.print_measure(ORIGIN[1], BODY_PX);
-    c.print(col_right - maker_w, y, ORIGIN[1], BODY_PX, WHITE);
+    let origin = origin(f.pc);
+    c.print(left, y, origin[0], BODY_PX, WHITE);
+    let maker_w = c.print_measure(origin[1], BODY_PX);
+    c.print(col_right - maker_w, y, origin[1], BODY_PX, WHITE);
 
     let bars_y = panel_y + 14;
     let bars_h = 62;

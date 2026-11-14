@@ -31,6 +31,25 @@ impl Rig {
         Rig { dir, paths }
     }
 
+    /// A PC library: the same folders, read as the PC app reads them, with
+    /// a standalone RetroArch's cores beside it.
+    #[cfg(feature = "pc")]
+    pub fn pc() -> Rig {
+        let mut rig = Rig::new();
+        let cores = rig.dir.path().join("retroarch/cores");
+        std::fs::create_dir_all(&cores).unwrap();
+        for core in ["mgba_libretro", "gpsp_libretro", "gambatte_libretro"] {
+            let name = format!("{core}{}", std::env::consts::DLL_SUFFIX);
+            std::fs::write(cores.join(name), b"not a real core").unwrap();
+        }
+        rig.paths = Paths::pc(
+            rig.paths.sd.clone(),
+            rig.paths.tmp.clone(),
+            slot_mini::paths::Pc { cores: Some(cores) },
+        );
+        rig
+    }
+
     pub fn app(&self) -> Driver {
         let status = FixedStatus {
             battery: Some(76),

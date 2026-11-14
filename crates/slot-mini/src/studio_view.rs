@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot/src/studio_view.rs
-// Changes: imports point at slot-mini crates
+// Changes: imports point at slot-mini crates; `hit` (what the PC's mouse
+//   is over) is new
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use slot_mini_store::{Outline, Platform, ShellChoice, ShellFinish};
@@ -620,4 +621,63 @@ pub fn shelf_rect(canvas_w: f32, cart: &slot_mini_store::Cart) -> [f32; 4] {
         Platform::Gb | Platform::Gbc => (GB_CART_W as f32, GB_CART_H as f32),
     };
     [(canvas_w - w) / 2.0, slot_mini_ui::rest_y(h), w, h]
+}
+
+/// What the PC's mouse is over in the studio.
+#[cfg(feature = "pc")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hit {
+    /// A row of the list, by index.
+    Row(usize),
+    /// A colour chip, by its place in the grid.
+    Chip(usize),
+}
+
+/// The row or chip at a point, laid out as `view` draws them.
+#[cfg(feature = "pc")]
+pub fn hit(s: &Studio, canvas_w: f32, x: f32, y: f32) -> Option<Hit> {
+    let l = layout(canvas_w, s.cart.platform);
+    match s.screen {
+        Screen::List { .. } => {
+            let (left, right) = (l.edge + LIST_INSET, canvas_w - LIST_INSET);
+            if x < left || x > right {
+                return None;
+            }
+            let rows = s.rows();
+            let height = |r: &Row| match row_choice(s, *r) {
+                Some(_) => 100.0,
+                None => 64.0,
+            };
+            let total: f32 = rows.iter().map(height).sum();
+            let mut top = ((FOOTER_TOP - total) / 2.0).floor();
+            for (i, r) in rows.iter().enumerate() {
+                let h = height(r);
+                if y >= top && y < top + h {
+                    return Some(Hit::Row(i));
+                }
+                top += h;
+            }
+            None
+        }
+        Screen::Chips { at, .. } => {
+            let probe = chip_grid(0.0, 0.0);
+            let height = probe.last().map_or(0.0, |p| p.y) + CHIP_SIZE;
+            let room = GRID_BOTTOM - GRID_TOP;
+            let wanted = probe.get(at)?.y + CHIP_SIZE / 2.0 - room / 2.0;
+            let scroll = wanted.clamp(0.0, (height - room).max(0.0));
+            let x0 = canvas_w - CHIP_EDGE - GRID_W;
+            chip_grid(x0, GRID_TOP - scroll)
+                .iter()
+                .position(|p| {
+                    p.y >= GRID_TOP
+                        && p.y + CHIP_SIZE <= GRID_BOTTOM
+                        && x >= p.x
+                        && x < p.x + CHIP_SIZE
+                        && y >= p.y
+                        && y < p.y + CHIP_SIZE
+                })
+                .map(Hit::Chip)
+        }
+        _ => None,
+    }
 }

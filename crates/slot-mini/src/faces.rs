@@ -2,7 +2,8 @@
 //   crates/slot/src/cart_faces.rs
 // Changes: workers also convert faces to sprites and pre-scale them to
 //   slot's side scale; the glue to slot's App and GL compositor is replaced by `sync`,
-//   which hands finished faces back to the caller and can wait with a
+//   the scale is the grid's for a shelf shown as a grid; `sync`
+//   hands finished faces back to the caller and can wait with a
 //   deadline; `Building`, the worker loop and the tests are slot's.
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
@@ -16,7 +17,9 @@ use std::time::{Duration, Instant};
 
 use slot_mini_gfx::Sprite;
 use slot_mini_store::Cart;
-use slot_mini_ui::{cart_face_with, cart_interior, shows_interior, CartFace, SIDE_SCALE};
+use slot_mini_ui::{
+    cart_face_with, cart_interior, shows_interior, CartFace, GRID_SCALE, SIDE_SCALE,
+};
 
 use crate::label_cache::label_art;
 
@@ -31,21 +34,26 @@ type Built = (Key, Prepared, Option<Prepared>);
 /// A face ready for the renderer: full size and pre-scaled for the sides.
 pub struct Prepared {
     pub full: Sprite,
+    /// The copy at the scale the view rests carts at.
     pub side: Sprite,
 }
 
-fn prepare(face: &CartFace) -> Prepared {
+fn prepare(face: &CartFace, grid: bool) -> Prepared {
+    let scale = match grid {
+        true => GRID_SCALE,
+        false => SIDE_SCALE,
+    };
     let full = Sprite::from_rgba(face.w, face.h, &face.rgba);
     let side = full.resized(
-        (face.w as f32 * SIDE_SCALE).round() as u32,
-        (face.h as f32 * SIDE_SCALE).round() as u32,
+        (face.w as f32 * scale).round() as u32,
+        (face.h as f32 * scale).round() as u32,
     );
     Prepared { full, side }
 }
 
 #[derive(Default)]
 struct Queue {
-    jobs: VecDeque<(Key, Cart)>,
+    jobs: VecDeque<(Key, Cart, bool)>,
     closed: bool,
 }
 
@@ -91,6 +99,8 @@ pub struct FaceWant {
     pub shelf: usize,
     pub index: usize,
     pub on_screen: bool,
+    /// The shelf shows as a grid: pre-scale for its cells, not the sides.
+    pub grid: bool,
 }
 
 pub struct CartFaces {
@@ -194,14 +204,14 @@ impl CartFaces {
     ) {
         let (lock, wake) = &*self.queue;
         let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
-        for (key, _) in queue.jobs.drain(..) {
+        for (key, _, _) in queue.jobs.drain(..) {
             self.building.unqueue(key);
         }
         for w in wants {
             let key = (w.shelf, w.index);
             if let Some(cart) = cart(w.shelf, w.index) {
                 if self.building.start(key, cart) {
-                    queue.jobs.push_back((key, cart.clone()));
+                    queue.jobs.push_back((key, cart.clone(), w.grid));
                 }
             }
         }
@@ -231,7 +241,7 @@ impl Drop for CartFaces {
 fn work(queue: &Shared, outbox: &Sender<Built>, root: &Path) {
     let (lock, wake) = &**queue;
     loop {
-        let (key, cart) = {
+        let (key, cart, grid) = {
             let mut q = lock.lock().unwrap_or_else(|e| e.into_inner());
             loop {
                 if q.closed {
@@ -244,8 +254,8 @@ fn work(queue: &Shared, outbox: &Sender<Built>, root: &Path) {
             }
         };
         slot_mini_store::header_index::verify(&cart.rom);
-        let face = prepare(&cart_face_with(&cart, label_art(root, &cart)));
-        let interior = shows_interior(&cart).then(|| prepare(&cart_interior(&cart)));
+        let face = prepare(&cart_face_with(&cart, label_art(root, &cart)), grid);
+        let interior = shows_interior(&cart).then(|| prepare(&cart_interior(&cart), grid));
         if outbox.send((key, face, interior)).is_err() {
             return;
         }

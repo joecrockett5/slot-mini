@@ -17,9 +17,11 @@ pub mod cores;
 pub mod cpufreq;
 pub mod faces;
 pub mod fixture;
+#[cfg(unix)]
 pub mod ingame;
 pub mod label_cache;
 pub mod launch;
+pub mod legend;
 pub mod library;
 pub mod onion;
 pub mod paths;
@@ -34,5 +36,7 @@ pub mod theme;
 pub mod update;
 pub mod wallpaper;
 
+#[cfg(feature = "pc")]
+pub use app::Pointer;
 pub use app::{App, Exit, Options, Phase};
 pub use paths::Paths;

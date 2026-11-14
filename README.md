@@ -15,6 +15,7 @@
   <a href="#installation">Installation</a> ·
   <a href="#using-slot-mini">Usage</a> ·
   <a href="#labels-shells-and-the-cart-studio">Cart studio</a> ·
+  <a href="#slot-mini-pc">PC</a> ·
   <a href="#building-from-source">Building</a> ·
   <a href="#documentation">Docs</a> ·
   <a href="#credits">Credits</a>
@@ -251,6 +252,47 @@ exists, or when you choose Exit to Onion. It runs under the name `sh`, because O
 process named `MainUI` as its menu. Turning the boot launcher off copies the originals back, and never over a
 file that is not slot-mini's script (an Onion update may already have restored its own).
 
+## slot-mini PC
+
+The same shelf on Windows, in front of your own standalone [RetroArch](https://www.retroarch.com). It reads a
+library folder laid out like an Onion SD card (`Roms/GB`, `Roms/GBC`, `Roms/GBA`, `Saves`, `Labels`), so labels,
+shells, favourites and saves mean the same thing on both. It does not sync with the Miyoo yet: MENU has a Sync
+page that says so.
+
+**Install.** Download `slot-mini-pc-<version>-windows-x64.zip` from the newest
+[release named "slot-mini PC"](https://github.com/joecrockett5/slot-mini/releases), unzip it anywhere and run
+`slot-mini-pc.exe`. There is no installer. The exe is not signed, so Windows SmartScreen may say "Windows
+protected your PC": choose **More info**, then **Run anyway**.
+
+**First run.** RetroArch is looked for in the usual places (its installer's folder, a portable copy, Steam,
+Scoop); MENU -> Folders points at it if it is elsewhere, shows which cores are missing and can fetch them from
+libretro's buildbot. The library starts empty at `%USERPROFILE%\slot-mini`: press A to import the games, labels,
+shells, favourites and saves from a Miyoo's SD card (nothing on the card is changed, nothing in the library is
+replaced), or copy ROMs into its `Roms` folders yourself.
+
+| | Controller | Keyboard |
+| --- | --- | --- |
+| Browse | D-pad or left stick | Arrow keys |
+| Jump a letter | Up / Down | Up / Down, Page Up / Page Down |
+| Play | A | Enter or Z |
+| Back | B | X |
+| Heart / unheart | Y | A |
+| Switch system | L1 / R1 | Q / W |
+| Grid / shelf | R2 | 2 or Tab |
+| Choose the core | START | Space |
+| Cart studio | SELECT | Backspace |
+| MENU | Guide, or click a stick | Esc or F1 |
+| Full screen | | F11 or Alt+Enter |
+
+A and B sit where the Miyoo has them (A on the right); MENU -> Controller swaps them for an Xbox layout. The
+footer shows the keys for whatever you last touched. The mouse works throughout: click a cart to choose it,
+double-click to play, scroll to browse. MENU also holds full screen, the folders, Import from SD card, Check for
+updates (it opens the download page) and Quit.
+
+Settings live in `%APPDATA%\slot-mini-pc\config.txt`. Only one slot-mini runs at a time; starting it again
+brings the first to the front. To build it: `cargo build --release -p slot-mini-pc` on Windows. Its checklist
+for a real PC is [docs/pc/TESTING.md](docs/pc/TESTING.md).
+
 ## Building from source
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, and rustup installs it automatically. The device build
@@ -319,6 +361,13 @@ tests it and packages the zip. Once everything passes, the `release` job
 
 To ship a new version, bump `version` in `Cargo.toml` and merge to `main`.
 
+The PC app has its own release line. The Windows job builds `slot-mini-pc.exe`, the `pc-package` job zips it
+([`scripts/package-pc.sh`](scripts/package-pc.sh)), and on `main`
+[`scripts/release-pc.sh`](scripts/release-pc.sh) publishes `pc-v<version>` from
+`crates/slot-mini-pc/Cargo.toml` when that version has no release yet. PC releases are never marked as GitHub's
+latest release, which is what the Miyoo's updater asks for; from 0.6.6 the Miyoo also ignores any tag that is not
+exactly `v<x.y.z>`.
+
 ## Documentation
 
 | Document | Contents |
@@ -329,6 +378,8 @@ To ship a new version, bump `version` in `Cargo.toml` and merge to `main`.
 | [DECISIONS.md](docs/DECISIONS.md) | Design decisions and the reasons for them |
 | [PROGRESS.md](docs/PROGRESS.md) | Changes by version, performance figures and open questions |
 | [DEVICE-TESTING.md](docs/DEVICE-TESTING.md) | A step-by-step checklist for a real Mini Plus |
+| [pc/TESTING.md](docs/pc/TESTING.md) | The same for the Windows app |
+| [pc/PROGRESS.md](docs/pc/PROGRESS.md) | Where the Windows app stands |
 
 ## Roadmap
 

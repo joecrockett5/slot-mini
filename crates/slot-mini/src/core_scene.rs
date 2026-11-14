@@ -22,6 +22,7 @@ use slot_mini_ui::{
 };
 
 use crate::core_picker::{CorePicker, Outcome, Press};
+use crate::legend::Glyphs;
 use crate::paths::Paths;
 
 /// slot: how far the other carts recede and dim while the cart is open.
@@ -52,6 +53,19 @@ pub struct Statics {
     plugged: [TexId; 2],
     /// Cancel, Swap, Choose.
     legends: [(TexId, u32, u32); 3],
+    /// The buttons the legends name.
+    glyphs: Glyphs,
+}
+
+fn legends(gfx: &mut Renderer, glyphs: Glyphs) -> [(TexId, u32, u32); 3] {
+    let legend = |gfx: &mut Renderer, f: slot_mini_ui::UndoFace| {
+        (gfx.upload_rgba(f.w, f.h, &f.rgba), f.w, f.h)
+    };
+    [
+        legend(gfx, hint_face(glyphs.cap("B"), "CANCEL")),
+        legend(gfx, arrows_hint_face("SWAP")),
+        legend(gfx, hint_face(glyphs.cap("A"), "CHOOSE")),
+    ]
 }
 
 fn up(gfx: &mut Renderer, f: CartFace) -> TexId {
@@ -59,7 +73,19 @@ fn up(gfx: &mut Renderer, f: CartFace) -> TexId {
 }
 
 impl Statics {
-    pub fn new(gfx: &mut Renderer) -> Statics {
+    /// Name `glyphs`' buttons in the legends from now on.
+    pub fn set_glyphs(&mut self, gfx: &mut Renderer, glyphs: Glyphs) {
+        if glyphs == self.glyphs {
+            return;
+        }
+        for (tex, ..) in self.legends {
+            gfx.free(tex);
+        }
+        self.legends = legends(gfx, glyphs);
+        self.glyphs = glyphs;
+    }
+
+    pub fn new(gfx: &mut Renderer, glyphs: Glyphs) -> Statics {
         let sockets = Core::ALL.iter().map(|&c| up(gfx, socket_face(c))).collect();
         let chips = Core::ALL
             .iter()
@@ -74,20 +100,14 @@ impl Statics {
             strip(gfx, slot_mini_ui::slot_plugged()),
             strip(gfx, slot_mini_ui::slot_plugged_light()),
         ];
-        let legend = |gfx: &mut Renderer, f: slot_mini_ui::UndoFace| {
-            (gfx.upload_rgba(f.w, f.h, &f.rgba), f.w, f.h)
-        };
-        let legends = [
-            legend(gfx, hint_face("B", "CANCEL")),
-            legend(gfx, arrows_hint_face("SWAP")),
-            legend(gfx, hint_face("A", "CHOOSE")),
-        ];
+        let legends = legends(gfx, glyphs);
         Statics {
             sockets,
             chips,
             blank,
             shadow,
             plugged,
+            glyphs,
             legends,
         }
     }

@@ -135,16 +135,25 @@ impl Status for OnionStatus {
     }
 }
 
-/// Hours and minutes in the local zone (TZ from the environment).
-pub fn local_hm() -> (u32, u32) {
-    // SAFETY: localtime_r writes only into `tm`.
+/// The local time now (TZ from the environment), if the C library knows it.
+pub fn local_tm() -> Option<libc::tm> {
+    // SAFETY: both calls write only into `tm`.
     unsafe {
         let now = libc::time(std::ptr::null_mut());
         let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&now, &mut tm).is_null() {
-            return (0, 0);
-        }
-        (tm.tm_hour as u32, tm.tm_min as u32)
+        #[cfg(unix)]
+        let ok = !libc::localtime_r(&now, &mut tm).is_null();
+        #[cfg(windows)]
+        let ok = libc::localtime_s(&mut tm, &now) == 0;
+        ok.then_some(tm)
+    }
+}
+
+/// Hours and minutes in the local zone (TZ from the environment).
+pub fn local_hm() -> (u32, u32) {
+    match local_tm() {
+        Some(tm) => (tm.tm_hour as u32, tm.tm_min as u32),
+        None => (0, 0),
     }
 }
 

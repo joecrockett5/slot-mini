@@ -14,7 +14,6 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 use slot_mini_store::{Cart, Platform};
 use slot_mini_ui::{cover, label_size};
 
-const DIR: &str = "App/slot-mini/cache/labels";
 const EXT: &str = "lz4";
 const OLD_EXT: &str = "rgba";
 const MAGIC: &[u8; 4] = b"SLC2";
@@ -158,17 +157,19 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
         .filter(|c| {
             !cached
                 .entry(c.platform)
-                .or_insert_with(|| {
-                    slot_mini_store::listing(&root.join(DIR).join(c.platform.dir_name()))
-                })
+                .or_insert_with(|| slot_mini_store::listing(&dir(root).join(c.platform.dir_name())))
                 .contains_key(&format!("{}.{EXT}", c.stem).to_lowercase())
         })
         .cloned()
         .collect()
 }
 
+fn dir(root: &Path) -> PathBuf {
+    root.join(slot_mini_store::app_dir()).join("cache/labels")
+}
+
 pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
-    root.join(DIR)
+    dir(root)
         .join(cart.platform.dir_name())
         .join(format!("{}.{EXT}", cart.stem))
 }

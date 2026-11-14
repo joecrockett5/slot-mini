@@ -576,6 +576,21 @@ Save and Load State worked on the device. Fixed:
 - Tests: new golden `about_settings`; MENU tests step into Settings. Not
   checked on a device (DEVICE-TESTING section 18).
 
+## 0.6.6: only `v<x.y.z>` is an update
+
+0.6.5 was the sync core's release (brief 1, `docs/sync/PROGRESS.md`);
+nothing in the launcher changed in it.
+
+- Check for updates takes a release only when its tag is exactly
+  `v<x.y.z>` (`update::device_tag`, decision 78): the PC app's
+  `pc-v<version>` releases now share the repository. Unit test
+  `only_a_plain_v_tag_is_a_device_release`. Nothing else on the device
+  changes: the only goldens that moved are the eight `about*` ones whose
+  sticker prints the version, and the shared code the PC app uses is
+  behind the `pc` feature, which the device build leaves off.
+- The PC app (`crates/slot-mini-pc`, brief 2) has its own progress file,
+  `docs/pc/PROGRESS.md`.
+
 ## Open questions
 
 - On the development build: does the overlay Game Switcher started from

@@ -53,6 +53,8 @@ pub struct StudioUi {
         Option<[u8; 3]>,
     )>,
     pub printer: Printer,
+    /// The buttons the legend names.
+    pub glyphs: crate::legend::Glyphs,
     prints: HashMap<LabelKind, (Vec<u8>, TexId, u32, u32)>,
     text: HashMap<(String, Style), (TexId, u32, u32)>,
     chip_disc: Option<TexId>,
@@ -120,6 +122,7 @@ impl StudioUi {
             cart_tex: None,
             built_for: None,
             printer: Printer::Idle,
+            glyphs: crate::legend::Glyphs::default(),
             prints: HashMap::new(),
             text: HashMap::new(),
             chip_disc: None,
@@ -1056,6 +1059,7 @@ impl StudioUi {
         let mut right = stage.w - 24.0;
         for (i, l) in legends.iter().enumerate() {
             let (key, label) = hint(l);
+            let key = self.glyphs.cap(key);
             let cache = format!("{key}:{label}");
             let (tex, w, h) = match self.text.get(&(cache.clone(), Style::Digit)) {
                 Some(t) => *t,

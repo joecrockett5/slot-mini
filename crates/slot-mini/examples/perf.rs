@@ -159,6 +159,66 @@ fn main() {
     }
     studio(&paths);
     menu(&paths);
+    #[cfg(feature = "pc")]
+    grid(&paths);
+}
+
+/// The grid view (PC only until brief 4): the same library scrolled a row
+/// at a time with Down held, every frame drawn.
+#[cfg(feature = "pc")]
+fn grid(paths: &Paths) {
+    let cores = paths.tmp.join("cores");
+    std::fs::create_dir_all(&cores).unwrap();
+    let pc = Paths::pc(
+        paths.sd.clone(),
+        paths.tmp.clone(),
+        slot_mini::paths::Pc { cores: Some(cores) },
+    );
+    let status = FixedStatus {
+        battery: Some(80),
+        wifi: true,
+        clock: (12, 0),
+        charging: false,
+    };
+    let opts = Options {
+        sound: None,
+        face_wait: Some(slot_mini::app::FACE_WAIT),
+        seed: 1,
+    };
+    let t0 = Instant::now();
+    let mut app = App::new(pc, Box::new(status), opts, 0);
+    let mut frame = Canvas::new(SCREEN_W, SCREEN_H);
+    app.tick(0);
+    app.render(&mut frame);
+    let first = t0.elapsed();
+    assert!(app.grid_on());
+    app.handle(Event::Press(Button::Down));
+    let (mut now, mut frames) = (0u64, 0u32);
+    let (mut worst, mut total) = (Duration::ZERO, Duration::ZERO);
+    let mut last = String::new();
+    let mut still = 0;
+    while still < 90 && frames < 20_000 {
+        now += 16;
+        let t = Instant::now();
+        app.tick(now);
+        app.render(&mut frame);
+        let dt = t.elapsed();
+        worst = worst.max(dt);
+        total += dt;
+        frames += 1;
+        let here = app.current().unwrap().1.stem.clone();
+        still = if here == last { still + 1 } else { 0 };
+        last = here;
+    }
+    app.handle(Event::Release(Button::Down));
+    println!(
+        "grid: first frame {:.0} ms, scroll {} frames, avg {:.2} ms, worst {:.2} ms, textures {:.1} MB",
+        first.as_secs_f64() * 1000.0,
+        frames,
+        total.as_secs_f64() * 1000.0 / frames as f64,
+        worst.as_secs_f64() * 1000.0,
+        app.gfx.bytes() as f64 / 1e6,
+    );
 }
 
 /// The cart studio: a whole frame redrawn, and the apply scene's curling

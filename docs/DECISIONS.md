@@ -355,3 +355,175 @@ built.
     by linking a call of every client entry point into the static armv7
     release binary. Brief 4 pays it; this brief links nothing into the
     launcher.
+
+## Brief 2: the PC app (`docs/briefs/02-pc-app.md`)
+
+62. **The PC app shares the device's app logic through the `slot-mini`
+    library, behind a cargo feature.** `slot-mini-pc` depends on `slot-mini`
+    with the feature `pc`; `Paths::pc` describes a PC library and
+    `Paths::is_pc()` gates every PC behaviour at run time. Without the
+    feature `is_pc()` is a constant `false`, so the Miyoo binary carries
+    none of it. Considered: moving the state machine to a new `slot-mini-app`
+    crate (a large move for brief 3 and 4 to rebase over, with no gain the
+    feature does not give) and copying the app into the PC crate (two apps
+    to keep alike). Cargo unifies features, so `cargo test --workspace` on a
+    desktop builds `slot-mini` with `pc` on; the device tests still run the
+    device paths because the gate is the `Paths` value. The armv7 job
+    excludes `slot-mini-pc`, so it builds and tests the library as the
+    device ships it. The parts of the library that only exist on the Miyoo
+    (`ingame`, the `aplay` sound player, CPU governor, Wi-Fi switch, the
+    update's exec) are `cfg(unix)`, so the library compiles for Windows.
+63. **The PC app's own folder is `App/slot-mini-pc`.** `slot_mini_store::
+    app_dir()` is a process-wide name (default `App/slot-mini`) the PC binary
+    sets once at start. A library folder can then be an SD card's copy
+    without the two apps reading each other's settings and caches.
+64. **Window, input and sound.** `winit` 0.30 for the window (per-monitor
+    DPI, fullscreen, focus events), `softbuffer` to present the 640x480
+    canvas scaled on the CPU (the app already draws in software; a GPU
+    surface would add a driver dependency for nothing), `gilrs` for
+    controllers (XInput and DirectInput on Windows, evdev on Linux;
+    positions come as South/East/West/North, which is what "by position"
+    needs). SDL2 was the alternative: one dependency for all three, but a
+    C library to build or ship as a DLL on Windows. The window and devices
+    live in the binary; everything else is a headless `PcApp` that tests
+    drive. Sound goes through a small mixer on `tinyaudio` (WASAPI on
+    Windows), only built for Windows; elsewhere the app is silent.
+    Native dialogs come from `rfd`.
+65. **How RetroArch is driven** (read from libretro/RetroArch master):
+    `retroarch -L <core> <rom> --appendconfig <file>`. Settings from an
+    appended file are written back into the main config when RetroArch
+    saves it on exit (`configuration.c`, `config_save_file`), so the
+    appended file sets `config_save_on_exit = "false"`. With
+    `sort_savefiles_enable` / `sort_savestates_enable` the folder is the
+    core's `library_name` (`runloop.c`, `runloop_path_set_redirect`): mGBA,
+    gpSP, Gambatte, the names Onion uses, so saves land in the same
+    `Saves/CurrentProfile/{saves,states}/<core>/` layout. The auto state is
+    `<stem>.state.auto`. Cores are looked for in `libretro_directory` from
+    `retroarch.cfg`, else `cores\` beside the executable. A missing core is
+    offered from `https://buildbot.libretro.com/nightly/windows/x86_64/
+    latest/<core>_libretro.dll.zip` (checked: 200 for mgba).
+66. **PC cores default to mGBA (GBA) and Gambatte (GB, GBC).** Onion's
+    defaults are tuned to the Miyoo's CPU (gpSP); a PC has no such limit and
+    mGBA is the accurate one. The per-game choice uses the same
+    `.game_config` files, so brief 3 can read the PC's choice from them.
+67. **The grid is a storage case: carts stand in rows on rails.** Four
+    columns at 0.36 of a cart's full size (GBA: three rows on screen, Game
+    Boy: two), the selected cart lifts 9 px and grows 14%, rows scroll on
+    the shelf's spring to keep it in view. The slot, footer and shelf name
+    stay where the shelf has them. Chosen over a flat table of covers (not
+    slot's look) and over a smaller scale with five columns (text labels
+    stop being readable). Rendered and looked at: `tests/golden/grid_*.png`.
+    D-pad moves by cell (left/right run on through the rows, up/down stop at
+    the ends), L1/R1 change shelf, **R2 toggles the view**, and **L2 held
+    with the D-pad jumps a letter** (Up/Down are taken by the rows). A, Y,
+    X, SELECT and START are the shelf's. Insert: the case fades while the
+    cart flies from its cell to where the shelf holds it (180 ms), then
+    slot's insert plays unchanged; eject reverses it. The view is kept per
+    shelf in `data/views.txt`; the PC defaults to grid. The Miyoo has no
+    grid until brief 4 (`grid_on()` needs `is_pc()`).
+68. **Grid faces are pre-scaled like the shelf's** (#13, #14): a shelf shown
+    as a grid has its faces' pinned copy made at the grid's scale instead of
+    the side scale, so resting carts are 1:1 blits; only the lifting cart is
+    scaled. Measured with `examples/perf.rs` (200 extra carts, Down held):
+    host avg 1.5 ms, worst 3.9 ms a frame; qemu-armv7 avg 18 ms, worst 33 ms,
+    against the shelf's 4.0 / 21 ms. The blits are not the cost (logged:
+    only the lifting cart leaves the 1:1 path): a row brings four new faces
+    where a shelf step brings one, and the frame waits for them. Per cart
+    the two views cost about the same. Fine on a PC; brief 4 should build a
+    second row ahead or slow the repeat before the Miyoo gets the grid.
+    Textures: 12.9 MB against 9.1 MB (PC only).
+69. **The mouse.** The grid follows the pointer; the carousel does not
+    (every cart passing under it would pull the next along). A click on a
+    side cart centres it, a double click on the selected cart inserts it,
+    the wheel walks carts (rows in the grid), the right button is B. On
+    MENU the row under the pointer is selected and a click is A; on other
+    lists the wheel walks and the right button goes back. The view button
+    sits left of the clock and shows the view it leads to; the host's
+    status icon (brief 3's sync state) goes left of that
+    (`App::set_status_icon`).
+70. **Legends name the device in hand** (`slot_mini::legend::Glyphs`). The
+    last device to send input decides. A controller shows the Miyoo's
+    letters: with the layout setting "by position" they are where the
+    Miyoo has them, "by letter" (Xbox) swaps A/B and X/Y so the letters on
+    the pad are the ones on screen. The keyboard shows key caps drawn as
+    slot's hint pills: ENTER (A), X (B), S (X), A (Y), Q/W (L1/R1), BKSP
+    (SELECT), SPACE (START), ESC (MENU). The device's legends are untouched
+    (goldens identical).
+71. **MENU on the PC** keeps the sticker (model "SLOT-MINI PC", serial
+    prefix SP, the PC crate's version, credits to slot, RetroArch and the
+    Miyoo build) and swaps the device's rows for the host's
+    (`about_pc.rs`): Settings, Import from SD card, the update row, Quit.
+    Settings: Sounds, Recents shelf, Online labels, Fullscreen, Controller,
+    Folders (RetroArch, Library, missing cores), Sync (a placeholder page
+    for brief 3). The shared app only reports which host row was chosen
+    (`take_host_action`); the PC app does the work and pushes labels back
+    (`set_host`), so no PC I/O lives in the shared crate.
+72. **Sounds default on for the PC** and the setting alone rules there (the
+    Miyoo keeps its default and its `--sound` flag). Mixing is our own
+    (`audio::Mixer`, tested); output is `tinyaudio` on Windows (WASAPI, no
+    extra DLL) and silent elsewhere, so CI needs no sound device.
+73. **Updates are a link.** The check lists the repo's releases, takes the
+    highest published `pc-v<x.y.z>`, and A on "Get slot-mini PC x" opens
+    its page in the browser (`https` only). No self-replacing exe: less to
+    go wrong on Windows, and the brief allows it.
+74. **Missing cores**: MENU > Settings > Folders shows which are missing and
+    offers them from libretro's buildbot. It takes two presses (the first
+    says what will be downloaded and from where), an existing core is never
+    replaced, and the zip is unpacked by our own small reader over
+    `miniz_oxide` (already in the tree) rather than a zip crate.
+75. **Native dialogs are `rfd`** on Windows only (folder and file pickers);
+    elsewhere they answer "nothing chosen", which is what headless tests
+    and CI need. Changing the library folder rebuilds the app
+    (`Request::Reopen`) rather than re-pointing a live one.
+76. **First run.** A library with no games shows a welcome screen in the
+    shelf's own type instead of the Miyoo's "No games" line: where the
+    library is, where ROMs go, that A (or a click) imports from an Onion
+    card, and that sync is still to come. It sits on a dimmed panel because
+    a wallpaper can be anything. The import's progress and result replace
+    the offer line, so the first import needs no trip into MENU.
+77. **Import from SD card** (`import.rs`) copies what the card's scan
+    finds: each ROM, its label, its `Imgs` art and its save. The save is
+    read from the folder of the core the Miyoo runs the game on (then the
+    other cores for that system) and written to the folder of the core the
+    PC runs it on, so RetroArch on the PC finds it. Shell choices and
+    favourites are merged line by line. Nothing in the library is ever
+    replaced: a file that is already there is counted, shown in the summary
+    and listed in `App/slot-mini-pc/import.txt`. States are not copied
+    (they belong to one build of one core), and neither are Onion's own
+    files or per-game core settings (the PC's core choice is its own). A
+    file lands as `<name>.importing` and is renamed when whole, so a card
+    pulled half way leaves nothing that looks like a game. A name Windows
+    cannot hold fails that one file and is listed; the rest carries on.
+    It runs on a worker thread; the shelf rescans (games and favourites)
+    once it is at rest.
+78. **Two release lines.** The PC app is versioned on its own
+    (`crates/slot-mini-pc`, 0.1.0) and released as `pc-v<version>` with
+    `slot-mini-pc-<version>-windows-x64.zip`, always with `--latest=false`:
+    the Miyoo's updater asks GitHub for the latest release and must keep
+    getting a `v<version>` one. As a second lock, from 0.6.6 the device
+    takes a release only when its tag is exactly `v<x.y.z>`
+    (`update::device_tag`), so `pc-v...`, `main-latest` or a suffixed tag
+    is never offered even if it were marked latest. Devices on 0.6.5 or
+    older rely on the first lock alone.
+79. **The PC zip is put together on Linux** (`scripts/package-pc.sh`, the
+    `pc-package` job) around the exe the Windows job built. The script
+    reads the exe's PE header and refuses one that is not x64, not the
+    Windows subsystem, or without its version resource and manifest, so a
+    broken build script cannot ship. The licence notice is the device's
+    script with `--pc` (`slot-mini-pc`'s dependencies for
+    `x86_64-pc-windows-msvc`). The zip holds one folder; text files get
+    CRLF line ends for Notepad. The device release now also waits for the
+    Windows build, since one `release` job publishes both.
+80. **Icon, version and manifest** come from `build.rs` through
+    `winresource`, an unconditional build dependency because a build
+    script is compiled for the host; it does nothing for other targets.
+    The icon is the Miyoo app icon (`package/app/icon.png`) resampled into
+    `assets/icon.ico`. The manifest declares Windows 10/11, long-path
+    awareness and the v6 common controls. Long paths still need Windows'
+    own `LongPathsEnabled` switch for what RetroArch is handed; Rust's
+    file calls already cope without it.
+81. **One instance.** A named mutex (`Local\slot-mini-pc.one-instance`)
+    decides; a second start finds the first window by its class name and
+    brings it forward, then exits. If that window is hidden because a game
+    is running, it is left hidden: showing the shelf over RetroArch would
+    be worse than doing nothing.

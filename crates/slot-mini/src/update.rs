@@ -110,6 +110,18 @@ pub fn version(s: &str) -> Option<(u32, u32, u32)> {
     it.next().is_none().then_some(v)
 }
 
+/// The version in a device release's tag, which is exactly `v<x.y.z>`.
+/// Anything else in the repository's releases is not for the Miyoo: the
+/// PC app's `pc-v0.1.0`, the rolling `main-latest`, a `v1.0.0-rc1`.
+pub fn device_tag(tag: &str) -> Option<String> {
+    let ver = tag.strip_prefix('v')?;
+    let plain = ver.split('.').count() == 3
+        && ver
+            .split('.')
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    (plain && version(ver).is_some()).then(|| ver.to_string())
+}
+
 pub fn is_newer(candidate: &str, current: &str) -> bool {
     match (version(candidate), version(current)) {
         (Some(a), Some(b)) => a > b,
@@ -135,9 +147,7 @@ pub fn parse_release(json: &str) -> Option<Release> {
     if v["draft"].as_bool() == Some(true) || v["prerelease"].as_bool() == Some(true) {
         return None;
     }
-    let tag = v["tag_name"].as_str()?;
-    version(tag)?;
-    let ver = tag.trim().trim_start_matches('v').to_string();
+    let ver = device_tag(v["tag_name"].as_str()?)?;
     let assets = v["assets"].as_array()?;
     let wanted = format!("slot-mini-{ver}.zip");
     let asset = assets
@@ -365,6 +375,12 @@ fn update_dir(paths: &Paths) -> PathBuf {
     paths.app().join("update")
 }
 
+#[cfg(not(unix))]
+fn set_mode(_: &Path, _: bool) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
 fn set_mode(p: &Path, exec: bool) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mode = if exec { 0o755 } else { 0o644 };
@@ -373,7 +389,10 @@ fn set_mode(p: &Path, exec: bool) -> std::io::Result<()> {
 
 fn sync() {
     // SAFETY: sync(2) takes no arguments and cannot fail.
-    unsafe { libc::sync() };
+    #[cfg(unix)]
+    unsafe {
+        libc::sync()
+    };
 }
 
 /// Run `bin --version` with a time limit and return what it printed.
@@ -641,6 +660,33 @@ fn fetch_and_install(paths: &Paths, release: &Release, status: &Mutex<Status>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_plain_v_tag_is_a_device_release() {
+        assert_eq!(device_tag("v0.6.5").as_deref(), Some("0.6.5"));
+        for tag in [
+            "pc-v0.1.0",
+            "pc-v9.9.9",
+            "main-latest",
+            "0.6.5",
+            "v0.6",
+            "v0.6.5-rc1",
+            "v0.6.5+pc",
+            "v0.6.5.1",
+            " v0.6.5",
+            "vv0.6.5",
+            "v0.+6.5",
+            "v99999999999.0.0",
+        ] {
+            assert_eq!(device_tag(tag), None, "{tag}");
+        }
+        // A PC release that GitHub somehow called the latest is not offered,
+        // even though it carries a zip with a device-like name.
+        let json = r#"{"tag_name":"pc-v9.0.0","draft":false,"prerelease":false,
+            "assets":[{"name":"slot-mini-9.0.0.zip","size":1,
+            "browser_download_url":"https://example.test/x.zip"}]}"#;
+        assert_eq!(parse_release(json), None);
+    }
 
     #[test]
     fn versions_compare_numerically() {

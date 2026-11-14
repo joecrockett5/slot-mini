@@ -1,7 +1,8 @@
 name: CI
 
 # Every push and pull request runs the desktop job (format, clippy, tests,
-# boot shim tests). The armv7 job runs the tests on ARM under qemu:
+# boot shim tests), the Windows job (the PC app, crates/slot-mini-pc,
+# built and tested where it ships) and the PC zip. The armv7 job runs the tests on ARM under qemu:
 # - on pull requests, a light version: the test profile (no fat LTO), and no
 #   device binary or release zip, so nothing fails on main that a PR passed;
 # - on pushes to main, which publish a release, and when started by hand
@@ -24,6 +25,12 @@ jobs:
       - name: Toolchain
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      - name: Libraries for the PC app
+        # gilrs reads controllers through udev. Nothing here opens a window:
+        # the PC app's tests drive it headlessly.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
@@ -49,6 +56,47 @@ jobs:
           name: golden-failures
           path: target/golden-failures/
           if-no-files-found: ignore
+
+  windows:
+    name: Windows build and tests (PC app)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test -p slot-mini-pc --target x86_64-pc-windows-msvc
+      - name: Build
+        run: cargo build --release -p slot-mini-pc --target x86_64-pc-windows-msvc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slot-mini-pc-exe
+          path: target/x86_64-pc-windows-msvc/release/slot-mini-pc.exe
+          if-no-files-found: error
+
+  pc-package:
+    name: PC release zip
+    # The exe comes from Windows; the zip around it (README, licences) is
+    # put together and checked here, on every push and pull request.
+    needs: windows
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/download-artifact@v4
+        with:
+          name: slot-mini-pc-exe
+          path: dist/exe
+      - name: Release zip
+        run: SLOT_MINI_PC_EXE=dist/exe/slot-mini-pc.exe scripts/package-pc.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slot-mini-pc-release
+          path: dist/slot-mini-pc-*-windows-x64.zip
+          if-no-files-found: error
 
   device:
     name: armv7 musl build
@@ -80,7 +128,12 @@ jobs:
       - name: Test under qemu
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_RUNNER: qemu-arm-static
-        run: cargo test $([ "$FULL" = true ] && echo --release) --target armv7-unknown-linux-musleabihf --workspace
+        # The PC app is not for the Miyoo and is left out; the grid it
+        # shares with the device's code is tested on ARM all the same.
+        run: |
+          PROFILE=$([ "$FULL" = true ] && echo --release || true)
+          cargo test $PROFILE --target armv7-unknown-linux-musleabihf --workspace --exclude slot-mini-pc
+          cargo test $PROFILE --target armv7-unknown-linux-musleabihf -p slot-mini --features pc --test grid
       - name: Upload failed golden images
         if: failure()
         uses: actions/upload-artifact@v4
@@ -104,9 +157,9 @@ jobs:
 
   release:
     name: Publish release
-    # Only for pushes to main, and only once both builds and all tests pass.
+    # Only for pushes to main, and only once every build and all tests pass.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [desktop, device]
+    needs: [desktop, device, pc-package]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -123,3 +176,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/release.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: slot-mini-pc-release
+          path: dist
+      - name: Publish the PC app
+        # pc-v<version>, when crates/slot-mini-pc's version has no release.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release-pc.sh

@@ -16,6 +16,7 @@ mod board;
 mod cart;
 pub mod curl_runs;
 mod footer;
+mod grid;
 pub mod house_label;
 pub mod hud;
 pub mod hue;
@@ -59,6 +60,7 @@ pub use cart::{
     GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y,
 };
 pub use footer::{draw_corners, draw_footer, draw_wifi_icon, Printed, FOOTER_Y};
+pub use grid::{between, Grid, Step, GRID_COLS, GRID_SCALE};
 pub use hud::{footer_ink, Millis, HUD_INK, PLATE_H};
 pub use icon::{badge_face, heart_face, icon_box, icon_face, warm_fonts, Badge, Icon};
 pub use plate::{

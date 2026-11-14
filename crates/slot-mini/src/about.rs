@@ -12,9 +12,16 @@ use slot_mini_ui::sticker::{sticker_face, StickerFields, STICKER_H, STICKER_W};
 use slot_mini_ui::sticker_curl::{strips, Pose};
 use slot_mini_ui::{draw_backdrop, ease, hint_face, line_ink, title_line_face, FOOTER_Y};
 
+use crate::legend::Glyphs;
 use crate::paths::Paths;
 use crate::settings::Settings;
 use crate::update::{Status, Updater};
+
+#[cfg(feature = "pc")]
+#[path = "about_pc.rs"]
+mod pc;
+#[cfg(feature = "pc")]
+pub use pc::{short_path, Host, HostRow};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Row {
@@ -28,6 +35,9 @@ pub enum Row {
     OnlineLabels,
     Update,
     ExitToOnion,
+    /// A row the PC app answers for itself.
+    #[cfg(feature = "pc")]
+    Host(HostRow),
 }
 
 /// MENU's first page.
@@ -46,11 +56,21 @@ pub enum Outcome {
     Stay,
     Close,
     ExitToOnion,
+    /// The PC app's row was chosen (A) or changed (Left, Right).
+    #[cfg(feature = "pc")]
+    Host(HostRow),
 }
 
 pub struct About {
     pub row: usize,
     rows: Vec<Row>,
+    /// The pages B leads back through, and the row each was left on.
+    stack: Vec<(Vec<Row>, usize)>,
+    /// Which buttons the legend names.
+    pub glyphs: Glyphs,
+    /// What the PC app shows on its rows; `None` on the Miyoo.
+    #[cfg(feature = "pc")]
+    pub host: Option<Host>,
     /// Whether slot-mini is installed as the boot launcher, and a message
     /// from the last attempt to change that.
     pub launcher: bool,
@@ -97,11 +117,12 @@ const PAPER: [u8; 4] = [0xf4, 0xf1, 0xea, 0xff];
 /// hash; slot-mini prints its version, so the sticker only changes with a
 /// release.
 fn serial() -> String {
-    let digits: String = env!("CARGO_PKG_VERSION")
-        .chars()
-        .filter(|c| c.is_ascii_digit())
-        .collect();
-    let body = format!("SM{digits}");
+    serial_of("SM", env!("CARGO_PKG_VERSION"))
+}
+
+fn serial_of(prefix: &str, version: &str) -> String {
+    let digits: String = version.chars().filter(|c| c.is_ascii_digit()).collect();
+    let body = format!("{prefix}{digits}");
     format!("{body}{}", check39(&body))
 }
 
@@ -117,6 +138,10 @@ impl About {
         About {
             row: 0,
             rows: MAIN.to_vec(),
+            stack: Vec::new(),
+            glyphs: Glyphs::default(),
+            #[cfg(feature = "pc")]
+            host: None,
             launcher: crate::switch::installed(paths),
             boot_screen: crate::bootscreen::installed(paths),
             note: None,
@@ -134,13 +159,33 @@ impl About {
 
     /// Whether the settings page is showing.
     pub fn in_settings(&self) -> bool {
-        self.rows[0] != Row::Settings
+        !self.stack.is_empty()
     }
 
-    fn show(&mut self, rows: &[Row], row: usize) {
-        self.rows = rows.to_vec();
-        self.row = row;
+    /// Open a page under this one.
+    fn open(&mut self, rows: &[Row]) {
+        let from = std::mem::replace(&mut self.rows, rows.to_vec());
+        self.stack.push((from, self.row));
+        self.row = 0;
         self.note = None;
+    }
+
+    /// B: the page this one was opened from.
+    fn back(&mut self) {
+        if let Some((rows, row)) = self.stack.pop() {
+            self.rows = rows;
+            self.row = row;
+            self.note = None;
+        }
+    }
+
+    /// The settings page: the Miyoo's, or the PC's.
+    fn settings_rows(&self) -> Vec<Row> {
+        #[cfg(feature = "pc")]
+        if self.host.is_some() {
+            return pc::SETTINGS.to_vec();
+        }
+        SETTINGS.to_vec()
     }
 
     pub fn press(
@@ -158,10 +203,13 @@ impl About {
         match b {
             Button::Up => self.row = (self.row + n - 1) % n,
             Button::Down => self.row = (self.row + 1) % n,
-            Button::B if self.in_settings() => self.show(&MAIN, 0),
+            Button::B if self.in_settings() => self.back(),
             Button::B | Button::Menu => return Outcome::Close,
             Button::A | Button::Left | Button::Right => match self.rows[self.row] {
-                Row::Settings if b == Button::A => self.show(&SETTINGS, 0),
+                Row::Settings if b == Button::A => {
+                    let rows = self.settings_rows();
+                    self.open(&rows);
+                }
                 Row::Settings => {}
                 Row::Sounds => {
                     settings.sounds = !settings.sounds;
@@ -183,8 +231,11 @@ impl About {
                 }
                 Row::OnlineLabels => {
                     settings.label_service = !settings.label_service;
-                    self.note = settings.label_service.then(|| {
-                        "Carts without a label get one from slot's art host on Wi-Fi.".into()
+                    self.note = settings.label_service.then(|| match paths.is_pc() {
+                        false => {
+                            "Carts without a label get one from slot's art host on Wi-Fi.".into()
+                        }
+                        true => "Carts without a label get one from slot's art host.".into(),
                     });
                     if let Err(e) = settings.write(paths) {
                         eprintln!("slot-mini: settings: {e}");
@@ -234,6 +285,8 @@ impl About {
                 Row::Update => {}
                 Row::ExitToOnion if b == Button::A => return Outcome::ExitToOnion,
                 Row::ExitToOnion => {}
+                #[cfg(feature = "pc")]
+                Row::Host(row) => return self.host_press(row, b),
             },
             _ => {}
         }
@@ -277,12 +330,26 @@ impl About {
             Some((t, _)) => gfx.free(t),
             None => {}
         }
-        let face = sticker_face(&StickerFields {
-            battery,
-            serial: &serial(),
-            version: env!("CARGO_PKG_VERSION"),
-            baseos: None,
-        });
+        #[cfg(feature = "pc")]
+        let pc_version = self.host.as_ref().map(|h| h.version.clone());
+        #[cfg(not(feature = "pc"))]
+        let pc_version: Option<String> = None;
+        let face = match pc_version {
+            Some(version) => sticker_face(&StickerFields {
+                battery,
+                serial: &serial_of("SP", &version),
+                version: &version,
+                baseos: None,
+                pc: true,
+            }),
+            None => sticker_face(&StickerFields {
+                battery,
+                serial: &serial(),
+                version: env!("CARGO_PKG_VERSION"),
+                baseos: None,
+                pc: false,
+            }),
+        };
         let (w, h) = sticker_size();
         let sprite = Sprite::from_rgba(face.w, face.h, &face.rgba).resized(w as u32, h as u32);
         let t = gfx.upload(sprite);
@@ -366,6 +433,8 @@ impl About {
                 if self.boot_screen { "slot" } else { "Onion" }
             ),
             Row::ExitToOnion => "Exit to Onion".into(),
+            #[cfg(feature = "pc")]
+            Row::Host(row) => self.host_label(row),
         }
     }
 
@@ -416,12 +485,15 @@ impl About {
             Status::Failed(e) => Some(e.to_string()),
             _ => None,
         };
+        #[cfg(feature = "pc")]
+        let update_note = update_note.or_else(|| self.host_note());
         if let Some(note) = self.note.clone().or(update_note).or(self.diag.clone()) {
             let f = self.face(gfx, &note, Style::Note);
             put(out, f, y + 4.0, 0.9);
         }
         slot_mini_ui::draw_empty_slot(stage, None, out);
         for (i, (key, label)) in [("B", "BACK"), ("A", "SELECT")].into_iter().enumerate() {
+            let key = self.glyphs.cap(key);
             let key_text = format!("{key}:{label}");
             let (tex, w, h) = match self.faces.iter().find(|f| f.0 == key_text) {
                 Some((_, t, w, h)) => (*t, *w, *h),
@@ -446,6 +518,15 @@ impl About {
                 alpha: 1.0,
             });
         }
+    }
+}
+
+impl About {
+    /// The row drawn at height `y` of the screen, for the mouse.
+    pub fn row_at(&self, y: f32) -> Option<usize> {
+        let top = STICKER_Y + sticker_size().1 + 8.0;
+        let i = ((y - top) / ROW_PITCH).floor();
+        (i >= 0.0 && (i as usize) < self.rows.len()).then_some(i as usize)
     }
 }
 

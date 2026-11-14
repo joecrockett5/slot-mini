@@ -38,11 +38,31 @@ pub fn per_game(cart: &Cart) -> Option<String> {
 
 /// The core the system's `launch.sh` runs (`saves::default_core`).
 pub fn default_core(paths: &Paths, platform: Platform) -> Option<String> {
+    if paths.is_pc() {
+        return Some(pc_default(platform).libretro().to_string());
+    }
     saves::default_core(&paths.sd, platform)
 }
 
-/// Whether Onion's RetroArch has this core.
+/// The core the PC runs a system on unless a game says otherwise: mGBA for
+/// GBA and Gambatte for GB and GBC, Onion 4.3.1-1's defaults, so a save
+/// lands in the folder the Miyoo reads it from.
+pub fn pc_default(platform: Platform) -> Core {
+    match platform.hardware() {
+        Platform::Gba => Core::Mgba,
+        _ => Core::Gambatte,
+    }
+}
+
+/// Whether Onion's RetroArch has this core (on the PC, whether the
+/// standalone RetroArch's cores folder does).
 pub fn installed(paths: &Paths, core: &str) -> bool {
+    if paths.is_pc() {
+        return paths.pc_cores().is_some_and(|dir| {
+            dir.join(format!("{core}{}", std::env::consts::DLL_SUFFIX))
+                .is_file()
+        });
+    }
     paths
         .sd
         .join("RetroArch/.retroarch/cores")
@@ -53,6 +73,13 @@ pub fn installed(paths: &Paths, core: &str) -> bool {
 /// The core this cart runs on now, as one of slot's cores: its own setting,
 /// else the system's default, else mGBA (`saves::device_core`).
 pub fn chosen(paths: &Paths, cart: &Cart) -> Core {
+    if paths.is_pc() {
+        // The PC has no launch scripts to read a default from.
+        return per_game(cart)
+            .and_then(|c| Core::from_libretro(&c))
+            .filter(|c| c.runs(cart.platform))
+            .unwrap_or(pc_default(cart.platform));
+    }
     saves::device_core(&paths.sd, cart.platform, Some(&cart.rom))
 }
 
