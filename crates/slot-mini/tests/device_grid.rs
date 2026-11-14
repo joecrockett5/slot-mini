@@ -194,3 +194,23 @@ fn a_cart_flies_from_its_cell_into_the_slot() {
     d.run(700);
     assert!(d.app.exit.is_some(), "the game starts after the insert");
 }
+
+/// Resting carts keep only their cell-sized face on the Miyoo, so a grid
+/// of twenty-odd carts holds less than the shelf's nine (the budget is
+/// 40 MB for everything; DECISIONS.md, brief 4).
+#[test]
+fn a_grid_holds_less_than_the_shelf_does() {
+    let rig = Rig::new();
+    stock(&rig, 4, 60);
+    let mut d = rig.app();
+    d.run(600);
+    let shelf = d.app.gfx.bytes();
+    d.tap(Button::R2);
+    d.run(600);
+    for _ in 0..6 {
+        d.tap(Button::Down);
+        d.run(300);
+    }
+    let grid = d.app.gfx.bytes();
+    assert!(grid < shelf, "grid {grid} bytes, shelf {shelf}");
+}

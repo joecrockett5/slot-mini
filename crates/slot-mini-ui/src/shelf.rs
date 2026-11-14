@@ -187,6 +187,10 @@ impl Shelf {
         self.faces.get_mut(i).and_then(|f| f.replace(tex))
     }
 
+    pub fn interior(&self, i: usize) -> Option<TexId> {
+        self.interiors.get(i).copied().flatten()
+    }
+
     pub fn set_interior(&mut self, i: usize, tex: TexId) -> Option<TexId> {
         self.interiors.get_mut(i).and_then(|f| f.replace(tex))
     }

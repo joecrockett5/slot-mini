@@ -87,6 +87,7 @@ fn pairing_from_the_sync_page() {
     desk.hub.start_pairing();
     d.tap(Button::A);
     d.wait_until("the PCs found", |d| matches!(stage(d), Stage::Hubs(_)));
+    d.run(32);
     let Stage::Hubs(found) = stage(&d) else {
         unreachable!()
     };
@@ -111,6 +112,7 @@ fn pairing_from_the_sync_page() {
         std::thread::sleep(Duration::from_millis(5));
     }
     d.wait_until("pairing", |d| matches!(stage(d), Stage::Paired(_)));
+    d.run(32);
     assert!(d.app.sync.paired());
     assert_eq!(sync::paired(&rig.paths).as_deref(), Some("Desk"));
     assert_eq!(desk.hub.devices().len(), 1);
@@ -186,6 +188,7 @@ fn the_code_screen_and_b_cancels() {
     open_sync_page(&mut d);
     d.tap(Button::A);
     d.wait_until("the search to end", |d| stage(d) != Stage::Searching);
+    d.run(32);
     assert_eq!(stage(&d), Stage::Hubs(Vec::new()));
     golden("sync_page_no_pc", &d.frame);
     d.tap(Button::B);

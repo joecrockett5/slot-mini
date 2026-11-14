@@ -1523,13 +1523,27 @@ impl App {
             ),
             false => (shelf.on_screen(), shelf.around(NEAR)),
         };
+        // The Miyoo's grid keeps one face whole, the selected cart's (it
+        // lifts, flies and goes into the slot); the rest hold only their
+        // cell-sized copy, a seventh of the memory. A cart newly selected
+        // is built again, as a step along the shelf builds one.
+        let lean = grid && !self.paths.is_pc();
+        let selected = shelf.index;
         let wants: Vec<FaceWant> = near
             .into_iter()
-            .filter(|&i| shelf.face(i).is_none())
+            .filter(|&i| match shelf.face(i) {
+                None => true,
+                Some(tex) => lean && i == selected && !self.gfx.is_pinned(tex),
+            })
             .map(|i| FaceWant {
                 shelf: self.at,
                 index: i,
-                on_screen: on_screen.contains(&i),
+                // A frame does not wait for the whole face of a cart that
+                // has its small one: it starts its lift at that size, and
+                // the whole one is there before it has grown. (Tests wait
+                // for everything, so their pictures do not depend on it.)
+                on_screen: on_screen.contains(&i)
+                    && (shelf.face(i).is_none() || self.face_wait.is_none()),
                 grid,
             })
             .collect();
@@ -1540,13 +1554,17 @@ impl App {
             self.face_wait,
         );
         for r in ready {
-            let tex = self.gfx.upload(r.face.full);
-            self.gfx.pin_scaled(tex, r.face.side);
-            let interior = r.interior.map(|f| {
-                let t = self.gfx.upload(f.full);
-                self.gfx.pin_scaled(t, f.side);
-                t
-            });
+            let whole = !lean || (r.shelf == self.at && r.index == selected);
+            let mut put = |f: crate::faces::Prepared| match whole {
+                true => {
+                    let t = self.gfx.upload(f.full);
+                    self.gfx.pin_scaled(t, f.side);
+                    t
+                }
+                false => self.gfx.upload(f.side),
+            };
+            let tex = put(r.face);
+            let interior = r.interior.map(&mut put);
             let Some((_, shelf)) = self.shelves.get_mut(r.shelf) else {
                 self.gfx.free(tex);
                 continue;
@@ -1557,6 +1575,14 @@ impl App {
             if let Some(t) = interior {
                 if let Some(old) = shelf.set_interior(r.index, t) {
                     self.gfx.free(old);
+                }
+            }
+        }
+        if let (true, Some((_, shelf))) = (lean, self.shelves.get(self.at)) {
+            // The cart the selection left goes back to its small copy.
+            for i in (0..shelf.carts.len()).filter(|&i| i != selected) {
+                for tex in [shelf.face(i), shelf.interior(i)].into_iter().flatten() {
+                    self.gfx.keep_pinned(tex);
                 }
             }
         }
