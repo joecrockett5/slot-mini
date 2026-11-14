@@ -16,7 +16,7 @@ use slot_mini_gfx::{Button, Draw, Renderer, Stage, TexId};
 use slot_mini_store::{Cart, Core, Platform};
 use slot_mini_ui::{
     arrows_hint_face, board_face, board_from_shaped, cart_face_with, cart_interior, chip_face,
-    chip_shadow_face, ease, grown, hint_face, lid_at, lid_from_shaped, lift_of, padded, seats,
+    chip_shadow_face, ease, grown, lid_at, lid_from_shaped, lift_of, padded, seats,
     shelf_cart_shaped, socket_face, CartFace, Millis, Placed, Shelf, CART_W, FOOTER_Y, HOP_LIFT,
     SHADOW_H, SHADOW_W, TURN_PAD,
 };
@@ -62,9 +62,9 @@ fn legends(gfx: &mut Renderer, glyphs: Glyphs) -> [(TexId, u32, u32); 3] {
         (gfx.upload_rgba(f.w, f.h, &f.rgba), f.w, f.h)
     };
     [
-        legend(gfx, hint_face(glyphs.cap("B"), "CANCEL")),
+        legend(gfx, glyphs.face(glyphs.cap("B"), "CANCEL")),
         legend(gfx, arrows_hint_face("SWAP")),
-        legend(gfx, hint_face(glyphs.cap("A"), "CHOOSE")),
+        legend(gfx, glyphs.face(glyphs.cap("A"), "CHOOSE")),
     ]
 }
 

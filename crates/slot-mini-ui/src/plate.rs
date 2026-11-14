@@ -104,6 +104,35 @@ pub fn hint_coloured(key: &str, label: &str, ink: [u8; 3]) -> UndoFace {
     UndoFace { rgba, w, h: HINT_H }
 }
 
+/// A legend for the mouse (slot-mini PC): the label on a key-coloured
+/// plate, to be clicked, where a hint has a key cap beside its label.
+#[cfg(feature = "pc")]
+pub fn button_face(label: &str) -> UndoFace {
+    const PAD: u32 = 8;
+    let text_w = band_width(label);
+    let w = text_w + 2 * PAD;
+    let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
+    let top = (HINT_H - CAP) / 2;
+    for y in top..top + CAP {
+        for x in 0..w {
+            // The corners are left off, so it reads as a button.
+            let edge_x = x == 0 || x == w - 1;
+            let edge_y = y == top || y == top + CAP - 1;
+            if edge_x && edge_y {
+                continue;
+            }
+            let at = ((y * w + x) * 4) as usize;
+            rgba[at..at + 4].copy_from_slice(&[INK[0], INK[1], INK[2], 255]);
+        }
+    }
+    if let Some(font) = text::label_font() {
+        // Straight onto the plate: a blit would take the plate with it.
+        let layout = text::fit(font, label, text_w as f32, 1, KEY_PX, LABEL_MIN_PX);
+        text::draw_centred(&mut rgba, w, HINT_H, &layout, CAP_INK);
+    }
+    UndoFace { rgba, w, h: HINT_H }
+}
+
 pub fn word_width(text: &str) -> u32 {
     capped_width(text, WORD_MAX_W)
 }

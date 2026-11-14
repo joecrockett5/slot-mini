@@ -12,14 +12,14 @@ use slot_mini::paths::Pc;
 use slot_mini::sound::Sound;
 use slot_mini::status::Status;
 use slot_mini::{App, Exit, Options, Paths, Pointer};
-use slot_mini_gfx::{Button, Canvas, Event, Sprite, SCREEN_H, SCREEN_W};
+use slot_mini_gfx::{Button, Canvas, Event, SCREEN_H, SCREEN_W};
 use slot_mini_store::{Cart, Core};
 
 use crate::config::Config;
 use crate::import;
 use crate::input::{Device, Key, Stick};
 use crate::net::{self, PcRelease};
-use crate::retroarch::{self, RetroArch, Run};
+use crate::retroarch::{self, RetroArch, Run, Screen};
 
 /// Something only the window (or the desktop) can do, asked of `main`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,6 +41,10 @@ pub enum Request {
     /// The library changed: start the app again on the new one.
     Reopen,
 }
+
+/// The largest multiple of the stage the frame is drawn at (a 4K
+/// screen); a larger window repeats pixels.
+pub const MAX_SCALE: u32 = 4;
 
 /// MENU's update row.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -118,14 +122,21 @@ pub struct PcApp {
     places: Vec<PathBuf>,
     pub app: App,
     pub retroarch: Option<RetroArch>,
-    /// The 640x480 frame, as the Miyoo's screen would show it.
+    /// The frame: the Miyoo's 640x480 screen, or a whole multiple of it
+    /// when the window is that large (`set_scale`).
     pub frame: Canvas,
+    /// The window's outer position and size, as `main` last saw it: a
+    /// windowed game opens there.
+    pub window: Option<[i32; 4]>,
     game: Option<Game>,
     /// What `main` should do next, oldest first.
     pub requests: Vec<Request>,
     hooks: Vec<Box<dyn FnMut(&Played)>>,
     /// What the player last used.
     pub device: Device,
+    /// Whether a controller's X and stick click went down swapped
+    /// (`pad_button`).
+    pad_swapped: [bool; 2],
     stick: Stick,
     l2_down: bool,
     now: u64,
@@ -176,10 +187,12 @@ impl PcApp {
             app,
             retroarch,
             frame: Canvas::new(SCREEN_W, SCREEN_H),
+            window: None,
             game: None,
             requests: Vec::new(),
             hooks: Vec::new(),
             device: Device::default(),
+            pad_swapped: [false; 2],
             stick: Stick::default(),
             l2_down: false,
             now,
@@ -228,6 +241,10 @@ impl PcApp {
         if self.in_game() {
             return;
         }
+        let b = match device {
+            Device::Controller => self.pad_button(b, down),
+            _ => b,
+        };
         if b == Button::L2 {
             self.l2_down = down;
         }
@@ -235,6 +252,26 @@ impl PcApp {
             true => Event::Press(b),
             false => Event::Release(b),
         });
+    }
+
+    /// A controller's X and stick click on the shelf: X opens the cart
+    /// studio (SELECT on the Miyoo) and the stick click takes a cart off
+    /// Recents (X on the Miyoo), since Select itself is MENU here. A
+    /// button comes up as what it went down as.
+    fn pad_button(&mut self, b: Button, down: bool) -> Button {
+        let i = match b {
+            Button::X => 0,
+            Button::Select => 1,
+            _ => return b,
+        };
+        if down {
+            self.pad_swapped[i] = self.app.at_rest();
+        }
+        match (self.pad_swapped[i], i) {
+            (true, 0) => Button::Select,
+            (true, _) => Button::X,
+            _ => b,
+        }
     }
 
     pub fn key(&mut self, key: Key, down: bool) {
@@ -269,9 +306,16 @@ impl PcApp {
 
     /// The mouse, in the frame's pixels.
     pub fn pointer(&mut self, p: Pointer) {
-        if !self.in_game() {
-            self.app.pointer(p);
+        if self.in_game() {
+            return;
         }
+        // A click or the wheel makes the mouse the device in hand, and
+        // the legends buttons; only passing over the window does not.
+        if !matches!(p, Pointer::Move(..) | Pointer::Release) {
+            self.device = Device::Mouse;
+            self.app.set_glyphs(glyphs(Device::Mouse));
+        }
+        self.app.pointer(p);
     }
 
     /// F11 or Alt+Enter.
@@ -595,9 +639,13 @@ impl PcApp {
         self.app.render(&mut self.frame)
     }
 
-    /// The wallpaper, for the window's borders.
-    pub fn wallpaper(&self) -> Option<(&Sprite, u64)> {
-        self.app.wallpaper()
+    /// Draw the frame `k` times the stage's size from now on, so art the
+    /// stage shrinks (the grid's carts) keeps the window's detail.
+    pub fn set_scale(&mut self, k: u32) {
+        let k = k.clamp(1, MAX_SCALE);
+        if self.frame.w != SCREEN_W * k {
+            self.frame = Canvas::new(SCREEN_W * k, SCREEN_H * k);
+        }
     }
 
     // ---- games ---------------------------------------------------------
@@ -609,7 +657,11 @@ impl PcApp {
         };
         let run = retroarch::plan(&self.app.paths, &ra, &cart, fresh);
         let cfg = self.config_dir.join("launch.cfg");
-        let spawned = retroarch::command(&ra, &run, self.library(), &cfg, self.config.fullscreen)
+        let screen = match self.config.fullscreen {
+            true => Screen::Fullscreen,
+            false => Screen::Window(self.window),
+        };
+        let spawned = retroarch::command(&ra, &run, self.library(), &cfg, screen)
             .and_then(|mut cmd| cmd.spawn());
         let mut child = match spawned {
             Ok(child) => child,
@@ -660,6 +712,7 @@ fn glyphs(device: Device) -> Glyphs {
     match device {
         Device::Keyboard => Glyphs::Keyboard,
         Device::Controller => Glyphs::Pad,
+        Device::Mouse => Glyphs::Mouse,
     }
 }
 
@@ -773,9 +826,9 @@ mod tests {
         assert_eq!(r.pc.requests, [Request::Fullscreen(true)]);
         assert!(r.config().fullscreen && r.pc.app.host().fullscreen);
         r.taps(&[Down, Button::Right]);
-        assert!(r.config().xbox_layout && r.pc.app.host().xbox);
-        r.tap(Button::Left);
         assert!(!r.config().xbox_layout && !r.pc.app.host().xbox);
+        r.tap(Button::Left);
+        assert!(r.config().xbox_layout && r.pc.app.host().xbox);
         // Back out, and Quit.
         r.taps(&[Button::B, Button::Up, A]);
         assert_eq!(r.pc.requests.last(), Some(&Request::Quit));
@@ -967,5 +1020,51 @@ mod tests {
         assert_eq!(r.pc.app.about.as_ref().unwrap().glyphs, Glyphs::Keyboard);
         r.pc.stick(0.0, -1.0);
         assert_eq!(r.pc.app.about.as_ref().unwrap().glyphs, Glyphs::Pad);
+    }
+
+    #[test]
+    fn a_click_makes_the_legends_buttons() {
+        let mut r = rig(&ALL, true, NOWHERE);
+        r.tap(Menu);
+        r.pc.tick(16);
+        // Passing over the window is not picking the mouse up.
+        r.pc.pointer(Pointer::Move(320.0, 20.0));
+        assert_eq!(r.pc.app.about.as_ref().unwrap().glyphs, Glyphs::Pad);
+        r.pc.pointer(Pointer::Click(320.0, 20.0));
+        r.pc.pointer(Pointer::Release);
+        assert_eq!(r.pc.device, Device::Mouse);
+        assert_eq!(r.pc.app.about.as_ref().unwrap().glyphs, Glyphs::Mouse);
+    }
+
+    #[test]
+    fn a_controllers_x_opens_the_studio_and_its_stick_click_does_not() {
+        use slot_mini::Phase;
+        let mut r = rig(&ALL, true, NOWHERE);
+        assert!(!r.pc.app.shelf_kinds().is_empty());
+        let settle = |r: &mut Rig| {
+            for _ in 0..120 {
+                r.pc.tick(16);
+            }
+        };
+        settle(&mut r);
+        // The stick click is the Miyoo's SELECT, which on the shelf is X
+        // here (take a cart off Recents): no studio.
+        r.tap(Button::Select);
+        settle(&mut r);
+        assert_eq!(r.pc.app.phase, Phase::Shelf);
+        r.tap(Button::X);
+        settle(&mut r);
+        assert_eq!(r.pc.app.phase, Phase::Studio);
+        // The keyboard's keys are the Miyoo's own.
+        let mut r = rig(&ALL, true, NOWHERE);
+        settle(&mut r);
+        r.pc.key(Key::Button(Button::X), true);
+        r.pc.key(Key::Button(Button::X), false);
+        settle(&mut r);
+        assert_eq!(r.pc.app.phase, Phase::Shelf);
+        r.pc.key(Key::Button(Button::Select), true);
+        r.pc.key(Key::Button(Button::Select), false);
+        settle(&mut r);
+        assert_eq!(r.pc.app.phase, Phase::Studio);
     }
 }

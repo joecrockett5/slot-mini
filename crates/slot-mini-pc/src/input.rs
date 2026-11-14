@@ -8,9 +8,15 @@
 //!
 //! Controller: by position in the Miyoo's Nintendo layout (right = A,
 //! bottom = B, top = X, left = Y), or by Xbox labels with the setting
-//! (bottom = A, right = B, left = X, top = Y). MENU is a click of either
-//! stick, or the Guide button where the system lets it through (XInput
-//! does not).
+//! (bottom = A, right = B, left = X, top = Y). MENU is Select (Back /
+//! View on an Xbox controller): the Guide button belongs to the system,
+//! though it opens MENU too where it is let through. That leaves the
+//! Miyoo's SELECT to a click of either stick, and on the shelf `PcApp`
+//! gives the cart studio to X and taking a cart off Recents to the stick
+//! click, so the studio has a button of its own.
+//!
+//! Mouse: no table. Everything it can do is a button on the screen
+//! (crates/slot-mini/src/app_bar.rs).
 
 use gilrs::Button as Pad;
 use slot_mini_gfx::Button;
@@ -22,6 +28,7 @@ pub enum Device {
     #[default]
     Keyboard,
     Controller,
+    Mouse,
 }
 
 /// What a key does.
@@ -70,9 +77,9 @@ pub fn pad(button: Pad, xbox: bool) -> Option<Button> {
         (Pad::RightTrigger, _) => Button::R1,
         (Pad::LeftTrigger2, _) => Button::L2,
         (Pad::RightTrigger2, _) => Button::R2,
-        (Pad::Select, _) => Button::Select,
+        (Pad::Select | Pad::Mode, _) => Button::Menu,
         (Pad::Start, _) => Button::Start,
-        (Pad::Mode | Pad::LeftThumb | Pad::RightThumb, _) => Button::Menu,
+        (Pad::LeftThumb | Pad::RightThumb, _) => Button::Select,
         _ => return None,
     })
 }
@@ -182,7 +189,13 @@ mod tests {
         assert_eq!(pad(Pad::East, true), Some(Button::B));
         assert_eq!(pad(Pad::North, false), Some(Button::X));
         assert_eq!(pad(Pad::West, true), Some(Button::X));
-        assert_eq!(pad(Pad::RightThumb, false), Some(Button::Menu));
+        // Select is MENU (the Guide button is the system's), and a stick
+        // click is the Miyoo's SELECT.
+        assert_eq!(pad(Pad::Select, true), Some(Button::Menu));
+        assert_eq!(pad(Pad::Mode, false), Some(Button::Menu));
+        assert_eq!(pad(Pad::Start, true), Some(Button::Start));
+        assert_eq!(pad(Pad::LeftThumb, true), Some(Button::Select));
+        assert_eq!(pad(Pad::RightThumb, false), Some(Button::Select));
         assert_eq!(pad(Pad::RightTrigger2, true), Some(Button::R2));
     }
 

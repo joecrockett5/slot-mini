@@ -37,6 +37,8 @@ pub mod update;
 pub mod wallpaper;
 
 #[cfg(feature = "pc")]
+pub use app::bar;
+#[cfg(feature = "pc")]
 pub use app::Pointer;
 pub use app::{App, Exit, Options, Phase};
 pub use paths::Paths;

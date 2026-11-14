@@ -6,6 +6,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# slot-mini PC only: the mouse's buttons.
+pc = []
+
 [dependencies]
 fontdue = { workspace = true }
 png = { workspace = true }

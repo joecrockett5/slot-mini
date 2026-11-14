@@ -1,9 +1,9 @@
 //! Putting the 640x480 frame in a window of any size: scaled by a whole
 //! number when the window is at least the frame's size (pixels stay
-//! square and sharp), shrunk smoothly when it is not, centred, with the
-//! borders filled by the wallpaper, blurred and dimmed.
+//! square and sharp), shrunk smoothly when it is not, centred, with
+//! plain black bars around it.
 
-use slot_mini_gfx::{Canvas, Sprite};
+use slot_mini_gfx::Canvas;
 
 /// Where the frame lands in the window.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,82 +51,20 @@ impl View {
     }
 }
 
-/// How dark the borders are: this much of the wallpaper's light.
-const DIM: u32 = 90;
-/// The wallpaper is blurred by shrinking it to this width and back.
-const BLUR_W: u32 = 40;
-
-/// The window's borders: the wallpaper, blurred, dimmed and scaled to
-/// cover the window. Made again only when the window or wallpaper changes.
-#[derive(Default)]
-pub struct Border {
-    key: Option<(u32, u32, u64)>,
-    px: Vec<u32>,
-}
-
-impl Border {
-    fn make(&mut self, w: u32, h: u32, wallpaper: Option<(&Sprite, u64)>) {
-        let key = (w, h, wallpaper.map_or(u64::MAX, |(_, id)| id));
-        if self.key == Some(key) {
-            return;
-        }
-        self.key = Some(key);
-        let Some((art, _)) = wallpaper else {
-            self.px = vec![0; (w * h) as usize];
-            return;
-        };
-        // Cover the window: the same crop a wallpaper gets on the shelf.
-        let small_h = (BLUR_W * h / w.max(1)).max(2);
-        let small = cover(art, BLUR_W, small_h);
-        let big = small.resized(w, h);
-        self.px = big
-            .px
-            .iter()
-            .map(|&p| {
-                let c = |shift: u32| (((p >> shift) & 0xff) * DIM / 255) << shift;
-                c(16) | c(8) | c(0)
-            })
-            .collect();
-    }
-}
-
-/// `art` scaled and cropped to fill `w` x `h`.
-fn cover(art: &Sprite, w: u32, h: u32) -> Sprite {
-    let s = (w as f32 / art.w as f32).max(h as f32 / art.h as f32);
-    let (sw, sh) = (
-        ((art.w as f32 * s).ceil() as u32).max(w),
-        ((art.h as f32 * s).ceil() as u32).max(h),
-    );
-    let scaled = art.resized(sw, sh);
-    let (ox, oy) = ((sw - w) / 2, (sh - h) / 2);
-    let mut out = Sprite::new(w, h);
-    for y in 0..h {
-        let from = ((y + oy) * sw + ox) as usize;
-        let to = (y * w) as usize;
-        out.px[to..to + w as usize].copy_from_slice(&scaled.px[from..from + w as usize]);
-    }
-    out
-}
-
 /// Draw `frame` into a `w` x `h` window buffer of `0x00RRGGBB` pixels.
-pub fn present(
-    frame: &Canvas,
-    border: &mut Border,
-    wallpaper: Option<(&Sprite, u64)>,
-    out: &mut [u32],
-    w: u32,
-    h: u32,
-) -> View {
-    let view = View::fit(frame.w, frame.h, w, h);
+/// The frame is the `bw` x `bh` stage, drawn at that size or at a whole
+/// multiple of it (the app renders at the window's scale when it can);
+/// whatever it does not cover is black.
+pub fn present(frame: &Canvas, bw: u32, bh: u32, out: &mut [u32], w: u32, h: u32) -> View {
+    let view = View::fit(bw, bh, w, h);
     if out.len() < (w * h) as usize {
         return view;
     }
     if view.w < w || view.h < h {
-        border.make(w, h, wallpaper);
-        out[..border.px.len()].copy_from_slice(&border.px);
+        out.fill(0);
     }
     let k = view.w / frame.w;
-    if k >= 1 && view.w == frame.w * k {
+    if k >= 1 && view.w == frame.w * k && view.h == frame.h * k {
         // Whole pixels: each frame row is written k times.
         for fy in 0..frame.h {
             let row = &frame.px[(fy * frame.w) as usize..((fy + 1) * frame.w) as usize];
@@ -145,7 +83,7 @@ pub fn present(
             }
         }
     } else {
-        // Shrunk: bilinear through the sprite scaler.
+        // Shrunk: averaged through the sprite scaler.
         let small = frame.snapshot().resized(view.w, view.h);
         for y in 0..view.h {
             let from = (y * view.w) as usize;
@@ -157,6 +95,14 @@ pub fn present(
         *p &= 0x00ff_ffff;
     }
     view
+}
+
+impl View {
+    /// The whole number the stage is multiplied by in this view; 1 when
+    /// the window is smaller than the stage.
+    pub fn scale(&self, bw: u32) -> u32 {
+        (self.w / bw.max(1)).max(1)
+    }
 }
 
 #[cfg(test)]
@@ -225,15 +171,12 @@ mod tests {
     }
 
     #[test]
-    fn a_doubled_frame_keeps_its_pixels_and_fills_the_borders() {
+    fn a_doubled_frame_keeps_its_pixels_between_black_bars() {
         let mut frame = Canvas::new(4, 2);
         frame.px = vec![1, 2, 3, 4, 5, 6, 7, 8];
-        let mut art = Sprite::new(8, 8);
-        art.px.fill(0xffff_ffff);
         let (w, h) = (10, 6);
-        let mut out = vec![0u32; (w * h) as usize];
-        let mut border = Border::default();
-        let v = present(&frame, &mut border, Some((&art, 1)), &mut out, w, h);
+        let mut out = vec![0x00ab_cdefu32; (w * h) as usize];
+        let v = present(&frame, 4, 2, &mut out, w, h);
         assert_eq!(
             v,
             View {
@@ -243,11 +186,24 @@ mod tests {
                 h: 4
             }
         );
+        assert_eq!(v.scale(4), 2);
         assert_eq!(&out[11..19], &[1, 1, 2, 2, 3, 3, 4, 4]);
         assert_eq!(&out[21..29], &[1, 1, 2, 2, 3, 3, 4, 4]);
         assert_eq!(&out[31..39], &[5, 5, 6, 6, 7, 7, 8, 8]);
-        // The border is the white wallpaper, dimmed.
-        assert_eq!(out[0], 0x005a_5a5a);
-        assert_eq!(out[59], 0x005a_5a5a);
+        // The bars are black, whatever the wallpaper.
+        assert_eq!(out[0], 0);
+        assert_eq!(out[59], 0);
+    }
+
+    #[test]
+    fn a_frame_already_at_the_windows_scale_is_copied_as_it_is() {
+        // A 2x2 stage rendered at twice its size, in a 5x4 window.
+        let mut frame = Canvas::new(4, 4);
+        frame.px = (1..=16).collect();
+        let mut out = vec![9u32; 20];
+        let v = present(&frame, 2, 2, &mut out, 5, 4);
+        assert_eq!((v.x, v.y, v.w, v.h), (0, 0, 4, 4));
+        assert_eq!(&out[0..5], &[1, 2, 3, 4, 0]);
+        assert_eq!(&out[15..20], &[13, 14, 15, 16, 0]);
     }
 }

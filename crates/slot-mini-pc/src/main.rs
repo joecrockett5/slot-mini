@@ -11,8 +11,8 @@ use slot_mini::status::Status;
 use slot_mini::Pointer;
 use slot_mini_gfx::{SCREEN_H, SCREEN_W};
 use slot_mini_pc::input::{self, Device};
-use slot_mini_pc::pcapp::PcOptions;
-use slot_mini_pc::present::{present, Border, View};
+use slot_mini_pc::pcapp::{PcOptions, MAX_SCALE};
+use slot_mini_pc::present::{present, View};
 use slot_mini_pc::{config, desktop, retroarch, PcApp, Request};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -55,7 +55,6 @@ struct Shell {
     window: Option<Rc<Window>>,
     surface: Option<Surface>,
     gilrs: Option<gilrs::Gilrs>,
-    border: Border,
     start: Instant,
     next: Instant,
     mods: ModifiersState,
@@ -163,8 +162,8 @@ impl Shell {
         };
         self.view = present(
             &self.pc.frame,
-            &mut self.border,
-            self.pc.app.wallpaper(),
+            SCREEN_W,
+            SCREEN_H,
             &mut buffer,
             size.width,
             size.height,
@@ -172,6 +171,26 @@ impl Shell {
         if let Err(e) = buffer.present() {
             eprintln!("slot-mini-pc: present: {e}");
         }
+    }
+
+    /// Tell the app how large its frame can be drawn and where the window
+    /// is (a windowed game opens in its place).
+    fn measure(&mut self) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        if self.pc.in_game() {
+            return;
+        }
+        let size = window.inner_size();
+        let k = View::fit(SCREEN_W, SCREEN_H, size.width, size.height).scale(SCREEN_W);
+        // Past the largest frame the app draws, pixels are repeated.
+        self.pc.set_scale(if k <= MAX_SCALE { k } else { 1 });
+        let outer = window.outer_size();
+        self.pc.window = window
+            .outer_position()
+            .ok()
+            .map(|p| [p.x, p.y, outer.width as i32, outer.height as i32]);
     }
 
     fn pads(&mut self) {
@@ -259,6 +278,13 @@ impl Shell {
         });
         self.pc.close(rect);
         el.exit();
+        // Everything worth keeping is on disk. Leave now rather than wait
+        // for the window, the controllers and the worker threads to wind
+        // down: a slow one of those is a window that will not close.
+        if let Some(window) = &self.window {
+            window.set_visible(false);
+        }
+        std::process::exit(0);
     }
 }
 
@@ -330,6 +356,11 @@ impl ApplicationHandler for Shell {
                 (MouseButton::Right | MouseButton::Back, _) => self.pc.pointer(Pointer::Back),
                 _ => {}
             },
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => self.pc.pointer(Pointer::Release),
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel up (positive) is towards earlier carts.
                 self.wheel -= match delta {
@@ -351,6 +382,7 @@ impl ApplicationHandler for Shell {
         let now = Instant::now();
         if now >= self.next {
             self.pads();
+            self.measure();
             self.pc.tick(self.now());
             self.requests(el);
             let changed = self.pc.render();
@@ -445,7 +477,6 @@ fn main() {
         gilrs: gilrs::Gilrs::new()
             .map_err(|e| eprintln!("slot-mini-pc: controllers: {e}"))
             .ok(),
-        border: Border::default(),
         start,
         next: start,
         mods: ModifiersState::empty(),

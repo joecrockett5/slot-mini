@@ -45,18 +45,32 @@ files (they will not run in RetroArch; use real ROMs for section 4).
 - [ ] Keyboard: arrows browse, Up/Down and Page Up/Down jump letters,
       Q/W switch system, A hearts, Backspace opens the cart studio, Space
       the core picker, Esc MENU, 2 or Tab the grid.
-- [ ] The footer shows key caps after a key press and button glyphs after
-      a controller press.
+- [ ] A bar above the footer lists the shortcuts: key caps after a key
+      press, button names after a controller press, clickable buttons
+      after a mouse click. It steps aside while a shelf's name shows.
 - [ ] Controller (Xbox, then any other you have): D-pad and left stick
-      browse; A/B are the Miyoo's way round; MENU -> Controller swaps
-      them. Unplug and replug while running: it keeps working.
-- [ ] Mouse: hover and click carts on the shelf and in the grid,
-      double-click plays, wheel scrolls, clicks work in MENU and the
-      studio.
-- [ ] Insert and eject sounds play; MENU -> Sounds turns them off.
+      browse; A plays (the bottom button on an Xbox pad; MENU -> Settings
+      -> Controller switches to the Miyoo's layout); X opens the cart
+      studio; START (Menu) the core picker; SELECT (Back / View) opens
+      MENU; a stick click takes a cart off Recents. The Guide button is
+      not needed. Unplug and replug while running: it keeps working.
+      (A config from 0.1.0 keeps its "nintendo" layout until changed in
+      MENU; delete `config.txt` to see the new default.)
+- [ ] Mouse only, keyboard and controller untouched: click a cart, then
+      every button on the bar: PLAY, FAVE, STUDIO, the two SHELF arrows,
+      CORE, GRID / ROW, MENU. In MENU, the studio and the core picker the
+      legends at the bottom (BACK, SELECT, the arrows...) are buttons
+      too. Holding PLAY starts the game from the beginning. Hover picks
+      carts in the grid, double-click plays, the wheel scrolls, the right
+      button goes back.
+- [ ] Insert and eject sounds play; MENU -> Settings -> Sounds turns them
+      off and on again without a pause.
 - [ ] F11 and Alt+Enter toggle full screen; the choice, the window's size
-      and place survive a restart. Resize to odd sizes: the picture stays
-      sharp or evenly scaled over the blurred wallpaper, never stretched.
+      and place survive a restart. Resize to odd sizes: the picture is
+      never stretched, and what is left over is plain black.
+- [ ] Full screen or a large window: cart labels, text and the bar are
+      sharp, not blown-up 640x480 pixels (up to four times the size;
+      wallpapers and cart shells are only as fine as their artwork).
 - [ ] Move the window to a second monitor with different scaling, if you
       have one.
 
@@ -67,9 +81,11 @@ files (they will not run in RetroArch; use real ROMs for section 4).
 - [ ] Remove a core (`mgba_libretro.dll`) from RetroArch's cores: the GBA
       shelf says it is not installed; MENU -> Folders offers it; two
       presses download it; the notice goes.
-- [ ] A on a game: the cart goes in, slot-mini's window hides, RetroArch
-      starts full screen with the game. The Miyoo's save for it (imported)
-      is there.
+- [ ] A on a game with slot-mini full screen: the cart goes in,
+      slot-mini's window hides, RetroArch starts full screen with the
+      game. The Miyoo's save for it (imported) is there.
+- [ ] The same with slot-mini in a window: RetroArch opens in a window in
+      the same place and about the same size, on the same monitor.
 - [ ] Save in the game, close RetroArch (Esc, or its menu): slot-mini
       comes back, the cart ejects. The `.srm` in the library's `Saves`
       folder has a new date.
@@ -89,8 +105,9 @@ files (they will not run in RetroArch; use real ROMs for section 4).
 - [ ] Folders -> Library folder: move to another folder; the shelf
       reloads from it.
 - [ ] Sync: says it is coming.
-- [ ] Quit, and the window's close button, both end the app; no
-      `slot-mini-pc.exe` is left in Task Manager.
+- [ ] Quit, the window's close button and Alt+F4 all end the app at
+      once, with no "Not responding"; no `slot-mini-pc.exe` is left in
+      Task Manager, and the window's place is remembered.
 
 ## 6. Leaving no mess
 

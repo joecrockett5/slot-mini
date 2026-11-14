@@ -279,15 +279,23 @@ replaced), or copy ROMs into its `Roms` folders yourself.
 | Heart / unheart | Y | A |
 | Switch system | L1 / R1 | Q / W |
 | Grid / shelf | R2 | 2 or Tab |
-| Choose the core | START | Space |
-| Cart studio | SELECT | Backspace |
-| MENU | Guide, or click a stick | Esc or F1 |
+| Choose the core | START (Menu on an Xbox pad) | Space |
+| Cart studio | X | Backspace |
+| Take a cart off Recents | Click a stick | S |
+| MENU | SELECT (Back / View on an Xbox pad) | Esc or F1 |
 | Full screen | | F11 or Alt+Enter |
 
-A and B sit where the Miyoo has them (A on the right); MENU -> Controller swaps them for an Xbox layout. The
-footer shows the keys for whatever you last touched. The mouse works throughout: click a cart to choose it,
-double-click to play, scroll to browse. MENU also holds full screen, the folders, Import from SD card, Check for
-updates (it opens the download page) and Quit.
+A, B, X and Y go by an Xbox controller's labels (A at the bottom); MENU -> Settings -> Controller switches to the
+Miyoo's layout (A on the right). A bar above the footer lists these shortcuts for whatever you last touched,
+controller or keyboard. Pick up the mouse and the bar and every legend become buttons: PLAY (hold it to start a
+game from the beginning), FAVE, STUDIO, the shelf arrows, CORE, GRID / ROW and MENU, so everything can be done by
+clicking. Clicking a cart chooses it, a double-click plays it, the wheel browses and the right button goes back.
+MENU also holds full screen, the folders, Import from SD card, Check for updates (it opens the download page) and
+Quit.
+
+A game opens where slot-mini is: full screen when slot-mini is full screen, otherwise in a window in the same
+place. The picture is drawn at whole multiples of 640x480 (up to four times), so labels and text stay sharp on a
+large window, with plain black bars where the window is not 4:3.
 
 Settings live in `%APPDATA%\slot-mini-pc\config.txt`. Only one slot-mini runs at a time; starting it again
 brings the first to the front. To build it: `cargo build --release -p slot-mini-pc` on Windows. Its checklist
