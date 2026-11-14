@@ -1,7 +1,8 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-store/src/cart_shell.rs
 // Changes: the system-level shell file lives in slot-mini's app folder
-//   (slot keeps it in Config/).
+//   (slot keeps it in Config/). `set_line` is `write_choice`'s edit of the
+//   file's text on its own (slot-mini's sync merges lines with it).
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::collections::HashMap;
@@ -98,17 +99,11 @@ pub fn layered(system: &str, labels: &str) -> HashMap<String, ShellChoice> {
     out
 }
 
-pub fn write_choice(
-    root: &std::path::Path,
-    stem: &str,
-    choice: Option<&ShellChoice>,
-) -> std::io::Result<()> {
-    let path = root.join(LABELS_SHELL_FILE);
-    let mut text = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(e),
-    };
+/// `text` with `stem`'s line set to `value`, or removed. Lines for the same
+/// stem under another Unicode normalisation are dropped, as `write_choice`
+/// has always done.
+pub fn set_line(text: &str, stem: &str, value: Option<&str>) -> std::io::Result<String> {
+    let mut text = text.to_string();
     let want = key(stem);
     let others: Vec<String> = crate::ini::parse(&text)
         .into_keys()
@@ -117,6 +112,21 @@ pub fn write_choice(
     for raw in others {
         text = crate::ini::set(&text, &raw, None)?;
     }
+    crate::ini::set(&text, &want, value)
+}
+
+pub fn write_choice(
+    root: &std::path::Path,
+    stem: &str,
+    choice: Option<&ShellChoice>,
+) -> std::io::Result<()> {
+    let path = root.join(LABELS_SHELL_FILE);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    let want = key(stem);
     let system = std::fs::read_to_string(root.join(CART_SHELL_FILE)).unwrap_or_default();
     let value = match choice {
         Some(c) => Some(c.to_value()),
@@ -124,7 +134,7 @@ pub fn write_choice(
             .contains_key(&want)
             .then(|| "auto".to_string()),
     };
-    let out = crate::ini::set(&text, &want, value.as_deref())?;
+    let out = set_line(&text, stem, value.as_deref())?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }

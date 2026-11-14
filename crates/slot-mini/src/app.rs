@@ -215,7 +215,7 @@ impl App {
     pub fn new(paths: Paths, status: Box<dyn Status>, opts: Options, now: Millis) -> App {
         let settings = Settings::read(&paths);
         let theme = Theme::read(&paths);
-        let favourites = Favourites::read(&paths);
+        let favourites = Favourites::read(&crate::settings::favourites_file(&paths));
         let recents = Recents::read(&paths);
         let state = State::read(&paths);
         let mut gfx = Renderer::new();
@@ -519,7 +519,10 @@ impl App {
         };
         let (platform, stem) = (cart.platform, cart.stem.clone());
         self.favourites.toggle(platform, &stem);
-        if let Err(e) = self.favourites.write(&self.paths) {
+        if let Err(e) = self
+            .favourites
+            .write(&crate::settings::favourites_file(&self.paths))
+        {
             eprintln!("slot-mini: favourites: {e}");
         }
         let fav_index = self.shelf().map(|s| s.index).unwrap_or(0);
