@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+pub use slot_mini_store::Favourites;
 use slot_mini_store::{atomic_write, ini, Platform};
 
 use crate::paths::Paths;
@@ -159,59 +160,18 @@ impl State {
     }
 }
 
-// slot's favourites list format (slot-store/src/slot_state.rs): one
-// `<platform>/<stem>` per line, platform lowercase.
+/// Where the favourites are kept. The list itself is
+/// `slot_mini_store::Favourites`, which sync shares with slot-mini PC.
+pub fn favourites_file(paths: &Paths) -> std::path::PathBuf {
+    paths.data().join(FAVOURITES_FILE)
+}
+
 fn entry_key(platform: Platform, stem: &str) -> String {
-    format!("{}/{}", platform.dir_name().to_ascii_lowercase(), stem)
+    slot_mini_store::list_line(platform, stem)
 }
 
 fn entry_value(value: &str) -> Option<(Platform, String)> {
-    let (platform, stem) = value.split_once('/')?;
-    let platform = Platform::ALL
-        .into_iter()
-        .find(|p| platform.eq_ignore_ascii_case(p.dir_name()))?;
-    (!stem.is_empty()).then(|| (platform, stem.to_string()))
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Favourites {
-    pub list: Vec<(Platform, String)>,
-}
-
-impl Favourites {
-    pub fn read(paths: &Paths) -> Favourites {
-        let text = std::fs::read_to_string(paths.data().join(FAVOURITES_FILE)).unwrap_or_default();
-        let mut list = Vec::new();
-        for e in text.lines().filter_map(entry_value) {
-            if !list.contains(&e) {
-                list.push(e);
-            }
-        }
-        Favourites { list }
-    }
-
-    pub fn write(&self, paths: &Paths) -> std::io::Result<()> {
-        let text: String = self
-            .list
-            .iter()
-            .map(|(p, s)| entry_key(*p, s) + "\n")
-            .collect();
-        write(&paths.data().join(FAVOURITES_FILE), &text)
-    }
-
-    pub fn contains(&self, platform: Platform, stem: &str) -> bool {
-        self.list.iter().any(|(p, s)| *p == platform && s == stem)
-    }
-
-    /// Heart or un-heart; returns whether it is now a favourite.
-    pub fn toggle(&mut self, platform: Platform, stem: &str) -> bool {
-        if self.contains(platform, stem) {
-            self.list.retain(|(p, s)| !(*p == platform && s == stem));
-            return false;
-        }
-        self.list.push((platform, stem.to_string()));
-        true
-    }
+    slot_mini_store::list_entry(value)
 }
 
 /// The games last launched from slot-mini, newest first, in slot's list
@@ -289,14 +249,14 @@ mod tests {
     #[test]
     fn favourites_toggle_and_persist_in_slots_format() {
         let (_d, p) = tmp();
-        let mut f = Favourites::read(&p);
+        let mut f = Favourites::read(&favourites_file(&p));
         assert!(f.toggle(Platform::Gba, "Metroid Fusion"));
         assert!(f.toggle(Platform::Gb, "Tetris"));
         assert!(!f.toggle(Platform::Gba, "Metroid Fusion"));
-        f.write(&p).unwrap();
+        f.write(&favourites_file(&p)).unwrap();
         let text = std::fs::read_to_string(p.data().join(FAVOURITES_FILE)).unwrap();
         assert_eq!(text, "gb/Tetris\n");
-        assert_eq!(Favourites::read(&p), f);
+        assert_eq!(Favourites::read(&favourites_file(&p)), f);
     }
 
     #[test]
@@ -308,7 +268,7 @@ mod tests {
             "gba/A\nnonsense\nnes/B\ngba/\nGBA/A\ngbc/C\n",
         )
         .unwrap();
-        let f = Favourites::read(&p);
+        let f = Favourites::read(&favourites_file(&p));
         assert_eq!(
             f.list,
             vec![(Platform::Gba, "A".into()), (Platform::Gbc, "C".into())]

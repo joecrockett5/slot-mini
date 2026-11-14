@@ -3,6 +3,7 @@
 // Changes: ROMs come from Onion's Roms/<sys> (not Games/<sys>), including one
 //   level of subfolders; Onion's Imgs and hidden folders are skipped. The
 //   label and shell files stay in slot's Labels/ layout at the SD root.
+//   `rom_files` is public (slot-mini's sync lists ROMs with it).
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::collections::HashMap;
@@ -110,7 +111,7 @@ fn scan_of(root: &Path, platforms: &[Platform]) -> Result<Vec<Cart>, StoreError>
 
 /// ROM files in an Onion system folder and one level of subfolders, sorted
 /// by path so that duplicates resolve the same way every time.
-fn rom_files(dir: &Path, platform: Platform) -> Vec<PathBuf> {
+pub fn rom_files(dir: &Path, platform: Platform) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let walk = |d: &Path, depth: u32, out: &mut Vec<PathBuf>, sub: &mut Vec<PathBuf>| {
         let entries = match std::fs::read_dir(d) {

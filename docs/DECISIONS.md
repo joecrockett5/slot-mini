@@ -299,3 +299,59 @@ Calls made without asking, and why. Newest last.
     every settings write before 0.6.4 stored `label_service = off` although
     nothing could switch it on, so the old key is ignored rather than read
     as the player's choice.
+
+## Sync core (brief 1, `crates/slot-mini-sync`)
+
+Calls made while building the sync core. The rules themselves, and the
+reasons for them, are in `SYNC.md`; these are the choices about how it was
+built.
+
+1. **The hub plans, the client carries out.** The client sends its
+   manifest and the hub answers with the whole plan. One side holds the
+   rules, so a Miyoo with an older build cannot disagree with the PC about
+   what a sync does; a change of rules is a change of `PROTOCOL_VERSION`.
+2. **`tiny_http` for the hub, `ureq` for the client, no async.** Both are
+   blocking and small, and `ureq` is already in the device binary. The
+   client asks `ureq` for no TLS: sync is LAN only and every request
+   is signed.
+3. **Requests are signed with HMAC-SHA256 from `ring`, not encrypted.**
+   The key is made at pairing and shown to nobody; the six-digit code only
+   lets the two people at the two screens see that they are pairing with
+   each other. Encrypting a LAN transfer of the player's own files would
+   cost the Miyoo time on every ROM for little.
+4. **Deletions do not travel; Remove everywhere does.** A file missing on
+   one side is indistinguishable from one not yet synced, and the cost of
+   guessing wrong is a lost save. The one deletion that travels is asked
+   for by name on the PC and kept as a tombstone until each device has
+   applied it.
+5. **A save conflict keeps both, and the hub's copy stays the save.** The
+   device's copy is stored beside it on the PC, where there is a screen to
+   choose on (`swap_conflict`, `dismiss_conflict`). Nothing is merged and
+   nothing is dropped.
+6. **A side lists the saves of games it does not have.** Without that, a
+   ROM deleted on the PC and synced back would arrive and then overwrite
+   the save that was waiting there, or need a second sync to pick it up.
+7. **Names sync creates take the receiving side's spelling of the game.**
+   Labels, art and saves find their game by its stem, and on a
+   case-sensitive PC a save spelled as the Miyoo spelled it would not be
+   found.
+8. **16 MB of the card is never planned into** (`RESERVE`). Saves, states
+   and Onion itself need room after a sync; a ROM that would cross the
+   line is left out and reported.
+9. **The property tests use a small seeded generator, not `proptest`.**
+   The device job runs them under qemu, where a shrinking framework is
+   slow, and a failing seed is printed and replayed with `SYNC_SEED`. No
+   new dependency reaches the workspace for it.
+10. **`Event::Finished` boxes its report.** The report is far larger than
+    the other events, which are made once per piece of a transfer.
+11. **Setting saves aside, favourites and shell parsing live in
+    `slot-mini-store`** and are used by the launcher and by sync alike, so
+    there is one implementation of each. The launcher's behaviour and
+    goldens are unchanged.
+12. **Windows is checked, not tested, in CI** (`cargo check` for
+    `x86_64-pc-windows-gnu`). The desktop job is Linux; brief 3 brings a
+    Windows build of its own.
+13. **The client costs the device binary 258,624 bytes** (4.9%), measured
+    by linking a call of every client entry point into the static armv7
+    release binary. Brief 4 pays it; this brief links nothing into the
+    launcher.

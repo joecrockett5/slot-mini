@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-store/src/atomic.rs
-// Changes: none
+// Changes: `AtomicFile` added, for files too large to hold in memory
+//   (slot-mini's sync streams ROMs through it).
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
 
 use std::fs::File;
@@ -88,4 +89,94 @@ fn left_by_another_run(name: &str) -> bool {
     };
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
     digits(seq) && digits(pid) && pid != std::process::id().to_string()
+}
+
+/// A file written piece by piece beside its destination and renamed into
+/// place by [`AtomicFile::commit`]: [`atomic_write`] for content that is
+/// streamed. Dropped without a commit, the temporary file is removed.
+pub struct AtomicFile {
+    tmp: PathBuf,
+    path: PathBuf,
+    file: Option<File>,
+}
+
+impl AtomicFile {
+    pub fn create(path: &Path) -> std::io::Result<AtomicFile> {
+        let tmp = temp_path(path);
+        let file = File::create(&tmp)?;
+        Ok(AtomicFile {
+            tmp,
+            path: path.to_path_buf(),
+            file: Some(file),
+        })
+    }
+
+    /// Where the file will be once committed.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// fsync, rename over the destination, and sync the folder.
+    pub fn commit(mut self) -> std::io::Result<()> {
+        if let Some(f) = self.file.take() {
+            f.sync_all()?;
+        }
+        std::fs::rename(&self.tmp, &self.path)?;
+        sync_dir(&self.path);
+        Ok(())
+    }
+}
+
+impl Write for AtomicFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match &mut self.file {
+            Some(f) => f.write(buf),
+            None => Ok(0),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match &mut self.file {
+            Some(f) => f.flush(),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Drop for AtomicFile {
+    fn drop(&mut self) {
+        // Still set: never committed (or the commit failed before renaming).
+        if self.file.take().is_some() || self.tmp.exists() {
+            let _ = std::fs::remove_file(&self.tmp);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_atomic_file_appears_only_when_committed() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("rom.gba");
+        std::fs::write(&path, b"old").unwrap();
+        let mut f = AtomicFile::create(&path).unwrap();
+        f.write_all(b"new ").unwrap();
+        f.write_all(b"content").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"old");
+        f.commit().unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new content");
+        assert_eq!(std::fs::read_dir(d.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_dropped_atomic_file_leaves_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("rom.gba");
+        let mut f = AtomicFile::create(&path).unwrap();
+        f.write_all(b"half").unwrap();
+        drop(f);
+        assert_eq!(std::fs::read_dir(d.path()).unwrap().count(), 0);
+    }
 }
