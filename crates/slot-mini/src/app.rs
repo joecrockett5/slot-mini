@@ -1556,15 +1556,17 @@ impl Faces {
                 slot_mini_ui::slot_front_light(),
             ),
         ];
+        // The PC's grid rests carts at its own scale.
+        let grid = paths.is_pc();
         let shadows = [
-            upload_pinned(gfx, cart_shadow()),
-            upload_pinned(gfx, gb_cart_shadow(GbShell::Notched)),
-            upload_pinned(gfx, gb_cart_shadow(GbShell::Rounded)),
+            upload_pinned(gfx, cart_shadow(), grid),
+            upload_pinned(gfx, gb_cart_shadow(GbShell::Notched), grid),
+            upload_pinned(gfx, gb_cart_shadow(GbShell::Rounded), grid),
         ];
         let backings = [
-            upload_pinned(gfx, cart_backing(None)),
-            upload_pinned(gfx, cart_backing(Some(GbShell::Notched))),
-            upload_pinned(gfx, cart_backing(Some(GbShell::Rounded))),
+            upload_pinned(gfx, cart_backing(None), grid),
+            upload_pinned(gfx, cart_backing(Some(GbShell::Notched)), grid),
+            upload_pinned(gfx, cart_backing(Some(GbShell::Rounded)), grid),
         ];
         let empty = title_line_face(EMPTY_TEXT);
         let empty = (upload(gfx, &empty), empty.w, empty.h);
@@ -1607,15 +1609,23 @@ impl Faces {
     }
 }
 
-/// Upload a face with a copy pre-scaled to slot's side scale.
-fn upload_pinned(gfx: &mut Renderer, f: slot_mini_ui::CartFace) -> TexId {
+/// Upload a face with a copy pre-scaled to slot's side scale, and to the
+/// grid's where there is one.
+fn upload_pinned(gfx: &mut Renderer, f: slot_mini_ui::CartFace, grid: bool) -> TexId {
     let full = Sprite::from_rgba(f.w, f.h, &f.rgba);
-    let side = full.resized(
-        (f.w as f32 * slot_mini_ui::SIDE_SCALE).round() as u32,
-        (f.h as f32 * slot_mini_ui::SIDE_SCALE).round() as u32,
-    );
+    let at = |scale: f32| {
+        full.resized(
+            (f.w as f32 * scale).round() as u32,
+            (f.h as f32 * scale).round() as u32,
+        )
+    };
+    let side = at(slot_mini_ui::SIDE_SCALE);
+    let cell = grid.then(|| at(slot_mini_ui::GRID_SCALE));
     let t = gfx.upload(full);
     gfx.pin_scaled(t, side);
+    if let Some(cell) = cell {
+        gfx.pin_scaled(t, cell);
+    }
     t
 }
 

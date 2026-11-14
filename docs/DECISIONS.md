@@ -355,3 +355,80 @@ built.
     by linking a call of every client entry point into the static armv7
     release binary. Brief 4 pays it; this brief links nothing into the
     launcher.
+
+## Brief 2: the PC app (`docs/briefs/02-pc-app.md`)
+
+62. **The PC app shares the device's app logic through the `slot-mini`
+    library, behind a cargo feature.** `slot-mini-pc` depends on `slot-mini`
+    with the feature `pc`; `Paths::pc` describes a PC library and
+    `Paths::is_pc()` gates every PC behaviour at run time. Without the
+    feature `is_pc()` is a constant `false`, so the Miyoo binary carries
+    none of it. Considered: moving the state machine to a new `slot-mini-app`
+    crate (a large move for brief 3 and 4 to rebase over, with no gain the
+    feature does not give) and copying the app into the PC crate (two apps
+    to keep alike). Cargo unifies features, so `cargo test --workspace` on a
+    desktop builds `slot-mini` with `pc` on; the device tests still run the
+    device paths because the gate is the `Paths` value. The armv7 job
+    excludes `slot-mini-pc`, so it builds and tests the library as the
+    device ships it. The parts of the library that only exist on the Miyoo
+    (`ingame`, the `aplay` sound player, CPU governor, Wi-Fi switch, the
+    update's exec) are `cfg(unix)`, so the library compiles for Windows.
+63. **The PC app's own folder is `App/slot-mini-pc`.** `slot_mini_store::
+    app_dir()` is a process-wide name (default `App/slot-mini`) the PC binary
+    sets once at start. A library folder can then be an SD card's copy
+    without the two apps reading each other's settings and caches.
+64. **Window, input and sound.** `winit` 0.30 for the window (per-monitor
+    DPI, fullscreen, focus events), `softbuffer` to present the 640x480
+    canvas scaled on the CPU (the app already draws in software; a GPU
+    surface would add a driver dependency for nothing), `gilrs` for
+    controllers (XInput and DirectInput on Windows, evdev on Linux;
+    positions come as South/East/West/North, which is what "by position"
+    needs). SDL2 was the alternative: one dependency for all three, but a
+    C library to build or ship as a DLL on Windows. The window and devices
+    live in the binary; everything else is a headless `PcApp` that tests
+    drive. Sound goes through a small mixer on `tinyaudio` (WASAPI on
+    Windows), only built for Windows; elsewhere the app is silent.
+    Native dialogs come from `rfd`.
+65. **How RetroArch is driven** (read from libretro/RetroArch master):
+    `retroarch -L <core> <rom> --appendconfig <file>`. Settings from an
+    appended file are written back into the main config when RetroArch
+    saves it on exit (`configuration.c`, `config_save_file`), so the
+    appended file sets `config_save_on_exit = "false"`. With
+    `sort_savefiles_enable` / `sort_savestates_enable` the folder is the
+    core's `library_name` (`runloop.c`, `runloop_path_set_redirect`): mGBA,
+    gpSP, Gambatte, the names Onion uses, so saves land in the same
+    `Saves/CurrentProfile/{saves,states}/<core>/` layout. The auto state is
+    `<stem>.state.auto`. Cores are looked for in `libretro_directory` from
+    `retroarch.cfg`, else `cores\` beside the executable. A missing core is
+    offered from `https://buildbot.libretro.com/nightly/windows/x86_64/
+    latest/<core>_libretro.dll.zip` (checked: 200 for mgba).
+66. **PC cores default to mGBA (GBA) and Gambatte (GB, GBC).** Onion's
+    defaults are tuned to the Miyoo's CPU (gpSP); a PC has no such limit and
+    mGBA is the accurate one. The per-game choice uses the same
+    `.game_config` files, so brief 3 can read the PC's choice from them.
+67. **The grid is a storage case: carts stand in rows on rails.** Four
+    columns at 0.36 of a cart's full size (GBA: three rows on screen, Game
+    Boy: two), the selected cart lifts 9 px and grows 14%, rows scroll on
+    the shelf's spring to keep it in view. The slot, footer and shelf name
+    stay where the shelf has them. Chosen over a flat table of covers (not
+    slot's look) and over a smaller scale with five columns (text labels
+    stop being readable). Rendered and looked at: `tests/golden/grid_*.png`.
+    D-pad moves by cell (left/right run on through the rows, up/down stop at
+    the ends), L1/R1 change shelf, **R2 toggles the view**, and **L2 held
+    with the D-pad jumps a letter** (Up/Down are taken by the rows). A, Y,
+    X, SELECT and START are the shelf's. Insert: the case fades while the
+    cart flies from its cell to where the shelf holds it (180 ms), then
+    slot's insert plays unchanged; eject reverses it. The view is kept per
+    shelf in `data/views.txt`; the PC defaults to grid. The Miyoo has no
+    grid until brief 4 (`grid_on()` needs `is_pc()`).
+68. **Grid faces are pre-scaled like the shelf's** (#13, #14): a shelf shown
+    as a grid has its faces' pinned copy made at the grid's scale instead of
+    the side scale, so resting carts are 1:1 blits; only the lifting cart is
+    scaled. Measured with `examples/perf.rs` (200 extra carts, Down held):
+    host avg 1.5 ms, worst 3.9 ms a frame; qemu-armv7 avg 18 ms, worst 33 ms,
+    against the shelf's 4.0 / 21 ms. The blits are not the cost (logged:
+    only the lifting cart leaves the 1:1 path): a row brings four new faces
+    where a shelf step brings one, and the frame waits for them. Per cart
+    the two views cost about the same. Fine on a PC; brief 4 should build a
+    second row ahead or slow the repeat before the Miyoo gets the grid.
+    Textures: 12.9 MB against 9.1 MB (PC only).

@@ -157,9 +157,7 @@ pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart
         .filter(|c| {
             !cached
                 .entry(c.platform)
-                .or_insert_with(|| {
-                    slot_mini_store::listing(&dir(root).join(c.platform.dir_name()))
-                })
+                .or_insert_with(|| slot_mini_store::listing(&dir(root).join(c.platform.dir_name())))
                 .contains_key(&format!("{}.{EXT}", c.stem).to_lowercase())
         })
         .cloned()
