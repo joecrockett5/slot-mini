@@ -49,6 +49,8 @@ pub const GRID_LIFT_MS: Millis = 180;
 #[cfg(feature = "pc")]
 #[path = "app_pc.rs"]
 mod pc;
+#[cfg(feature = "pc")]
+pub use pc::Pointer;
 
 const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
@@ -138,6 +140,9 @@ struct Faces {
     wifi: Option<(TexId, u32, u32)>,
     /// slot's charging bolt, shown left of the battery while charging.
     bolt: Option<TexId>,
+    /// The PC's view button, as it shows on the shelf and on the grid.
+    #[cfg(feature = "pc")]
+    view: Option<[(TexId, u32, u32); 2]>,
 }
 
 #[derive(Default)]
@@ -219,6 +224,10 @@ pub struct App {
     grid: Grid,
     grid_settle: Option<Millis>,
     l2_held: bool,
+    /// A small icon left of the clock that the host owns (the PC's sync
+    /// status, when it has one).
+    #[cfg(feature = "pc")]
+    status_icon: Option<(TexId, u32, u32)>,
     pub exit: Option<Exit>,
 }
 
@@ -302,6 +311,8 @@ impl App {
             grid: Grid::new(),
             grid_settle: None,
             l2_held: false,
+            #[cfg(feature = "pc")]
+            status_icon: None,
             exit: None,
         };
         if app.paths.is_pc() {
@@ -1519,6 +1530,8 @@ impl App {
         if self.wifi {
             draw_wifi_icon(self.percent.printed, self.statics.wifi, out);
         }
+        #[cfg(feature = "pc")]
+        self.draw_pc_footer(out);
     }
 }
 
@@ -1587,6 +1600,10 @@ impl Faces {
             let w = s.w;
             (gfx.upload(s), w)
         });
+        #[cfg(feature = "pc")]
+        let view = paths
+            .is_pc()
+            .then(|| pc::view_faces(theme.footer_ink).map(|f| (upload(gfx, &f), f.w, f.h)));
         Faces {
             heart,
             shadows,
@@ -1596,6 +1613,8 @@ impl Faces {
             ground,
             wifi,
             bolt,
+            #[cfg(feature = "pc")]
+            view,
         }
     }
 

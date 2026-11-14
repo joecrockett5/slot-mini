@@ -8,14 +8,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use slot_mini::status::Status;
+use slot_mini::Pointer;
 use slot_mini_gfx::{SCREEN_H, SCREEN_W};
 use slot_mini_pc::input::{self, Device};
 use slot_mini_pc::pcapp::PcOptions;
-use slot_mini_pc::present::{present, Border};
+use slot_mini_pc::present::{present, Border, View};
 use slot_mini_pc::{config, retroarch, PcApp, Request};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowId};
@@ -24,6 +25,13 @@ use winit::window::{Fullscreen, Window, WindowId};
 const FRAME: Duration = Duration::from_micros(16_667);
 /// How often to look whether the game has ended.
 const IN_GAME: Duration = Duration::from_millis(100);
+
+/// Two clicks this close together, in time and in frame pixels, are a
+/// double click.
+const DOUBLE_MS: u64 = 400;
+const DOUBLE_PX: f32 = 8.0;
+/// A touchpad's pixels to a wheel's notch.
+const NOTCH_PX: f64 = 40.0;
 
 /// The footer's status on a PC: the clock, and no battery to show.
 struct PcStatus;
@@ -54,6 +62,13 @@ struct Shell {
     /// The window needs drawing again though the frame did not change.
     stale: bool,
     stick: (f32, f32),
+    /// Where the frame is in the window, as last drawn.
+    view: View,
+    /// The pointer, in the frame's pixels, when it is over the frame.
+    pointer: Option<(f32, f32)>,
+    last_click: Option<(u64, f32, f32)>,
+    /// Wheel movement not yet a whole notch (touchpads scroll in pixels).
+    wheel: f64,
 }
 
 impl Shell {
@@ -135,7 +150,7 @@ impl Shell {
         let Ok(mut buffer) = surface.buffer_mut() else {
             return;
         };
-        present(
+        self.view = present(
             &self.pc.frame,
             &mut self.border,
             self.pc.app.wallpaper(),
@@ -250,6 +265,53 @@ impl ApplicationHandler for Shell {
                     self.pc.key(key, down);
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                let at = self
+                    .view
+                    .to_frame(SCREEN_W, SCREEN_H, position.x, position.y);
+                if at != self.pointer {
+                    self.pointer = at;
+                    if let Some((x, y)) = at {
+                        self.pc.pointer(Pointer::Move(x, y));
+                    }
+                }
+            }
+            WindowEvent::CursorLeft { .. } => self.pointer = None,
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button,
+                ..
+            } => match (button, self.pointer) {
+                (MouseButton::Left, Some((x, y))) => {
+                    let now = self.now();
+                    let double = self.last_click.is_some_and(|(at, lx, ly)| {
+                        now - at <= DOUBLE_MS
+                            && (x - lx).abs() <= DOUBLE_PX
+                            && (y - ly).abs() <= DOUBLE_PX
+                    });
+                    // A third click starts over.
+                    self.last_click = (!double).then_some((now, x, y));
+                    self.pc.pointer(match double {
+                        true => Pointer::Double(x, y),
+                        false => Pointer::Click(x, y),
+                    });
+                }
+                (MouseButton::Right | MouseButton::Back, _) => self.pc.pointer(Pointer::Back),
+                _ => {}
+            },
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Wheel up (positive) is towards earlier carts.
+                self.wheel -= match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y as f64,
+                    MouseScrollDelta::PixelDelta(p) => p.y / NOTCH_PX,
+                };
+                let lines = self.wheel.trunc();
+                if lines != 0.0 {
+                    self.wheel -= lines;
+                    let (x, y) = self.pointer.unwrap_or((0.0, 0.0));
+                    self.pc.pointer(Pointer::Wheel(x, y, lines as i32));
+                }
+            }
             _ => {}
         }
     }
@@ -303,6 +365,10 @@ fn main() {
         mods: ModifiersState::empty(),
         stale: true,
         stick: (0.0, 0.0),
+        view: View::fit(SCREEN_W, SCREEN_H, SCREEN_W, SCREEN_H),
+        pointer: None,
+        last_click: None,
+        wheel: 0.0,
     };
     let el = match EventLoop::new() {
         Ok(el) => el,

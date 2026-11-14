@@ -9,7 +9,7 @@ use std::time::Duration;
 use slot_mini::paths::Pc;
 use slot_mini::sound::Sound;
 use slot_mini::status::Status;
-use slot_mini::{App, Exit, Options, Paths};
+use slot_mini::{App, Exit, Options, Paths, Pointer};
 use slot_mini_gfx::{Button, Canvas, Event, Sprite, SCREEN_H, SCREEN_W};
 use slot_mini_store::{Cart, Core};
 
@@ -185,6 +185,13 @@ impl PcApp {
     pub fn stick(&mut self, x: f32, y: f32) {
         for (b, down) in self.stick.moved(x, y) {
             self.button(b, down, Device::Controller);
+        }
+    }
+
+    /// The mouse, in the frame's pixels.
+    pub fn pointer(&mut self, p: Pointer) {
+        if !self.in_game() {
+            self.app.pointer(p);
         }
     }
 
