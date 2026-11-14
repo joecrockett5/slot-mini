@@ -655,3 +655,166 @@ built.
     leave their faces alone; after a sync that brought labels or changed
     shell lines the shelf is restocked in place (`App::relabel`), with
     the selection kept.
+
+## Brief 4: sync and the grid view on the Miyoo (`docs/briefs/04-device-sync.md`)
+
+101. **Sync on the Miyoo is one worker thread, and nothing at all until
+    paired.** An unpaired start reads `data/sync/client.txt`, finds it
+    missing and stops there: no thread, no socket, no hash. Once paired
+    the worker is made the first time there is a job for it and then
+    sleeps on a channel. The sync client is opened per job and dropped
+    after it, so no connection and no index is held between syncs. Every
+    network call and every hash is on that thread; the app reads a shared
+    view of what to draw. No async runtime, `ureq` and `ring` as in the
+    sync crate.
+102. **A launch closes a gate on the worker.** The worker reaches the card
+    through a gate the app shuts before it hands a game to Onion. A local
+    write under way finishes (files are written to a temporary name and
+    renamed, as everywhere), the worker stops before its next one, and
+    the game starts. So a launch never waits on the network beyond the
+    cap in #103, and RetroArch never opens a save half written.
+103. **The pull before a launch has 1.5 seconds, counted from the press.**
+    `LAUNCH_CAP`. The insert animation takes 0.73 s by itself, so a PC
+    that answers in time costs nothing, and the slowest case adds about
+    three quarters of a second. The probe that decides whether the PC is
+    there at all has 400 ms before a launch (`PROBE_LAUNCH`), 1 s for a
+    quiet sync and 3 s when the player asked (Sync now). Past the cap the
+    game starts with the save the card has, and the next sync sorts it
+    out by the rules in `docs/SYNC.md`.
+104. **64 MB of the card is never used by sync.** `MARGIN` is 48 MB on
+    top of the sync crate's own 16 MB reserve. Onion writes save states,
+    screenshots and logs to the same FAT card, and a card that fills
+    mid-game loses the save being written. Sync sees the free space less
+    the margin (`Layout::with_free_space`); a game that does not fit is
+    left off and counted in the summary ("2 games did not fit on the card
+    (48 MB)."), and saves, which are small, are still exchanged.
+105. **Automatic syncs, and when.** All are scope `Auto`, all need a
+    pairing, Auto sync on and Wi-Fi up, and all fail without a word
+    (the icon alone changes):
+    - at start, after the first frame is on the screen and the shelf is
+      at rest, so the first frame's time is untouched (measured, #116);
+    - on returning to the shelf after a game in boot-launcher mode, which
+      is that same start, since slot-mini is restarted by Onion;
+    - on a verified poke from the PC, answered only with an `Auto` sync
+      and only while the shelf is at rest (never over the studio, a menu
+      or a launch);
+    - a `Game` pull beside a launch (#103);
+    - in app mode, the in-game helper pushes the game's save once
+      RetroArch has exited (#108).
+    Sync now cancels a quiet sync under way and starts its own, so the
+    player never waits behind one they did not ask for.
+106. **No new timers.** The poke listener is a thread blocked on its
+    socket; a poke sets a flag the app reads on the wake it already has
+    (at most once a second when idle, #44). The worker blocks on its
+    channel. Nothing polls. The one exception is the pairing page while
+    it waits for the PC to confirm, which asks once a second and only
+    while that page is open.
+107. **The one gap: a game started from Onion's own menu.** slot-mini is
+    not running then and its helper is not beside the game, so that
+    game's save is neither pulled before nor pushed after. It is caught
+    at slot-mini's next start. If the same game was played on the PC in
+    between, that is a conflict like any other: the later save is in use
+    and the other is kept. The README says so.
+108. **The helper's push after a game.** In app mode Onion returns to its
+    own menu after a game, so nothing of slot-mini's runs unless the
+    helper does it. The launcher passes `--push` to the helper only in
+    app mode, only when paired with Auto sync on; with the in-game menu
+    off the helper still runs for the push alone (`--no-menu`) and never
+    touches the buttons. It pushes after RetroArch has exited and
+    written its state, has 8 s in all (`AFTER_GAME_CAP`), gives way at
+    once to a shutdown (`.offOrder`, SIGTERM) and is never the reason a
+    power-off waits. Unpaired, the helper is started exactly as before.
+109. **"Unreachable" is decided by a TCP probe, then one rediscovery.**
+    The paired PC's last address is tried first; if it does not accept,
+    the PC is looked for again by name for 0.8 s (its address may have
+    changed), and only then is the sync called unreachable. A PC that is
+    simply off costs an automatic sync about a second on the worker and
+    nothing on the frame.
+110. **The status icon.** Beside Wi-Fi in the footer, drawn with strokes
+    like the Wi-Fi fan so it takes the theme's footer ink: synced,
+    syncing, unreachable, conflict. Nothing is drawn while unpaired, so
+    every unpaired golden is unchanged. How the last sync ended is kept
+    in `data/sync/status.txt` so the icon survives a game. A conflict
+    stays shown until a later sync reports none, because it is settled on
+    the PC (brief 3's Conflicts page) and a quiet sync that moved nothing
+    must not hide it.
+111. **The Sync page.** MENU -> Settings -> Sync: "Pair with a PC" (or
+    the paired PC's name), Auto sync, Unpair. Pairing lists the PCs
+    found, shows the six-digit code and asks for A when the PC shows the
+    same one. Unpair takes two presses of A, with "A again unpairs.
+    Nothing is deleted." between them; it forgets the key and removes
+    the status file, and the card's games and saves stay. MENU has a
+    Sync now row only while paired, so the unpaired MENU is as it was.
+    `auto_sync` is written to `settings.txt` only once it has been
+    turned off (or is already in the file), so the file of someone who
+    never pairs does not change.
+112. **Settings scrolls.** With View and Sync there are more rows than
+    the sticker holds; it shows seven and scrolls, with the rows at the
+    edges fading. The five `about*` goldens that show the Settings list
+    were regenerated for the new rows and looked at; the rest are
+    byte-identical.
+113. **After a sync the shelf is brought up to date in place.** Rescan,
+    the label cache's entries for what arrived dropped, favourites and
+    shell lines read again, the selection kept by stem. No restart.
+114. **Seams for tests, read only from the environment.**
+    `SLOT_MINI_SIM_WIFI` (Wi-Fi up or down without the device's files),
+    `SLOT_MINI_SYNC_DISCOVER` and `SLOT_MINI_SYNC_POKE` (a local hub's
+    address and a local poke port instead of the broadcast), and
+    `SLOT_MINI_TEST_HELPER`. Every network test talks to a hub on
+    127.0.0.1.
+115. **The grid on the Miyoo.** Per shelf, kept in `data/views.txt`,
+    the scrolling shelf by default. R2 toggles it, and MENU -> Settings
+    -> View does the same for the shelf you are on, so it can be found
+    without knowing the button. Four rows and no shortcut bar (the bar
+    is the PC's). The legend "R2 ROW" is in the grid's footer only: a
+    legend on the shelf's footer would have changed every carousel
+    golden, which the brief rules out, and the Settings row covers
+    discovery. The legend is drawn in the footer's ink (`footer_hint_face`)
+    so it reads on light and dark themes. The grid's shadows and legend
+    are made the first time a grid is shown, so a player who never
+    presses R2 pays nothing for them, at start or in memory.
+116. **What #68 asked brief 4 to do, and what it cost.** Measured with
+    `examples/perf.rs` under qemu-armv7, 200 extra carts, Down held:
+    - the grid's 18 ms average was not the faces. `row_h` walked the
+      whole shelf and was called for every cart, every frame; it is now
+      worked out once per walk (shared code, so the PC's grid gains too).
+      12.5 ms average with 30 of 317 frames over 16.7 ms became 2.6 ms;
+    - the row after the visible ones is built ahead (`GRID_AHEAD = 1`),
+      and a held Up or Down moves one row per 110 ms at its fastest
+      (`GRID_ROW_GAP_MS`), so the faces of a row are ready before it
+      scrolls in. Worst frame 13 to 16 ms unpaced, 4 to 10 ms paced;
+    - only the selected cart keeps its whole face; the others keep the
+      copy scaled for the grid and free the full pixels (`keep_pinned`).
+      A grid of 207 carts peaked at 41.3 MB before this and 36.8 MB
+      after, with textures at 7.3 MB against the shelf's 9.1. The frame
+      does not wait for the selected cart's whole face; it lifts with
+      the scaled copy for the frame or two that takes.
+    Nothing was dropped from the picture: the lift, the insert, the
+    shadows and the hearts are the PC's. What is simpler is the pace of a
+    held Up or Down and the four-row page.
+    Figures, branch against 0.6.6: grid average 2.5 ms a frame, no frame
+    over 16.7 ms, the one frame that turns a shelf into a grid 77 to
+    100 ms (it builds the shadows); shelf average 2.8 to 3.7 ms, as
+    before.
+117. **Budgets, measured.** No device was available; the figures are from
+    the armv7 binary under qemu and from the x86-64 build, as in
+    PROGRESS.md, and the device checklist asks for the real ones.
+    - First frame, real binary under qemu-armv7, 207 carts: 341 to
+      385 ms, against 336 to 388 ms for 0.6.6. Unchanged, paired or not,
+      since the first sync waits for the first frame.
+    - Idle: unpaired, no sync thread and no socket. Paired, two threads,
+      both blocked (#106); the idle wake is the one that was there.
+    - Memory (VmHWM, x86-64): scrolling a shelf of 207 carts 37.5 MB,
+      the grid 36.8 MB, during Sync now moving 96 MB of ROMs 36.3 MB
+      (`tests/sync_budget.rs` holds it under 40 MB with the real
+      binary). Sync adds under 1 MB: files are streamed and hashed in
+      pieces, never held whole.
+    - Binary (armv7, release): 5,278,420 to 5,651,700 bytes, +373 KB
+      (7%): the sync crate, its HTTP client (`ureq` without TLS) and
+      `ring`.
+118. **Tests made steadier along the way.** A golden taken straight after
+    a `wait_until` could catch the frame drawn before the change, so
+    those tests draw once more first; and `shelf_fetched_label`, which
+    failed about one run in twenty on `main`, now runs past the shelf
+    title's fade before comparing. No tolerance was loosened and no test
+    was skipped.
