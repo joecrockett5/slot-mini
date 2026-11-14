@@ -104,7 +104,9 @@ fn a_miyoo_pairs_through_the_pcs_screens() {
         &mut link,
         Scope::Full,
         &mut |event| {
-            if let slot_mini_sync::Event::Transfer { index, .. } = event {
+            // Before the Miyoo sends its fourth file the PC has heard of
+            // three, and hears nothing more until this returns.
+            if let slot_mini_sync::Event::Transfer { index, done: 0, .. } = event {
                 rig.frames(2);
                 if index == 3 {
                     seen = rig.page().lines;
