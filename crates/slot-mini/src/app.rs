@@ -228,6 +228,13 @@ pub struct App {
     /// status, when it has one).
     #[cfg(feature = "pc")]
     status_icon: Option<(TexId, u32, u32)>,
+    /// What the PC app's rows on MENU show, and the one last chosen.
+    #[cfg(feature = "pc")]
+    host: crate::about::Host,
+    #[cfg(feature = "pc")]
+    host_action: Option<crate::about::HostRow>,
+    /// The buttons the legends name.
+    glyphs: crate::legend::Glyphs,
     pub exit: Option<Exit>,
 }
 
@@ -247,9 +254,11 @@ impl App {
         let statics = Faces::new(&mut gfx, &paths, &theme, stage, opts.seed);
         let faces = CartFaces::spawn(paths.sd.clone());
         let carts = library::scan(&paths);
-        let sound_given = opts.sound.is_some();
+        // The PC app always hands its speakers in, and the setting rules.
+        let sound_given = opts.sound.is_some() && !paths.is_pc();
         let sound: Box<dyn crate::sound::Sound> = match opts.sound {
             Some(s) => s,
+            None if paths.is_pc() => Box::new(crate::sound::Silent),
             #[cfg(unix)]
             None => Box::new(
                 crate::sound::Player::onion(&paths.sd, paths.cache().join("sounds"))
@@ -313,6 +322,11 @@ impl App {
             l2_held: false,
             #[cfg(feature = "pc")]
             status_icon: None,
+            #[cfg(feature = "pc")]
+            host: crate::about::Host::default(),
+            #[cfg(feature = "pc")]
+            host_action: None,
+            glyphs: crate::legend::Glyphs::default(),
             exit: None,
         };
         if app.paths.is_pc() {
@@ -849,7 +863,9 @@ impl App {
             s.release_hold();
         }
         self.a_held = None;
-        self.studio = Some(crate::studio_ui::StudioUi::open(cart, at, index));
+        let mut ui = crate::studio_ui::StudioUi::open(cart, at, index);
+        ui.glyphs = self.glyphs;
+        self.studio = Some(ui);
         self.phase = Phase::Studio;
     }
 
@@ -875,8 +891,12 @@ impl App {
             s.release_hold();
         }
         self.a_held = None;
-        if self.core_statics.is_none() {
-            self.core_statics = Some(crate::core_scene::Statics::new(&mut self.gfx));
+        match self.core_statics.as_mut() {
+            Some(statics) => statics.set_glyphs(&mut self.gfx, self.glyphs),
+            None => {
+                self.core_statics =
+                    Some(crate::core_scene::Statics::new(&mut self.gfx, self.glyphs))
+            }
         }
         self.core = Some(crate::core_scene::CoreScene::open(
             &self.paths,
@@ -933,6 +953,11 @@ impl App {
         self.a_held = None;
         let mut about = crate::about::About::new(&self.paths);
         about.diag = self.cpu.clone();
+        about.glyphs = self.glyphs;
+        #[cfg(feature = "pc")]
+        if self.paths.is_pc() {
+            about.for_host(self.host.clone());
+        }
         self.about = Some(about);
         self.phase = Phase::About;
     }
@@ -968,6 +993,8 @@ impl App {
                 self.phase = Phase::Shelf;
             }
             crate::about::Outcome::ExitToOnion => self.exit = Some(Exit::ToOnion),
+            #[cfg(feature = "pc")]
+            crate::about::Outcome::Host(row) => self.host_action = Some(row),
         }
     }
 

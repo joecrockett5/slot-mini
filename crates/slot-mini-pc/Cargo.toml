@@ -28,6 +28,10 @@ winit = "0.30"
 softbuffer = "0.4"
 gilrs = "0.11"
 libc = { workspace = true }
+ureq = { workspace = true }
+serde_json = { workspace = true }
+crc32fast = { workspace = true }
+miniz_oxide = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 rfd = { version = "0.15", default-features = false }

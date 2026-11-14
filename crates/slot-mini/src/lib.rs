@@ -21,6 +21,7 @@ pub mod fixture;
 pub mod ingame;
 pub mod label_cache;
 pub mod launch;
+pub mod legend;
 pub mod library;
 pub mod onion;
 pub mod paths;

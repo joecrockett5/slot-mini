@@ -4,8 +4,11 @@
 //! Everything here runs without a window, so tests drive it: `main.rs`
 //! only owns the window, the controllers and the native dialogs.
 
+pub mod audio;
 pub mod config;
+pub mod desktop;
 pub mod input;
+pub mod net;
 pub mod pcapp;
 pub mod present;
 pub mod retroarch;

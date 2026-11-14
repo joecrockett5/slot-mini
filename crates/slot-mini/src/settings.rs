@@ -76,7 +76,8 @@ impl Settings {
         let m = ini::read(&paths.data(), SETTINGS_FILE);
         let d = Settings::default();
         Settings {
-            sounds: on(m.get("sounds"), d.sounds),
+            // A PC has speakers and nothing to set up: on unless turned off.
+            sounds: on(m.get("sounds"), d.sounds || paths.is_pc()),
             label_service: on(m.get("online_labels"), d.label_service),
             art_host: m
                 .get("art_host")

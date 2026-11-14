@@ -432,3 +432,46 @@ built.
     the two views cost about the same. Fine on a PC; brief 4 should build a
     second row ahead or slow the repeat before the Miyoo gets the grid.
     Textures: 12.9 MB against 9.1 MB (PC only).
+69. **The mouse.** The grid follows the pointer; the carousel does not
+    (every cart passing under it would pull the next along). A click on a
+    side cart centres it, a double click on the selected cart inserts it,
+    the wheel walks carts (rows in the grid), the right button is B. On
+    MENU the row under the pointer is selected and a click is A; on other
+    lists the wheel walks and the right button goes back. The view button
+    sits left of the clock and shows the view it leads to; the host's
+    status icon (brief 3's sync state) goes left of that
+    (`App::set_status_icon`).
+70. **Legends name the device in hand** (`slot_mini::legend::Glyphs`). The
+    last device to send input decides. A controller shows the Miyoo's
+    letters: with the layout setting "by position" they are where the
+    Miyoo has them, "by letter" (Xbox) swaps A/B and X/Y so the letters on
+    the pad are the ones on screen. The keyboard shows key caps drawn as
+    slot's hint pills: ENTER (A), X (B), S (X), A (Y), Q/W (L1/R1), BKSP
+    (SELECT), SPACE (START), ESC (MENU). The device's legends are untouched
+    (goldens identical).
+71. **MENU on the PC** keeps the sticker (model "SLOT-MINI PC", serial
+    prefix SP, the PC crate's version, credits to slot, RetroArch and the
+    Miyoo build) and swaps the device's rows for the host's
+    (`about_pc.rs`): Settings, Import from SD card, the update row, Quit.
+    Settings: Sounds, Recents shelf, Online labels, Fullscreen, Controller,
+    Folders (RetroArch, Library, missing cores), Sync (a placeholder page
+    for brief 3). The shared app only reports which host row was chosen
+    (`take_host_action`); the PC app does the work and pushes labels back
+    (`set_host`), so no PC I/O lives in the shared crate.
+72. **Sounds default on for the PC** and the setting alone rules there (the
+    Miyoo keeps its default and its `--sound` flag). Mixing is our own
+    (`audio::Mixer`, tested); output is `tinyaudio` on Windows (WASAPI, no
+    extra DLL) and silent elsewhere, so CI needs no sound device.
+73. **Updates are a link.** The check lists the repo's releases, takes the
+    highest published `pc-v<x.y.z>`, and A on "Get slot-mini PC x" opens
+    its page in the browser (`https` only). No self-replacing exe: less to
+    go wrong on Windows, and the brief allows it.
+74. **Missing cores**: MENU > Settings > Folders shows which are missing and
+    offers them from libretro's buildbot. It takes two presses (the first
+    says what will be downloaded and from where), an existing core is never
+    replaced, and the zip is unpacked by our own small reader over
+    `miniz_oxide` (already in the tree) rather than a zip crate.
+75. **Native dialogs are `rfd`** on Windows only (folder and file pickers);
+    elsewhere they answer "nothing chosen", which is what headless tests
+    and CI need. Changing the library folder rebuilds the app
+    (`Request::Reopen`) rather than re-pointing a live one.

@@ -1983,10 +1983,13 @@ dependencies = [
 name = "slot-mini-pc"
 version = "0.1.0"
 dependencies = [
+ "crc32fast",
  "gilrs",
  "libc",
+ "miniz_oxide 0.8.9",
  "png",
  "rfd",
+ "serde_json",
  "slot-mini",
  "slot-mini-gfx",
  "slot-mini-store",
@@ -1994,6 +1997,7 @@ dependencies = [
  "softbuffer",
  "tempfile",
  "tinyaudio",
+ "ureq",
  "windows-sys 0.59.0",
  "winit",
  "winresource",

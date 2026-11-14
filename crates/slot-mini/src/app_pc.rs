@@ -9,6 +9,8 @@ use slot_mini_store::Cart;
 use slot_mini_ui::{UndoFace, FOOTER_Y, HINT_H};
 
 use super::{App, Phase, NOT_STARTED};
+use crate::about::{Host, HostRow};
+use crate::legend::Glyphs;
 use crate::library;
 use crate::settings::{Recents, State};
 
@@ -97,6 +99,68 @@ impl App {
         });
     }
 
+    /// What the PC app's rows on MENU show.
+    pub fn set_host(&mut self, host: Host) {
+        if host == self.host {
+            return;
+        }
+        if let Some(about) = self.about.as_mut() {
+            about.set_host(host.clone());
+        }
+        self.host = host;
+    }
+
+    pub fn host(&self) -> &Host {
+        &self.host
+    }
+
+    /// The PC row chosen on MENU since this was last asked.
+    pub fn take_host_action(&mut self) -> Option<HostRow> {
+        self.host_action.take()
+    }
+
+    /// A line under MENU's rows (what a host row came to).
+    pub fn set_about_note(&mut self, note: Option<String>) {
+        if let Some(about) = self.about.as_mut() {
+            about.note = note;
+        }
+    }
+
+    /// The player picked up the keyboard or a controller: the legends
+    /// name its buttons.
+    pub fn set_glyphs(&mut self, glyphs: Glyphs) {
+        if glyphs == self.glyphs {
+            return;
+        }
+        self.glyphs = glyphs;
+        if let Some(about) = self.about.as_mut() {
+            about.glyphs = glyphs;
+        }
+        if let Some(ui) = self.studio.as_mut() {
+            ui.glyphs = glyphs;
+        }
+        if let Some(statics) = self.core_statics.as_mut() {
+            statics.set_glyphs(&mut self.gfx, glyphs);
+        }
+    }
+
+    /// The mouse on MENU: the row under it is selected, a click chooses it.
+    fn about_pointer(&mut self, p: Pointer) {
+        let (Pointer::Move(_, y) | Pointer::Click(_, y)) = p else {
+            return;
+        };
+        let Some(about) = self.about.as_mut() else {
+            return;
+        };
+        let Some(row) = about.row_at(y) else {
+            return;
+        };
+        about.row = row;
+        if matches!(p, Pointer::Click(..)) {
+            self.tap(Button::A);
+        }
+    }
+
     /// Whether the app is on the plain shelf, where the mouse picks carts.
     fn on_shelf(&self) -> bool {
         self.phase == Phase::Shelf && self.core.is_none()
@@ -109,6 +173,9 @@ impl App {
 
     /// The mouse did something, in the frame's own pixels.
     pub fn pointer(&mut self, p: Pointer) {
+        if self.phase == Phase::About && matches!(p, Pointer::Move(..) | Pointer::Click(..)) {
+            return self.about_pointer(p);
+        }
         if !self.on_shelf() {
             // Other screens are lists: the wheel walks them and the right
             // button goes back.

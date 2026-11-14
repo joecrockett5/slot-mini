@@ -13,7 +13,7 @@ use slot_mini_gfx::{SCREEN_H, SCREEN_W};
 use slot_mini_pc::input::{self, Device};
 use slot_mini_pc::pcapp::PcOptions;
 use slot_mini_pc::present::{present, Border, View};
-use slot_mini_pc::{config, retroarch, PcApp, Request};
+use slot_mini_pc::{config, desktop, retroarch, PcApp, Request};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -214,6 +214,26 @@ impl Shell {
                     window.set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
                 }
                 Request::Quit => self.quit(el),
+                Request::PickLibrary => {
+                    let start = self.pc.library().to_path_buf();
+                    let folder = desktop::pick_folder("Choose the library folder", &start);
+                    self.pc.chose_library(folder);
+                }
+                Request::PickRetroArch => {
+                    let exe = desktop::pick_file("Where is RetroArch?", retroarch::EXE);
+                    self.pc.chose_retroarch(exe);
+                }
+                Request::PickCard => {
+                    let start = std::path::PathBuf::new();
+                    let card = desktop::pick_folder("Choose the Onion SD card", &start);
+                    self.pc.chose_card(card);
+                }
+                Request::OpenUrl(url) => desktop::open_url(&url),
+                Request::Reopen => {
+                    self.pc.close(None);
+                    self.pc = open_pc(self.start.elapsed().as_millis() as u64);
+                    self.stale = true;
+                }
             }
         }
     }
@@ -335,7 +355,8 @@ impl ApplicationHandler for Shell {
     }
 }
 
-fn main() {
+/// The app on the library the config names (or the default one).
+fn open_pc(now: u64) -> PcApp {
     let config_dir = config::dir();
     let library = config::Config::read(&config_dir)
         .library
@@ -347,13 +368,19 @@ fn main() {
         config_dir,
         places: retroarch::usual_places(),
         status: Box::new(PcStatus),
-        sound: None,
+        sound: Some(Box::new(slot_mini_pc::audio::Speakers::new())),
         face_wait: slot_mini::Options::default().face_wait,
         seed,
+        releases_url: slot_mini_pc::net::releases_url(slot_mini_pc::net::REPO),
+        buildbot: retroarch::BUILDBOT.to_string(),
     };
+    PcApp::new(&library, opts, now)
+}
+
+fn main() {
     let start = Instant::now();
     let mut shell = Shell {
-        pc: PcApp::new(&library, opts, 0),
+        pc: open_pc(0),
         window: None,
         surface: None,
         gilrs: gilrs::Gilrs::new()
