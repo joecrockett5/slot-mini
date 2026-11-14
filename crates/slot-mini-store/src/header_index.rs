@@ -11,7 +11,9 @@ use std::time::UNIX_EPOCH;
 
 use crate::gb::Header;
 
-const FILE: &str = "App/slot-mini/cache/headers";
+fn file(root: &Path) -> PathBuf {
+    root.join(crate::app_dir()).join("cache/headers")
+}
 
 type Stamp = (u64, u64);
 
@@ -138,7 +140,7 @@ pub fn save(root: &Path) -> std::io::Result<()> {
         out.push_str(&line);
         out.push('\n');
     }
-    let path = root.join(FILE);
+    let path = file(root);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -150,7 +152,7 @@ pub fn save(root: &Path) -> std::io::Result<()> {
 }
 
 pub fn load(root: &Path) {
-    let text = std::fs::read(root.join(FILE))
+    let text = std::fs::read(file(root))
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .unwrap_or_default();
     let loaded: HashMap<PathBuf, Entry> = text.lines().filter_map(|l| parse(root, l)).collect();

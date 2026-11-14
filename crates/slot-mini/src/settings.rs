@@ -216,6 +216,51 @@ impl Recents {
     }
 }
 
+/// Which shelves show as a grid (`views.txt`: `<shelf key> = grid|shelf`).
+/// A shelf that is not listed takes the host's default.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Views {
+    chosen: Vec<(String, bool)>,
+}
+
+const VIEWS_FILE: &str = "views.txt";
+
+impl Views {
+    pub fn read(paths: &Paths) -> Views {
+        let chosen = ini::read(&paths.data(), VIEWS_FILE)
+            .into_iter()
+            .filter_map(|(k, v)| match v.as_str() {
+                "grid" => Some((k, true)),
+                "shelf" => Some((k, false)),
+                _ => None,
+            })
+            .collect();
+        Views { chosen }
+    }
+
+    pub fn is_grid(&self, shelf: &str, default: bool) -> bool {
+        self.chosen
+            .iter()
+            .find(|(k, _)| k == shelf)
+            .map_or(default, |(_, g)| *g)
+    }
+
+    pub fn set(&mut self, shelf: &str, grid: bool) {
+        self.chosen.retain(|(k, _)| k != shelf);
+        self.chosen.push((shelf.to_string(), grid));
+        self.chosen.sort();
+    }
+
+    pub fn write(&self, paths: &Paths) -> std::io::Result<()> {
+        let text: String = self
+            .chosen
+            .iter()
+            .map(|(k, g)| format!("{k} = {}\n", if *g { "grid" } else { "shelf" }))
+            .collect();
+        write(&paths.data().join(VIEWS_FILE), &text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

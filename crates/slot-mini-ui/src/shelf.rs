@@ -1,6 +1,7 @@
 // Copied from slot (https://github.com/BrandonKowalski/slot) at e66715d:
 //   crates/slot-ui/src/shelf.rs
-// Changes: SIDE_SCALE is public (slot-mini pre-scales faces to it); imports
+// Changes: SIDE_SCALE is public (slot-mini pre-scales faces to it);
+//   `draw_cart_faded`, `heart_on` and `shell_of` added for the grid view; imports
 //   point at slot-mini crates (slot_gfx -> slot_mini_gfx with Canvas as Stage,
 //   slot_store -> slot_mini_store)
 // Copyright (C) Brandon Kowalski and slot contributors. GPL-3.0-or-later.
@@ -516,6 +517,24 @@ impl Shelf {
 
     pub fn draw_cart_at(&self, i: usize, rect: [f32; 4], out: &mut Vec<Draw>) {
         self.layers(i, rect, 1.0, out);
+    }
+
+    pub fn draw_cart_faded(&self, i: usize, rect: [f32; 4], alpha: f32, out: &mut Vec<Draw>) {
+        self.layers(i, rect, alpha, out);
+    }
+
+    /// The heart sticker and its size, if cart `i` is a favourite.
+    pub fn heart_on(&self, i: usize) -> Option<(TexId, f32, f32)> {
+        self.hearted
+            .get(i)
+            .copied()
+            .unwrap_or(false)
+            .then_some(self.heart)
+            .flatten()
+    }
+
+    pub fn shell_of(&self, i: usize) -> Option<GbShell> {
+        self.shell(i)
     }
 
     pub fn draw_row(

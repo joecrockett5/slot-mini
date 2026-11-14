@@ -12,14 +12,14 @@ use slot_mini_store::{Cart, Platform};
 use slot_mini_ui::power::{Battery, Charge};
 use slot_mini_ui::{
     cart_backing, cart_shadow, draw_footer, draw_ground, draw_slot_title, draw_wifi_icon, ease,
-    gb_cart_shadow, heart_face, title_line_face, word_ink, GbShell, Millis, Printed, Shelf,
-    SlotChrome, UndoFace, HEART_SCALE,
+    gb_cart_shadow, heart_face, title_line_face, word_ink, GbShell, Grid, Millis, Printed, Shelf,
+    SlotChrome, Step, UndoFace, HEART_SCALE,
 };
 
 use crate::faces::{CartFaces, FaceWant};
 use crate::library::{self, ShelfKind};
 use crate::paths::Paths;
-use crate::settings::{Favourites, Recents, Settings, State};
+use crate::settings::{Favourites, Recents, Settings, State, Views};
 use crate::status::{clock_text, Status};
 use crate::theme::Theme;
 
@@ -42,6 +42,9 @@ const SLOT_NAME_OUT_MS: Millis = 800;
 const STATUS_POLL_MS: Millis = 2_000;
 /// Shown when no GBA, GB or GBC games were found.
 const EMPTY_TEXT: &str = "No games in Roms/GBA, GBC or GB";
+/// The grid view: how long a cart takes between its cell and the place the
+/// shelf holds it over the slot, before an insert and after an eject.
+pub const GRID_LIFT_MS: Millis = 180;
 /// An animation that starts with the next frame shown.
 const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
@@ -204,6 +207,14 @@ pub struct App {
     pub core: Option<crate::core_scene::CoreScene>,
     core_statics: Option<crate::core_scene::Statics>,
     restart_at: Option<Millis>,
+    /// The grid view (the PC only, until the Miyoo adopts it): which shelves
+    /// use it, whether the one on screen does, its rows and lift, and when a
+    /// cart ejected into it began flying back to its cell.
+    views: Views,
+    grid_mode: bool,
+    grid: Grid,
+    grid_settle: Option<Millis>,
+    l2_held: bool,
     pub exit: Option<Exit>,
 }
 
@@ -282,10 +293,19 @@ impl App {
             core: None,
             core_statics: None,
             restart_at: None,
+            views: Views::default(),
+            grid_mode: false,
+            grid: Grid::new(),
+            grid_settle: None,
+            l2_held: false,
             exit: None,
         };
+        if app.paths.is_pc() {
+            app.views = Views::read(&app.paths);
+        }
         app.restock();
         app.restore(&state);
+        app.refresh_view();
         app.load_shelf_grounds();
         // Ready a player now, while the eject (if any) has not started.
         if app.settings.sounds {
@@ -345,6 +365,160 @@ impl App {
 
     fn current_shelf_key(&self) -> Option<String> {
         self.shelves.get(self.at).map(|(k, _)| k.key())
+    }
+
+    // ---- the grid view -------------------------------------------------
+
+    /// Whether the shelf on screen shows as a grid. Only the PC has the
+    /// grid for now, so the device build drops everything behind this.
+    #[inline]
+    pub fn grid_on(&self) -> bool {
+        self.paths.is_pc() && self.grid_mode
+    }
+
+    /// Take up the view the shelf on screen was left in.
+    fn refresh_view(&mut self) {
+        if !self.paths.is_pc() {
+            return;
+        }
+        let was = self.grid_mode;
+        self.grid_mode = self
+            .current_shelf_key()
+            .is_some_and(|k| self.views.is_grid(&k, true));
+        self.grid_settle = None;
+        if let Some((_, shelf)) = self.shelves.get(self.at) {
+            self.grid.snap(shelf);
+        }
+        if was != self.grid_mode {
+            // Faces are pre-scaled for the view they were built for.
+            self.drop_faces();
+        }
+    }
+
+    fn drop_faces(&mut self) {
+        self.faces.reset();
+        for (_, shelf) in &mut self.shelves {
+            for i in 0..shelf.carts.len() {
+                for t in [shelf.take_face(i), shelf.take_interior(i)]
+                    .into_iter()
+                    .flatten()
+                {
+                    self.gfx.free(t);
+                }
+            }
+        }
+    }
+
+    /// Switch the shelf on screen between the scrolling shelf and the grid,
+    /// and remember it for that shelf.
+    pub fn toggle_view(&mut self) {
+        if !self.paths.is_pc() || self.phase != Phase::Shelf || self.core.is_some() {
+            return;
+        }
+        let Some(key) = self.current_shelf_key() else {
+            return;
+        };
+        self.views.set(&key, !self.grid_mode);
+        if let Err(e) = self.views.write(&self.paths) {
+            eprintln!("slot-mini: views: {e}");
+        }
+        if let Some(s) = self.shelf_mut() {
+            s.release_hold();
+            let i = s.index;
+            s.select(i);
+        }
+        self.refresh_view();
+    }
+
+    /// The D-pad in the grid: cells, or letters while L2 is held.
+    fn grid_press(&mut self, b: Button) -> bool {
+        let step = match b {
+            Button::Left => Step::Left,
+            Button::Right => Step::Right,
+            Button::Up => Step::Up,
+            Button::Down => Step::Down,
+            _ => return false,
+        };
+        self.grid_settle = None;
+        let now = self.now;
+        let Some((_, shelf)) = self.shelves.get_mut(self.at) else {
+            return true;
+        };
+        match self.l2_held {
+            true => {
+                match step {
+                    Step::Left | Step::Up => shelf.jump_prev_letter(),
+                    Step::Right | Step::Down => shelf.jump_next_letter(),
+                }
+                let i = shelf.index;
+                shelf.select(i);
+            }
+            false => self.grid.hold(shelf, step, now),
+        }
+        true
+    }
+
+    /// Where the shelf holds the selected cart over the slot.
+    fn rest_rect(&self, shelf: &Shelf) -> [f32; 4] {
+        let (x, scale) = shelf.selected_at(self.stage);
+        let (w, h) = shelf
+            .carts
+            .get(shelf.index)
+            .map_or((0, 0), |c| slot_mini_ui::cart_box(c.platform));
+        let (w, h) = (w as f32 * scale, h as f32 * scale);
+        [x, slot_mini_ui::foot_y(h / scale) - h, w, h]
+    }
+
+    /// The selected cart `t` of the way from its cell to the shelf's rest.
+    fn draw_flying(&self, shelf: &Shelf, t: f32, out: &mut Vec<Draw>) {
+        let from = self.grid.selected_rect(shelf, self.stage);
+        let rect = slot_mini_ui::between(from, self.rest_rect(shelf), t);
+        shelf.draw_cart_at(shelf.index, rect, out);
+    }
+
+    fn draw_grid(&self, shelf: &Shelf, out: &mut Vec<Draw>) {
+        let (stage, light) = (self.stage, self.theme.light);
+        match &self.phase {
+            Phase::Shelf => {
+                let scene = self.core.as_ref().filter(|s| s.shown());
+                if let (Some(scene), Some(statics)) = (scene, &self.core_statics) {
+                    // The case fades as the picker's cart opens over the slot.
+                    let open = scene.open_eased(self.now);
+                    self.grid
+                        .draw(shelf, stage, light, Some(&scene.stem), 1.0 - open, out);
+                    slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+                    scene.draw_plugged(stage, statics, light, self.now, out);
+                    scene.draw(stage, shelf, statics, self.now, out);
+                    return;
+                }
+                let settle = self
+                    .grid_settle
+                    .map(|at| self.now.saturating_sub(at) as f32 / GRID_LIFT_MS as f32)
+                    .filter(|t| *t < 1.0);
+                match (settle, shelf.carts.get(shelf.index)) {
+                    (Some(t), Some(cart)) => {
+                        self.grid
+                            .draw(shelf, stage, light, Some(&cart.stem), t, out);
+                        self.draw_flying(shelf, 1.0 - t, out);
+                    }
+                    _ => self.grid.draw(shelf, stage, light, None, 1.0, out),
+                }
+                slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+                draw_slot_title(stage, self.title.printed, self.title_alpha(), out);
+                self.draw_footer(out);
+            }
+            Phase::Inserting { at, stem, .. } if self.now < *at => {
+                let t = 1.0 - (*at - self.now) as f32 / GRID_LIFT_MS as f32;
+                self.grid
+                    .draw(shelf, stage, light, Some(stem), 1.0 - t, out);
+                self.draw_flying(shelf, t, out);
+                slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+            }
+            Phase::Inserting { stem, .. } | Phase::Ejecting { stem, .. } => {
+                self.chrome(shelf, stem, out)
+            }
+            Phase::Studio | Phase::About => {}
+        }
     }
 
     /// The wallpaper behind the shelf on screen: its own, else the random
@@ -515,6 +689,7 @@ impl App {
         self.at = (self.at as i32 + by).rem_euclid(n) as usize;
         self.shelf_named = Some(self.now);
         self.notice = None;
+        self.refresh_view();
     }
 
     fn toggle_favourite(&mut self) {
@@ -604,7 +779,12 @@ impl App {
             return self.core_press(b);
         }
         let now = self.now;
+        if self.grid_on() && self.grid_press(b) {
+            return;
+        }
         match b {
+            Button::L2 => self.l2_held = true,
+            Button::R2 => self.toggle_view(),
             Button::Left => self.shelf_mut().map_or((), |s| s.hold_left(now)),
             Button::Right => self.shelf_mut().map_or((), |s| s.hold_right(now)),
             Button::Up => self.shelf_mut().map_or((), |s| s.jump_prev_letter()),
@@ -622,7 +802,17 @@ impl App {
     }
 
     fn release(&mut self, b: Button) {
+        if self.grid_on() {
+            match b {
+                Button::Left => self.grid.release(Step::Left),
+                Button::Right => self.grid.release(Step::Right),
+                Button::Up => self.grid.release(Step::Up),
+                Button::Down => self.grid.release(Step::Down),
+                _ => {}
+            }
+        }
         match b {
+            Button::L2 => self.l2_held = false,
             Button::Left => self.shelf_mut().map_or((), |s| s.release_left()),
             Button::Right => self.shelf_mut().map_or((), |s| s.release_right()),
             Button::A if self.a_held.take().is_some() && self.phase == Phase::Shelf => {
@@ -811,10 +1001,22 @@ impl App {
         let Some((_, cart)) = self.current() else {
             return;
         };
-        // Refuse before the cart goes in if Onion could not run it.
-        let checked =
-            crate::launch::record(&self.paths, cart).and_then(|r| crate::launch::command(&r));
-        if let Err(e) = checked {
+        if self.paths.is_pc() {
+            // The PC runs RetroArch itself: all it needs is the core.
+            let core = crate::cores::chosen(&self.paths, cart);
+            if !crate::cores::installed(&self.paths, core.libretro()) {
+                self.notice = Some(match self.paths.pc_cores() {
+                    Some(_) => format!("{} is not installed", core.text()),
+                    None => "RetroArch was not found".into(),
+                });
+                self.shelf_named = Some(self.now);
+                return;
+            }
+        } else if let Err(e) =
+            // Refuse before the cart goes in if Onion could not run it.
+            crate::launch::record(&self.paths, cart)
+                .and_then(|r| crate::launch::command(&r))
+        {
             eprintln!("slot-mini: {e}");
             self.notice = Some(match e {
                 crate::launch::LaunchError::UnsafePath(_) => "Rename this file to launch it".into(),
@@ -827,10 +1029,19 @@ impl App {
         if let Some(s) = self.shelf_mut() {
             s.release_hold();
         }
+        // From the grid the cart first flies to where the shelf holds it.
+        let lift = match self.grid_on() {
+            true => {
+                self.grid.release_hold();
+                self.grid_settle = None;
+                GRID_LIFT_MS
+            }
+            false => 0,
+        };
         // The sound comes later, as the cart seats (see `tick`).
         self.insert_sounded = false;
         self.phase = Phase::Inserting {
-            at: self.now,
+            at: self.now + lift,
             stem,
             fresh,
         };
@@ -848,6 +1059,20 @@ impl App {
         if let Some(s) = self.shelf_mut() {
             s.tick(now);
             s.update(dt.min(0.1));
+        }
+        if self.grid_on() {
+            if let Some((_, shelf)) = self.shelves.get_mut(self.at) {
+                if self.phase == Phase::Shelf {
+                    self.grid.tick(shelf, now);
+                }
+                self.grid.update(shelf, dt.min(0.1));
+            }
+            if self
+                .grid_settle
+                .is_some_and(|at| now.saturating_sub(at) >= GRID_LIFT_MS)
+            {
+                self.grid_settle = None;
+            }
         }
         self.take_shelf_grounds();
         if let Some(ui) = self.studio.as_mut() {
@@ -907,6 +1132,9 @@ impl App {
             }
             Phase::Ejecting { at, .. } if self.secs_since(*at) >= EJECT_S => {
                 self.phase = Phase::Shelf;
+                if self.grid_on() {
+                    self.grid_settle = Some(now);
+                }
             }
             _ => {}
         }
@@ -1009,10 +1237,13 @@ impl App {
     pub fn placeholders_on_screen(&self) -> usize {
         self.shelf()
             .map(|s| {
-                s.on_screen()
-                    .into_iter()
-                    .filter(|&i| s.face(i).is_none())
-                    .count()
+                match self.grid_on() {
+                    true => self.grid.on_screen(s, self.stage),
+                    false => s.on_screen(),
+                }
+                .into_iter()
+                .filter(|&i| s.face(i).is_none())
+                .count()
             })
             .unwrap_or(0)
     }
@@ -1025,15 +1256,22 @@ impl App {
         let Some((_, shelf)) = self.shelves.get(self.at) else {
             return;
         };
-        let on_screen = shelf.on_screen();
-        let wants: Vec<FaceWant> = shelf
-            .around(NEAR)
+        let grid = self.grid_on();
+        let (on_screen, near) = match grid {
+            true => (
+                self.grid.on_screen(shelf, self.stage),
+                self.grid.near(shelf, self.stage),
+            ),
+            false => (shelf.on_screen(), shelf.around(NEAR)),
+        };
+        let wants: Vec<FaceWant> = near
             .into_iter()
             .filter(|&i| shelf.face(i).is_none())
             .map(|i| FaceWant {
                 shelf: self.at,
                 index: i,
                 on_screen: on_screen.contains(&i),
+                grid,
             })
             .collect();
         let shelves = &self.shelves;
@@ -1065,10 +1303,10 @@ impl App {
         }
         // Keep memory flat: faces only near the selection on this shelf.
         for (s, (_, shelf)) in self.shelves.iter_mut().enumerate() {
-            let near = if s == self.at {
-                shelf.around(NEAR + 1)
-            } else {
-                Vec::new()
+            let near = match (s == self.at, grid) {
+                (false, _) => Vec::new(),
+                (true, true) => self.grid.near(shelf, self.stage),
+                (true, false) => shelf.around(NEAR + 1),
             };
             for i in 0..shelf.carts.len() {
                 if near.contains(&i) {
@@ -1202,6 +1440,9 @@ impl App {
             self.draw_footer(out);
             return;
         };
+        if self.grid_on() {
+            return self.draw_grid(shelf, out);
+        }
         match &self.phase {
             Phase::Shelf => {
                 let scene = self.core.as_ref().filter(|s| s.shown());
