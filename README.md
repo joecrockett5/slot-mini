@@ -256,8 +256,8 @@ file that is not slot-mini's script (an Onion update may already have restored i
 
 The same shelf on Windows, in front of your own standalone [RetroArch](https://www.retroarch.com). It reads a
 library folder laid out like an Onion SD card (`Roms/GB`, `Roms/GBC`, `Roms/GBA`, `Saves`, `Labels`), so labels,
-shells, favourites and saves mean the same thing on both. It does not sync with the Miyoo yet: MENU has a Sync
-page that says so.
+shells, favourites and saves mean the same thing on both, and it is the hub a Miyoo syncs with over Wi-Fi (see
+**Sync** below).
 
 **Install.** Download `slot-mini-pc-<version>-windows-x64.zip` from the newest
 [release named "slot-mini PC"](https://github.com/joecrockett5/slot-mini/releases), unzip it anywhere and run
@@ -266,9 +266,34 @@ protected your PC": choose **More info**, then **Run anyway**.
 
 **First run.** RetroArch is looked for in the usual places (its installer's folder, a portable copy, Steam,
 Scoop); MENU -> Folders points at it if it is elsewhere, shows which cores are missing and can fetch them from
-libretro's buildbot. The library starts empty at `%USERPROFILE%\slot-mini`: press A to import the games, labels,
-shells, favourites and saves from a Miyoo's SD card (nothing on the card is changed, nothing in the library is
-replaced), or copy ROMs into its `Roms` folders yourself.
+libretro's buildbot. The library starts empty at `%USERPROFILE%\slot-mini`, and the first screen offers three
+ways to fill it: press A to pair a Miyoo and bring its library over by Wi-Fi; press START (Space) to import the
+games, labels, shells, favourites and saves from a Miyoo's SD card (nothing on the card is changed, nothing in
+the library is replaced); or copy ROMs into its `Roms` folders yourself.
+
+**Sync.** slot-mini PC keeps its library in step with your Miyoo's: games, labels, box art, cart shells,
+favourites and saves, so you can play on one and carry on from the other. It needs a slot-mini on the Miyoo that
+has Sync in its MENU, and both on the same Wi-Fi network.
+
+- *Windows Firewall.* The first time slot-mini PC runs, Windows asks whether to let it through. Choose **Allow**
+  with **Private networks** ticked. If you chose Cancel, the Miyoo will not find the PC: open Windows Security ->
+  Firewall & network protection -> Allow an app through firewall -> Change settings, and tick `slot-mini-pc`
+  under Private. MENU -> Settings -> Sync -> "Miyoo can't find this PC?" says the same. Sync uses TCP and UDP
+  port 24735 and only ever talks to your own network.
+- *Pairing.* MENU -> Settings -> Sync -> Pair a Miyoo (or A on the first screen), then on the Miyoo open MENU,
+  choose Sync and pick this PC. Both screens show a six-digit code: confirm on both only if they match. Then
+  choose Sync now on the Miyoo; the PC shows the games arriving and its shelves fill as they do.
+- *After that* Sync now on either side brings the two in step, and the PC asks the Miyoo by itself each time
+  you close a game on the PC. A small icon left of the clock shows a sync running, a conflict, or a sync that
+  failed, and the shelf says in a line what each sync moved.
+- *Conflicts.* If a game was played on both since they last synced, the later save is the one in use and the
+  other is kept. The cart wears an amber "!", and Sync -> Conflicts shows both copies, where each came from and
+  when it was last played. "Use the other copy" swaps them; "Keep this one" puts the other away in
+  `Saves/slot-mini-removed` after asking.
+- *Remove everywhere.* Delete, a right click on the selected cart, or MENU -> Remove this game takes a game off
+  this PC and, at its next sync, off every paired Miyoo. It asks first and says what goes. Saves are not
+  deleted: they are moved to `Saves/slot-mini-removed/<system>` on each side.
+- The PC's name (what the Miyoo lists) and the paired Miyoos, with Unpair, are on the same Sync page.
 
 | | Controller | Keyboard |
 | --- | --- | --- |
@@ -283,15 +308,16 @@ replaced), or copy ROMs into its `Roms` folders yourself.
 | Cart studio | X | Backspace |
 | Take a cart off Recents | Click a stick | S |
 | MENU | SELECT (Back / View on an Xbox pad) | Esc or F1 |
+| Remove a game everywhere | (MENU) | Delete |
 | Full screen | | F11 or Alt+Enter |
 
 A, B, X and Y go by an Xbox controller's labels (A at the bottom); MENU -> Settings -> Controller switches to the
 Miyoo's layout (A on the right). A bar above the footer lists these shortcuts for whatever you last touched,
 controller or keyboard. Pick up the mouse and the bar and every legend become buttons: PLAY (hold it to start a
 game from the beginning), FAVE, STUDIO, the shelf arrows, CORE, GRID / ROW and MENU, so everything can be done by
-clicking. Clicking a cart chooses it, a double-click plays it, the wheel browses and the right button goes back.
-MENU also holds full screen, the folders, Import from SD card, Check for updates (it opens the download page) and
-Quit.
+clicking. Clicking a cart chooses it, a double-click plays it, the wheel browses and the right button goes back
+(on the selected cart it asks about removing the game everywhere). MENU also holds full screen, the folders,
+Sync, Import from SD card, Check for updates (it opens the download page) and Quit.
 
 A game opens where slot-mini is: full screen when slot-mini is full screen, otherwise in a window in the same
 place. The picture is drawn at whole multiples of 640x480 (up to four times), so labels and text stay sharp on a

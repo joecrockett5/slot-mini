@@ -225,7 +225,8 @@ impl Rig {
 }
 
 /// Compare against `tests/golden/<name>.png`; `UPDATE_GOLDEN=1` writes it
-/// instead. Small differences pass, as in the shared app's tests.
+/// instead. Small differences pass, as in the shared app's tests, and so
+/// does the version on MENU's plate.
 pub fn golden(name: &str, frame: &slot_mini_gfx::Canvas) {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
     let path = dir.join(format!("{name}.png"));
@@ -245,10 +246,18 @@ pub fn golden(name: &str, frame: &slot_mini_gfx::Canvas) {
         "{name}: size"
     );
     let got = frame.to_rgba();
+    // MENU's plate prints the app's version as a serial, a barcode and a
+    // line of text: a release must not redraw every picture. The plate is
+    // pictured with a fixed version in crates/slot-mini/tests/pc_menu.rs.
+    let plate = |i: usize| {
+        let (x, y) = (i as u32 % frame.w, i as u32 / frame.w);
+        (215..565).contains(&x) && (15..170).contains(&y)
+    };
     let off = buf[..info.buffer_size()]
         .chunks_exact(4)
         .zip(got.chunks_exact(4))
-        .filter(|(a, b)| (0..3).any(|i| a[i].abs_diff(b[i]) > 24))
+        .enumerate()
+        .filter(|(i, (a, b))| !plate(*i) && (0..3).any(|c| a[c].abs_diff(b[c]) > 24))
         .count();
     let limit = (frame.w * frame.h) as usize / 500;
     assert!(

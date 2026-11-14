@@ -12,7 +12,7 @@ Decisions are in `docs/DECISIONS.md` under "Brief 3", from #89.
 | 2. The Sync page, pairing and status | done |
 | 3. Post-game poke, conflicts, Remove everywhere | done |
 | 4. First run and results | done |
-| 5. Docs and release | to do |
+| 5. Docs and release | done: slot-mini PC 0.2.0 |
 
 ## Phase 0: what the hub tells the PC
 
@@ -114,6 +114,27 @@ changed on the Miyoo showing on the PC's shelf without a restart).
 `crates/slot-mini/tests/pc_menu.rs` has the pictures of the screen
 (`pc_first_run_pair*.png`, `pc_first_run_paired.png`,
 `pc_first_run_seeding.png`).
+
+## Phase 5: docs and release
+
+- `README.md` and `package/pc/README.txt` (the zip's) describe sync: the
+  firewall prompt and what to do after Cancel, pairing, conflicts,
+  Remove everywhere.
+- `docs/pc/TESTING.md` section 7 is the checklist for real hardware. None
+  of it has been run: it needs a Windows PC and a Miyoo with brief 4's
+  side of sync, which does not exist yet.
+- `crates/slot-mini-pc` is 0.2.0. The workspace version is unchanged: the
+  shared crates' changes are all behind the `pc` feature, the device
+  goldens are untouched and the Miyoo's binary is the same.
+
+## What is left
+
+- Brief 4: the Miyoo's side (MENU -> Sync, pairing, Sync now, the poke
+  listener). Until it ships, the PC's hub has only the tests' client to
+  talk to.
+- The real-hardware checklist above, once brief 4 is on a Miyoo. The
+  wording of the firewall page is from Windows 11's documentation, not
+  from seeing the prompt.
 
 ## How to run
 

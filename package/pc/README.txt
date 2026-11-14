@@ -16,10 +16,39 @@ Start
     places; MENU -> Folders points at it if it is somewhere else. Cores
     that are missing can be fetched from MENU.
 
-    The first time, the library is empty: press A to copy the games,
-    saves, labels and cart shells from a Miyoo's SD card, or put games in
-    the library folder's Roms/GB, Roms/GBC and Roms/GBA yourself. Nothing
-    on the card is changed. MENU -> Folders shows and moves the library.
+    The first time, the library is empty. Press A to pair your Miyoo and
+    bring its library over by Wi-Fi (see Sync), press START (Space) to
+    copy the games, saves, labels and cart shells from a Miyoo's SD card,
+    or put games in the library folder's Roms/GB, Roms/GBC and Roms/GBA
+    yourself. Nothing on the card is changed. MENU -> Folders shows and
+    moves the library.
+
+Sync
+    slot-mini keeps this library in step with your Miyoo's over Wi-Fi:
+    games, labels, cart shells, favourites and saves. The Miyoo needs a
+    slot-mini with Sync in its MENU, on the same network as this PC.
+
+    Windows Firewall asks about slot-mini the first time it runs. Choose
+    Allow, with Private networks ticked. If you chose Cancel, the Miyoo
+    cannot find this PC: open Windows Security, Firewall & network
+    protection, Allow an app through firewall, Change settings, and tick
+    slot-mini-pc under Private. (TCP and UDP port 24735.)
+
+    Pair: MENU -> Settings -> Sync -> Pair a Miyoo, then on the Miyoo
+    MENU -> Sync and pick this PC. Confirm on both only if the two codes
+    match. Then choose Sync now on the Miyoo.
+
+    From then on Sync now on either brings them in step, and the PC
+    asks the Miyoo by itself when you close a game here. The icon left
+    of the clock shows a sync running, a conflict or a failure.
+
+    A game played on both since the last sync is a conflict: the later
+    save is in use, the other is kept, and the cart wears a "!". Sync ->
+    Conflicts shows both and can swap them.
+
+    Delete, a right click on the selected cart, or MENU -> Remove this
+    game removes a game here and on every paired Miyoo. It asks first.
+    Saves are moved to Saves/slot-mini-removed, never deleted.
 
 Controls                    Controller              Keyboard
     Browse                  D-pad or stick          Arrow keys
@@ -33,6 +62,7 @@ Controls                    Controller              Keyboard
     Cart studio             X                       Backspace
     Off Recents             A stick click           S
     MENU                    SELECT (Back/View)      Esc or F1
+    Remove everywhere       (MENU)                  Delete
     Full screen                                     F11 or Alt+Enter
 
     A, B, X and Y go by an Xbox controller's labels (A at the bottom).

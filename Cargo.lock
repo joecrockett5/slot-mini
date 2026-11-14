@@ -1837,7 +1837,7 @@ dependencies = [
 
 [[package]]
 name = "slot-mini-pc"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
  "gilrs",
