@@ -74,6 +74,16 @@ impl App {
         true
     }
 
+    /// Labels changed on disk under carts that stayed: load them again.
+    pub fn relabel(&mut self) -> bool {
+        if !self.at_rest() {
+            return false;
+        }
+        self.restock();
+        self.refresh_view();
+        true
+    }
+
     /// Whether nothing is open or moving over the shelf.
     pub fn at_rest(&self) -> bool {
         self.phase == Phase::Shelf
@@ -298,31 +308,70 @@ impl App {
         });
     }
 
-    /// The first-run screen's lines: where games go, the import, and that
-    /// sync is still to come.
+    /// The first-run screen's lines: pairing a Miyoo first where the host
+    /// syncs, then the import and where games go.
     fn welcome_lines(&self) -> Vec<String> {
         if !self.paths.is_pc() || !self.shelves.is_empty() {
             return Vec::new();
         }
         let sep = std::path::MAIN_SEPARATOR;
-        let import = match &self.host.import_note {
-            Some(note) => note.clone(),
-            None if self.glyphs == Glyphs::Mouse => {
-                "or click IMPORT to copy them from your Miyoo's SD card.".into()
-            }
-            None => format!(
-                "or press {} to import them from your Miyoo's SD card.",
-                self.glyphs.cap("A")
+        let mouse = self.glyphs == Glyphs::Mouse;
+        let a = self.glyphs.cap("A");
+        let home = crate::about::short_path(&self.host.library);
+        let roms = format!("Put ROMs in Roms{sep}GBA, Roms{sep}GBC or Roms{sep}GB there,");
+        let Some(offer) = &self.host.offer else {
+            // No sync: the import is the offer.
+            let import = match &self.host.import_note {
+                Some(note) => note.clone(),
+                None if mouse => "or click IMPORT to copy them from your Miyoo's SD card.".into(),
+                None => format!("or press {a} to import them from your Miyoo's SD card."),
+            };
+            return vec![
+                "Welcome to slot-mini".into(),
+                "Your games live here, laid out like an Onion SD card:".into(),
+                home,
+                roms,
+                import,
+                String::new(),
+            ];
+        };
+        let (what, how) = match &offer.paired {
+            None => (
+                "Pair your Miyoo to bring its library over.".to_string(),
+                match mouse {
+                    true => "Click PAIR: both need to be on the same Wi-Fi.".to_string(),
+                    false => format!("Press {a} to pair: both need to be on the same Wi-Fi."),
+                },
             ),
+            Some(name) => (
+                format!("Paired with {name}."),
+                "Choose Sync now on the Miyoo to bring its library over.".to_string(),
+            ),
+        };
+        let import = match mouse {
+            true => "Or click IMPORT to copy its SD card, or put ROMs in".to_string(),
+            false => format!(
+                "Or press {} to import its SD card, or put ROMs in",
+                self.glyphs.cap("START")
+            ),
+        };
+        let last = match (&offer.note, &self.host.import_note) {
+            (Some(note), _) | (None, Some(note)) => note.clone(),
+            (None, None) => home,
         };
         vec![
             "Welcome to slot-mini".into(),
-            "Your games live here, laid out like an Onion SD card:".into(),
-            crate::about::short_path(&self.host.library),
-            format!("Put ROMs in Roms{sep}GBA, Roms{sep}GBC or Roms{sep}GB there,"),
+            what,
+            how,
             import,
-            "Saves do not sync with the Miyoo yet: that is coming.".into(),
+            format!("Roms{sep}GBA, Roms{sep}GBC or Roms{sep}GB here:"),
+            last,
         ]
+    }
+
+    /// The first-run screen's lines, as printed.
+    pub fn welcome(&self) -> &[String] {
+        &self.welcome.1
     }
 
     /// Print the first-run screen's lines again when they change.

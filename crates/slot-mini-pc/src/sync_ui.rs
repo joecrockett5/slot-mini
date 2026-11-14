@@ -301,6 +301,28 @@ impl PcApp {
         self.app.open_menu()
     }
 
+    /// The first-run screen's offer was taken: pairing, or the Sync page
+    /// once a Miyoo is paired.
+    pub(super) fn pair_from_shelf(&mut self) -> bool {
+        let paired = self.hub().is_some_and(|h| !h.devices().is_empty());
+        self.open_solo(match paired {
+            true => Screen::Main,
+            false => Screen::Pairing,
+        })
+    }
+
+    /// What the first-run screen says about pairing.
+    pub(super) fn offer(&self) -> Option<slot_mini::about::Offer> {
+        let hub = self.hub()?;
+        Some(slot_mini::about::Offer {
+            paired: hub.devices().first().map(|d| d.name.clone()),
+            note: match &self.ui.progress {
+                Some(p) => Some(p.text.clone()),
+                None => self.ui.failed.clone(),
+            },
+        })
+    }
+
     /// Ask about removing the cart on the shelf everywhere: from MENU's
     /// row, a right click on the cart, or Delete.
     pub fn remove_current(&mut self) -> bool {
@@ -994,6 +1016,14 @@ impl PcApp {
                 self.ui.failed = went_wrong(&report).then(|| text.clone());
                 self.ui.last = Some(text.clone());
                 self.rescan_due = true;
+                let kind = |k: &String| Key::parse(k).map(|k| k.kind);
+                let moved = &report.to_hub;
+                self.relabel_due |= report.text_changed
+                    || moved
+                        .added
+                        .iter()
+                        .chain(&moved.updated)
+                        .any(|k| kind(k) == Some(Kind::Label));
                 if !report.is_noop() {
                     self.app.set_notice(text);
                 }

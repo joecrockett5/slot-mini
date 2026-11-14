@@ -637,3 +637,21 @@ built.
     the shelf and in the grid, drawn over the cart by the shared app from
     a set of stems the PC hands it (`App::set_marked`, `pc`-gated). The
     label is left alone, since it is the player's own picture.
+98. **The first-run screen offers pairing on A and keeps the import on
+    START.** With sync in the app the first thing an empty library says
+    is "Pair your Miyoo to bring its library over"; A (or PAIR on the
+    bar) opens the pairing screen straight from the shelf. Import from SD
+    card stays one press away (START, Space, or IMPORT on the bar), and
+    in MENU. Once a Miyoo is paired the screen asks for Sync now on the
+    Miyoo, A becomes SYNC (the Sync page), and the last line shows the
+    seeding as it runs. The line that said sync was coming is gone.
+99. **The summary of a sync is a shelf notice, and only when something
+    moved.** "Synced with <name>: 14 games and 1 save in, 2 saves out"
+    shows where the shelf's name goes and fades as a name does. A sync
+    that moved nothing says "In step with <name>" on the Sync page only,
+    so the post-game poke does not put words on the shelf every time.
+100. **Labels and shells that arrive for carts already on the shelf are
+    loaded again at once.** A rescan that finds the same carts used to
+    leave their faces alone; after a sync that brought labels or changed
+    shell lines the shelf is restocked in place (`App::relabel`), with
+    the selection kept.

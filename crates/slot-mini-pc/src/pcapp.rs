@@ -160,6 +160,8 @@ pub struct PcApp {
     /// The library changed under the app: look again once the shelf is
     /// at rest.
     rescan_due: bool,
+    /// A sync brought labels or shells for carts already on the shelf.
+    relabel_due: bool,
     /// The sync hub over this library; `None` when its state could not be
     /// opened.
     pub sync: Option<Service>,
@@ -226,6 +228,7 @@ impl PcApp {
             import: Import::Idle,
             import_rx: None,
             rescan_due: false,
+            relabel_due: false,
             sync,
             ui: SyncUi::default(),
         };
@@ -441,6 +444,7 @@ impl PcApp {
             },
             page: self.sync_page(),
             remove: self.removable(),
+            offer: self.offer(),
         });
         self.show_status();
     }
@@ -473,6 +477,9 @@ impl PcApp {
             },
             HostRow::Folders => {}
             HostRow::Sync => self.open_sync(),
+            HostRow::Pair => {
+                self.pair_from_shelf();
+            }
             HostRow::Remove => {
                 self.remove_current();
             }
@@ -563,7 +570,11 @@ impl PcApp {
         changed |= self.sync_tick();
         if self.rescan_due && self.app.at_rest() {
             self.rescan_due = false;
-            self.app.rescan();
+            // A rescan that finds the same carts leaves their faces be.
+            if !self.app.rescan() && self.relabel_due {
+                self.app.relabel();
+            }
+            self.relabel_due = false;
         }
         if changed {
             self.refresh_host();
@@ -1058,8 +1069,8 @@ mod tests {
         let mut r = Rig { dir, pc, now: 0 };
         r.pc.tick(0);
         assert!(r.pc.app.shelf_kinds().is_empty());
-        // A on the first-run screen asks for the card.
-        r.tap(A);
+        // A on the first-run screen pairs; START asks for the card.
+        r.tap(Button::Start);
         assert_eq!(r.pc.requests, [Request::PickCard]);
         // A folder that is no card is refused, and says why.
         r.pc.chose_card(Some(r.dir.path().join("config")));
@@ -1078,7 +1089,7 @@ mod tests {
         assert_eq!(r.pc.app.host().import, "Importing...");
         // A second card while one is being read is ignored.
         r.pc.requests.clear();
-        r.tap(A);
+        r.tap(Button::Start);
         assert!(r.pc.requests.is_empty());
         r.wait("the import", |pc| !matches!(pc.import, Import::Running(..)));
         let Import::Said(summary) = r.pc.import.clone() else {

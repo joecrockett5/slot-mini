@@ -25,6 +25,8 @@ pub enum HostRow {
     Sync,
     /// Remove the cart on the shelf everywhere (the host asks first).
     Remove,
+    /// The first-run screen's offer was taken: pair a Miyoo.
+    Pair,
     /// A row of the host's page was chosen (A).
     Page(usize),
     /// A row of the host's page was turned: Right is `true`.
@@ -95,6 +97,17 @@ pub struct Host {
     pub page: Option<Page>,
     /// The game MENU was opened over, when it can be removed everywhere.
     pub remove: Option<String>,
+    /// What the first-run screen says about pairing, when the host syncs.
+    pub offer: Option<Offer>,
+}
+
+/// The first-run screen's offer to bring a Miyoo's library over.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Offer {
+    /// The Miyoo already paired, if one is.
+    pub paired: Option<String>,
+    /// How a sync is going, or how the last one went wrong.
+    pub note: Option<String>,
 }
 
 /// MENU's first page on the PC.
@@ -255,6 +268,7 @@ impl About {
             HostRow::Cores => host.cores.clone().unwrap_or_default(),
             HostRow::Sync => "Sync".into(),
             HostRow::Remove => "Remove this game".into(),
+            HostRow::Pair => "Pair a Miyoo".into(),
             HostRow::Page(i) => host
                 .page
                 .as_ref()

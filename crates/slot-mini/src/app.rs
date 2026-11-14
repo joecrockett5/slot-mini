@@ -847,10 +847,20 @@ impl App {
         }
         let now = self.now;
         #[cfg(feature = "pc")]
-        if self.paths.is_pc() && self.shelves.is_empty() && b == Button::A {
-            // The first-run screen offers the import.
-            self.host_action = Some(crate::about::HostRow::Import);
-            return;
+        if self.paths.is_pc() && self.shelves.is_empty() {
+            // The first-run screen's offer: pairing where the host
+            // syncs, with the import beside it; else the import.
+            use crate::about::HostRow;
+            match (b, self.host.offer.is_some()) {
+                (Button::A, true) => self.host_action = Some(HostRow::Pair),
+                (Button::A, false) | (Button::Start, true) => {
+                    self.host_action = Some(HostRow::Import)
+                }
+                _ => {}
+            }
+            if matches!(b, Button::A | Button::Start) {
+                return;
+            }
         }
         if self.grid_on() && self.grid_press(b) {
             return;

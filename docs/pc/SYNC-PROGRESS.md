@@ -11,7 +11,7 @@ Decisions are in `docs/DECISIONS.md` under "Brief 3", from #89.
 | 1. Hub wiring | done |
 | 2. The Sync page, pairing and status | done |
 | 3. Post-game poke, conflicts, Remove everywhere | done |
-| 4. First run and results | to do |
+| 4. First run and results | done |
 | 5. Docs and release | to do |
 
 ## Phase 0: what the hub tells the PC
@@ -90,6 +90,30 @@ with the real client is badged, listed, swapped (the auto state set
 aside with the save that leaves, the Miyoo given the chosen save) and
 dismissed after a Cancel; Remove everywhere from each of its three ways
 in, gone from the PC at once and from the Miyoo at its next sync.
+
+## Phase 4: first run and results
+
+- The first-run screen (decision #98): `Host::offer` (`Offer`: the
+  paired Miyoo's name and a line of progress) from `PcApp::offer`;
+  `welcome_lines` in `crates/slot-mini/src/app_pc.rs` words it; the bar
+  has `Item::Pair` and `Item::Card`; A is `HostRow::Pair`
+  (`pair_from_shelf`: the pairing screen, or the Sync page once paired)
+  and START is `HostRow::Import`. Without a sync service the old screen
+  stands, with the import on A.
+- Results (decision #99): `summary` is the shelf's notice after a sync
+  that moved something, and the Sync page's last line always.
+- Refresh (decision #100): `relabel_due` in `PcApp`, set when a finished
+  sync brought labels or shell lines, makes the next rescan restock even
+  when the carts are the same.
+
+Exit tests: `crates/slot-mini-pc/tests/sync_first_run.rs` goes from an
+empty library to a seeded one through the first-run screen with the real
+client (pairing on A, the prompt for Sync now, progress on the screen,
+the shelves filling, the summary, a quiet no-op sync, and a label
+changed on the Miyoo showing on the PC's shelf without a restart).
+`crates/slot-mini/tests/pc_menu.rs` has the pictures of the screen
+(`pc_first_run_pair*.png`, `pc_first_run_paired.png`,
+`pc_first_run_seeding.png`).
 
 ## How to run
 

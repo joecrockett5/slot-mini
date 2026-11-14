@@ -5,7 +5,7 @@
 mod common;
 
 use common::{golden, Rig};
-use slot_mini::about::{Host, HostRow, Page, PageRow, Row};
+use slot_mini::about::{Host, HostRow, Offer, Page, PageRow, Row};
 use slot_mini::legend::Glyphs;
 use slot_mini::{Phase, Pointer};
 use slot_mini_gfx::Button;
@@ -25,6 +25,7 @@ fn host() -> Host {
         import_note: None,
         page: None,
         remove: None,
+        offer: None,
     }
 }
 
@@ -258,4 +259,46 @@ fn an_empty_library_shows_the_first_run_screen() {
     d.tap(Button::Menu);
     d.run(1000);
     assert_eq!(d.app.phase, Phase::About);
+}
+
+#[test]
+fn where_the_host_syncs_the_first_run_screen_offers_pairing_first() {
+    let rig = Rig::pc();
+    std::fs::remove_dir_all(rig.paths.sd.join("Roms")).unwrap();
+    let mut d = rig.app();
+    let with = |offer: Offer| Host {
+        offer: Some(offer),
+        ..host()
+    };
+    d.app.set_host(with(Offer::default()));
+    d.run(300);
+    assert_eq!(
+        d.app.welcome()[1],
+        "Pair your Miyoo to bring its library over."
+    );
+    golden("pc_first_run_pair", &d.frame);
+    // A pairs; the import is still a press away.
+    d.tap(Button::A);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Pair));
+    d.tap(Button::Start);
+    assert_eq!(d.app.take_host_action(), Some(HostRow::Import));
+    d.app.set_glyphs(Glyphs::Mouse);
+    d.run(50);
+    golden("pc_first_run_pair_mouse", &d.frame);
+    d.app.set_glyphs(Glyphs::Pad);
+    // Paired: what to do on the Miyoo, then how its sync is going.
+    let paired = Offer {
+        paired: Some("Miyoo Mini Plus".into()),
+        note: None,
+    };
+    d.app.set_host(with(paired.clone()));
+    d.run(50);
+    golden("pc_first_run_paired", &d.frame);
+    d.app.set_host(with(Offer {
+        note: Some("From Miyoo Mini Plus: 4 of 31, Golden Sun (7.9 MB; 12 MB so far)".into()),
+        ..paired
+    }));
+    d.run(50);
+    assert!(d.app.welcome()[5].starts_with("From Miyoo Mini Plus: 4 of 31"));
+    golden("pc_first_run_seeding", &d.frame);
 }
