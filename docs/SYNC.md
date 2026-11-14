@@ -325,7 +325,9 @@ next time with the same result.
      as the conflict copy; then the client receives the hub's save as in
      rule 2 (so its own copy also stays on the card as `.bak_`).
 
-   The hub records the conflict (key, device, stamp, file, hash); the
+   The hub records the conflict (key, device, stamp, file, hash, the
+   side the copy came from, and when the copy and the winning save were
+   last played, both on the hub's clock; a swap exchanges the two); the
    same copy is recorded once, however often an interrupted sync repeats. The PC app
    lists them and can **swap** one: the conflict copy becomes the save
    (through rule 2, so the PC's auto state is set aside) and the save
@@ -374,7 +376,8 @@ tombstone pushes it. From then on it is an ordinary game.
   every item of that game and list it. `set_busy(None)` clears it. A sync
   already in flight is not interrupted: the PC app should mark the game
   before starting RetroArch and should not start it while a sync is
-  transferring that game.
+  transferring that game. `Hub::is_syncing_game(&game)` says whether the
+  sync in flight has the game in its plan.
 
 ## The exchange
 
@@ -691,6 +694,7 @@ let server = Server::start(hub.clone(), "0.0.0.0:24735".parse()?,
 hub.start_pairing();            // "Pair a device" open; PairingCode arrives
 hub.confirm_pairing();          // the user said yes
 hub.set_busy(Some(game));       // before RetroArch starts; None after
+hub.is_syncing_game(&game);     // true: do not start it yet
 hub.remove_everywhere(&game)?;
 server.poke(POKE_PORT);         // "Sync now"
 ```
@@ -732,7 +736,7 @@ thread serving the request:
 
 | `HubEvent` | Meaning |
 | --- | --- |
-| `Sync { device, event }` | a device's sync is at this stage: `Planning`, a `Transfer` as each file starts, `Finished` with the report |
+| `Sync { device, event }` | a device's sync is at this stage: `Connecting`, `Planning`, a `Transfer` as each file starts (`index` is the plan's action, `count` how many actions the plan has, `size` the file's bytes; `done` stays 0), `Finished` with the report |
 | `Changed(key)` | the hub wrote this item, so the PC can redraw a cart; `Changed("text")` for shells and favourites |
 | `PairingCode { device_name, code }` | a device wants to pair: show the code and ask |
 | `Paired(device)`, `Unpaired(id)` | the list of devices changed |

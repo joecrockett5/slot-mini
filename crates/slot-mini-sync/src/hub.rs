@@ -76,6 +76,20 @@ struct Session {
     /// land.
     paths: HashMap<String, PathBuf>,
     games: HashMap<String, Game>,
+    /// The device's files as its manifest gave them, by folded key: the
+    /// size, and for a save when it was last played, on the hub's clock.
+    theirs: HashMap<String, (u64, Option<u64>)>,
+}
+
+/// What a transfer's progress and a conflict's record say about the
+/// device's side of an action.
+#[derive(Clone, Copy)]
+struct Theirs {
+    /// How many actions the plan has.
+    count: usize,
+    /// The device's file: its size, and when it was last played.
+    size: u64,
+    played: Option<u64>,
 }
 
 struct Attempt {
@@ -118,6 +132,21 @@ fn text<'a>(body: &'a Value, name: &str) -> Result<&'a str, SyncError> {
     body[name]
         .as_str()
         .ok_or_else(|| SyncError::Bad(format!("the request has no {name}")))
+}
+
+/// A conflict copy on its way into the record.
+struct Kept<'a> {
+    file: &'a std::path::Path,
+    hash: &'a str,
+    from: Side,
+    played: Option<u64>,
+    save_played: Option<u64>,
+}
+
+/// When a file was last written, in Unix seconds.
+fn modified(path: &std::path::Path) -> Option<u64> {
+    let time = std::fs::metadata(path).ok()?.modified().ok()?;
+    Some(time.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs())
 }
 
 fn slug(name: &str) -> String {
@@ -252,6 +281,22 @@ impl Hub {
             .session
             .as_ref()
             .is_some_and(|s| s.used.elapsed() < SESSION_IDLE)
+    }
+
+    /// Whether the sync in flight has `game` in its plan. The PC app asks
+    /// before it starts RetroArch (docs/SYNC.md, "Space and busy games").
+    pub fn is_syncing_game(&self, game: &GameId) -> bool {
+        let folded = game.folded();
+        self.state()
+            .session
+            .as_ref()
+            .filter(|s| s.used.elapsed() < SESSION_IDLE)
+            .is_some_and(|s| {
+                s.actions.iter().any(|op| match op {
+                    Op::Remove { game } => game.folded() == folded,
+                    op => op.key().is_some_and(|k| k.game().folded() == folded),
+                })
+            })
     }
 
     // ---- Authentication ----
@@ -528,6 +573,7 @@ impl Hub {
                 text_records: Vec::new(),
                 paths: HashMap::new(),
                 games: HashMap::new(),
+                theirs: HashMap::new(),
             });
         }
         self.sync_event(device, Event::Connecting);
@@ -623,6 +669,18 @@ impl Hub {
         s.text_records = plan.text_records;
         s.paths = scan.paths;
         s.games = scan.games;
+        // The device's clock may be wrong, so its times are kept as ages.
+        let hub_now = scan.manifest.now;
+        s.theirs = client
+            .items
+            .iter()
+            .map(|i| {
+                let played = i
+                    .played
+                    .map(|p| hub_now.saturating_sub(client.now.saturating_sub(p)));
+                (i.key.folded(), (i.size, played))
+            })
+            .collect();
         drop(state);
         if text_changed {
             self.emit(HubEvent::Changed("text".into()));
@@ -656,7 +714,7 @@ impl Hub {
         device: &str,
         session: &str,
         action: usize,
-    ) -> Result<(Op, Option<PathBuf>, HashMap<String, Game>), SyncError> {
+    ) -> Result<(Op, Option<PathBuf>, HashMap<String, Game>, Theirs), SyncError> {
         let mut state = self.state();
         let s = Self::session(&mut state, device, session)?;
         let op = s
@@ -675,7 +733,16 @@ impl Hub {
                 .collect(),
             None => HashMap::new(),
         };
-        Ok((op, path, games))
+        let (size, played) = op
+            .key()
+            .and_then(|k| s.theirs.get(&k.folded()).copied())
+            .unwrap_or((0, None));
+        let theirs = Theirs {
+            count: s.actions.len(),
+            size,
+            played,
+        };
+        Ok((op, path, games, theirs))
     }
 
     fn device_name(&self, device: &str) -> String {
@@ -694,7 +761,7 @@ impl Hub {
         action: usize,
         reader: &mut dyn Read,
     ) -> Result<(), SyncError> {
-        let (op, have, games) = self.action(device, session, action)?;
+        let (op, have, games, theirs) = self.action(device, session, action)?;
         let (key, want, winner) = match &op {
             Op::Push { key, hash, .. } => (key, hash, None),
             Op::Conflict {
@@ -726,11 +793,11 @@ impl Hub {
             device,
             Event::Transfer {
                 index: action,
-                count: 0,
+                count: theirs.count,
                 key: key.to_string(),
                 to_client: false,
                 done: 0,
-                size: 0,
+                size: theirs.size,
             },
         );
         let mut file = AtomicFile::create(&target)?;
@@ -766,8 +833,21 @@ impl Hub {
                 // device's save comes in.
                 if let Ok(old) = std::fs::read(&dest) {
                     let copy = copy_name(&self.name);
+                    let played = modified(&dest);
                     std::fs::rename(&dest, &copy)?;
-                    self.record_conflict(device, key, &stamp, &copy, &hash_bytes(&old), &dest)?;
+                    self.record_conflict(
+                        device,
+                        key,
+                        &stamp,
+                        &dest,
+                        Kept {
+                            file: &copy,
+                            hash: &hash_bytes(&old),
+                            from: Side::Hub,
+                            played,
+                            save_played: theirs.played,
+                        },
+                    )?;
                 }
                 saves::receive_save(&dest, Some(&state_file), Incoming::File(file), &stamp)?;
             }
@@ -788,7 +868,19 @@ impl Hub {
                 });
                 if !known {
                     file.commit()?;
-                    self.record_conflict(device, key, &stamp, &target, want, &dest)?;
+                    self.record_conflict(
+                        device,
+                        key,
+                        &stamp,
+                        &dest,
+                        Kept {
+                            file: &target,
+                            hash: want,
+                            from: Side::Client,
+                            played: theirs.played,
+                            save_played: modified(&dest),
+                        },
+                    )?;
                 }
             }
         }
@@ -823,14 +915,14 @@ impl Hub {
         device: &str,
         key: &Key,
         stamp: &str,
-        copy: &std::path::Path,
-        hash: &str,
         save: &std::path::Path,
+        copy: Kept,
     ) -> Result<(), SyncError> {
         let mut list = self.store.conflicts();
         let file = copy
+            .file
             .strip_prefix(self.layout.saves_dir())
-            .unwrap_or(copy)
+            .unwrap_or(copy.file)
             .to_string_lossy()
             .replace('\\', "/");
         // The key in the PC's spelling: the save's own file name.
@@ -844,7 +936,10 @@ impl Hub {
             device: self.device_name(device),
             stamp: stamp.to_string(),
             file,
-            hash: hash.to_string(),
+            hash: copy.hash.to_string(),
+            from: copy.from,
+            played: copy.played,
+            save_played: copy.save_played,
         });
         self.store.set_conflicts(&list)?;
         Ok(())
@@ -858,7 +953,7 @@ impl Hub {
         session: &str,
         action: usize,
     ) -> Result<(File, u64, String), SyncError> {
-        let (op, path, _) = self.action(device, session, action)?;
+        let (op, path, _, theirs) = self.action(device, session, action)?;
         let (key, size, hash) = match &op {
             Op::Pull {
                 key, size, hash, ..
@@ -881,7 +976,7 @@ impl Hub {
             device,
             Event::Transfer {
                 index: action,
-                count: 0,
+                count: theirs.count,
                 key: key.to_string(),
                 to_client: true,
                 done: 0,
@@ -1055,7 +1150,13 @@ impl Hub {
                 std::fs::rename(&save, &parked)?;
                 saves::receive_save(&save, Some(&state_file), Incoming::Bytes(&chosen), &stamp)?;
                 std::fs::rename(&parked, &copy)?;
-                list[n].hash = hash_bytes(&old);
+                let c = &mut list[n];
+                c.hash = hash_bytes(&old);
+                c.from = match c.from {
+                    Side::Hub => Side::Client,
+                    Side::Client => Side::Hub,
+                };
+                std::mem::swap(&mut c.played, &mut c.save_played);
             }
             _ => {
                 saves::receive_save(&save, Some(&state_file), Incoming::Bytes(&chosen), &stamp)?;
