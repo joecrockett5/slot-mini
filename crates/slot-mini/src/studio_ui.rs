@@ -12,8 +12,8 @@ use std::sync::mpsc::{self, Receiver};
 use slot_mini_gfx::{Button, Draw, Renderer, Sprite, Stage, TexId, OUT_H};
 use slot_mini_store::{Cart, Platform};
 use slot_mini_ui::{
-    arrows_hint_face, board_in, cart_backing, cart_face_with, cart_interior, hint_face,
-    shows_interior, title_line_face, word_ink, Placed, FOOTER_Y,
+    arrows_hint_face, board_in, cart_backing, cart_face_with, cart_interior, shows_interior,
+    title_line_face, word_ink, Placed, FOOTER_Y,
 };
 
 use crate::art::jobs::{self, Prints, UpdateFail};
@@ -55,6 +55,10 @@ pub struct StudioUi {
     pub printer: Printer,
     /// The buttons the legend names.
     pub glyphs: crate::legend::Glyphs,
+    /// The Miyoo button behind each legend last drawn, in the order they
+    /// were drawn, for the PC's mouse.
+    #[cfg(feature = "pc")]
+    pub legend_keys: Vec<&'static str>,
     prints: HashMap<LabelKind, (Vec<u8>, TexId, u32, u32)>,
     text: HashMap<(String, Style), (TexId, u32, u32)>,
     chip_disc: Option<TexId>,
@@ -123,6 +127,8 @@ impl StudioUi {
             built_for: None,
             printer: Printer::Idle,
             glyphs: crate::legend::Glyphs::default(),
+            #[cfg(feature = "pc")]
+            legend_keys: Vec::new(),
             prints: HashMap::new(),
             text: HashMap::new(),
             chip_disc: None,
@@ -1055,6 +1061,10 @@ impl StudioUi {
                 Legend::Hex => ("Y", "HEX"),
             }
         };
+        #[cfg(feature = "pc")]
+        {
+            self.legend_keys = legends.iter().map(|l| hint(l).0).collect();
+        }
         let n = legends.len();
         let mut right = stage.w - 24.0;
         for (i, l) in legends.iter().enumerate() {
@@ -1066,7 +1076,7 @@ impl StudioUi {
                 None => {
                     let f = match key {
                         "LR" | "UD" => arrows_hint_face(label),
-                        _ => hint_face(key, label),
+                        _ => self.glyphs.face(key, label),
                     };
                     let t = (gfx.upload_rgba(f.w, f.h, &f.rgba), f.w, f.h);
                     self.text.insert((cache, Style::Digit), t);

@@ -527,3 +527,49 @@ built.
     brings it forward, then exits. If that window is hidden because a game
     is running, it is left hidden: showing the shelf over RetroArch would
     be worse than doing nothing.
+82. **PC sound is `PlaySoundW`, not a mixer** (replaces the sound half of
+    #64 and #72's `audio::Mixer`). On a real PC the `tinyaudio` device
+    never made a sound and its thread hung the app when it was dropped
+    (turning sounds off) or at exit. slot plays one short clip at a time,
+    so each clip is a WAV in memory handed to `PlaySoundW` with
+    `SND_MEMORY | SND_ASYNC | SND_NODEFAULT`: no device to open, no thread
+    of ours, and a new clip or `stop` cuts the old one off, which is what
+    the Miyoo does. `tinyaudio` is gone from the tree.
+83. **Quit ends the process.** After the config is written and the window
+    hidden, `std::process::exit(0)`: nothing is left to save, and waiting
+    for winit, gilrs and worker threads to unwind is where "Not
+    responding" came from.
+84. **Black bars.** The frame sits in the window between plain black; the
+    blurred wallpaper border (#64) is gone. It read as the picture being
+    stretched.
+85. **A game takes slot-mini's place.** RetroArch gets `-f` and
+    `video_fullscreen = "true"` when slot-mini is full screen; otherwise
+    `video_fullscreen = "false"` and slot-mini's outer window rectangle as
+    `video_windowed_position_*` with `video_window_save_positions`, all in
+    the appended config, so RetroArch's own config is still untouched
+    (#65). No setting: the window already says what the player wants.
+86. **Controller: Select is MENU.** XInput keeps the Guide button for the
+    system, and a stick click was not discoverable. So Select (Back /
+    View) is MENU, START stays the core picker, and the Miyoo's SELECT
+    moves to a stick click. On the shelf `PcApp` swaps X and that click,
+    so the cart studio is on X and taking a cart off Recents (rare) is on
+    the stick. The keyboard keeps the Miyoo's table. New installs name
+    buttons by Xbox labels (`Config::default`), since the bar prints
+    them; a config that already says `nintendo` keeps it.
+87. **The shortcut bar, and buttons for the mouse** (`app_bar.rs`, PC
+    only). Above the footer, on the shelf, grid and first-run screen, a
+    bar lists what the buttons do, with the caps of the device in hand
+    (#70). The mouse is a third device (`Glyphs::Mouse`, taken up on a
+    click or the wheel, not on passing over): the bar's entries and slot's
+    own legends in MENU, the studio and the core picker are drawn as
+    buttons and click. Legends are hit-tested from the frame's draw list
+    rather than each screen learning about the mouse. The bar fades out
+    under the shelf's name, which shows in the same place. The Miyoo draws
+    none of it (`paths.is_pc()`, feature `pc`).
+88. **The PC frame is drawn at a whole multiple** (up to 4x). Stretching
+    640x480 made labels blocky on a monitor. `Renderer::render_scaled`
+    lays out at 1x, snaps as before, then multiplies, and textures that
+    were being shrunk (cart faces, art) are resampled from their full size
+    instead, cached per size. Layout cannot drift from the device's
+    because it is still computed at 640x480. Feature `pc` only; the device
+    path is `render` as it was.

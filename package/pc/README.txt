@@ -30,16 +30,24 @@ Controls                    Controller              Keyboard
     Switch system           L1 / R1                 Q / W
     Grid / shelf            R2                      2 or Tab
     Choose the core         START (Menu)            Space
-    Cart studio             SELECT (Back/View)      Backspace
-    MENU                    Guide or a stick click  Esc or F1
+    Cart studio             X                       Backspace
+    Off Recents             A stick click           S
+    MENU                    SELECT (Back/View)      Esc or F1
     Full screen                                     F11 or Alt+Enter
 
-    A and B follow the Miyoo's layout (A on the right). MENU ->
-    Controller swaps them for an Xbox layout. The mouse works too: click
-    a cart to pick it, double-click to play, the wheel browses.
+    A, B, X and Y go by an Xbox controller's labels (A at the bottom).
+    MENU -> Settings -> Controller switches to the Miyoo's layout (A on
+    the right). The bar above the footer lists these for whatever you
+    last touched.
 
-    In a game, RetroArch's own keys apply; closing RetroArch comes back
-    to the shelf.
+    The mouse does everything too: click anywhere and the bar and the
+    legends turn into buttons (hold PLAY to start a game from the
+    beginning). Click a cart to pick it, double-click to play, the wheel
+    browses, the right button goes back.
+
+    A game opens full screen when slot-mini is full screen, otherwise in
+    a window where slot-mini's was. In a game, RetroArch's own keys
+    apply; closing RetroArch comes back to the shelf.
 
 Where things are kept
     Settings: %APPDATA%\slot-mini-pc\config.txt

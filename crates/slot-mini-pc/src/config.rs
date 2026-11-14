@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "config.txt";
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     /// The library folder, once chosen.
     pub library: Option<PathBuf>,
@@ -20,6 +20,22 @@ pub struct Config {
     /// The window's outer position and inner size when it was last closed.
     pub window: Option<[i32; 4]>,
     pub maximized: bool,
+}
+
+impl Default for Config {
+    /// A PC's controller is most often an Xbox one, and the shortcut bar
+    /// names its buttons by their labels, so that is the layout until the
+    /// setting says otherwise.
+    fn default() -> Self {
+        Config {
+            library: None,
+            retroarch: None,
+            fullscreen: false,
+            xbox_layout: true,
+            window: None,
+            maximized: false,
+        }
+    }
 }
 
 /// Where the config lives. `SLOT_MINI_PC_CONFIG` overrides it (tests, and
@@ -70,7 +86,8 @@ impl Config {
                 "library" if !value.is_empty() => c.library = Some(PathBuf::from(value)),
                 "retroarch" if !value.is_empty() => c.retroarch = Some(PathBuf::from(value)),
                 "fullscreen" => c.fullscreen = on,
-                "controller" => c.xbox_layout = value.eq_ignore_ascii_case("xbox"),
+                "controller" if value.eq_ignore_ascii_case("xbox") => c.xbox_layout = true,
+                "controller" if value.eq_ignore_ascii_case("nintendo") => c.xbox_layout = false,
                 "maximized" => c.maximized = on,
                 "window" => {
                     let n: Vec<i32> = value
@@ -142,5 +159,9 @@ mod tests {
         assert_eq!(Config::read(dir.path()), Config::default());
         let c = Config::parse("window = 1,2,0,5\nnonsense\ncontroller = sideways\n");
         assert_eq!(c, Config::default());
+        // A new install's controller goes by Xbox labels; the setting is
+        // kept once written.
+        assert!(c.xbox_layout);
+        assert!(!Config::parse("controller = nintendo\n").xbox_layout);
     }
 }

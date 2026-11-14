@@ -3,7 +3,7 @@ name = "slot-mini-pc"
 description = "slot-mini for Windows: slot's cartridge shelf in front of a standalone RetroArch."
 # The PC app's own release line (tags `pc-v<version>`), apart from the
 # Miyoo's workspace version.
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -35,8 +35,7 @@ miniz_oxide = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 rfd = { version = "0.15", default-features = false }
-tinyaudio = "1"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Security", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio"] }
 
 # Used by build.rs for Windows targets only. Not under cfg(windows): a
 # build script is compiled for the machine doing the build.

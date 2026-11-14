@@ -10,7 +10,7 @@ use slot_mini_gfx::{Button, Draw, Renderer, Sprite, Stage, TexId};
 use slot_mini_ui::curl_runs::{joined, wider};
 use slot_mini_ui::sticker::{sticker_face, StickerFields, STICKER_H, STICKER_W};
 use slot_mini_ui::sticker_curl::{strips, Pose};
-use slot_mini_ui::{draw_backdrop, ease, hint_face, line_ink, title_line_face, FOOTER_Y};
+use slot_mini_ui::{draw_backdrop, ease, line_ink, title_line_face, FOOTER_Y};
 
 use crate::legend::Glyphs;
 use crate::paths::Paths;
@@ -498,7 +498,7 @@ impl About {
             let (tex, w, h) = match self.faces.iter().find(|f| f.0 == key_text) {
                 Some((_, t, w, h)) => (*t, *w, *h),
                 None => {
-                    let f = hint_face(key, label);
+                    let f = self.glyphs.face(key, label);
                     let t = gfx.upload_rgba(f.w, f.h, &f.rgba);
                     self.faces.push((key_text, t, f.w, f.h));
                     (t, f.w, f.h)

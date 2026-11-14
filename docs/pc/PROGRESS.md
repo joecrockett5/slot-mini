@@ -15,8 +15,7 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
 - `crates/slot-mini-pc` 0.1.0. `PcApp` (src/pcapp.rs) is the whole app
   without a window; `main.rs` is the winit/softbuffer/gilrs shell around it
   and carries out its `Request`s. Tests drive `PcApp` headlessly.
-- `present.rs` scales the frame (whole numbers when it fits) over a blurred,
-  dimmed wallpaper; `input.rs` maps keys, pads and the stick; `config.rs`
+- `present.rs` puts the frame in the window between black bars; `input.rs` maps keys, pads and the stick; `config.rs`
   is `config.txt` under `%APPDATA%\slot-mini-pc` (`SLOT_MINI_PC_CONFIG`
   overrides the folder).
 - The shared app's PC seam is `crates/slot-mini/src/app_pc.rs`.
@@ -69,6 +68,27 @@ Brief: `docs/briefs/02-pc-app.md`. Decisions: `docs/DECISIONS.md`, from #62.
 ## Phase 8: docs — done
 
 - README "slot-mini PC", `docs/pc/TESTING.md`, CLAUDE.md's release lines.
+
+## After the first Windows test (0.1.1) — done
+
+The maintainer ran `docs/pc/TESTING.md` on Windows and reported seven
+things; DECISIONS #82 to #88.
+
+- Closing hung, and so did turning sounds off: both were the audio
+  device's thread. Sound is now `PlaySoundW` (`audio.rs`), and quitting
+  ends the process once the config is written.
+- Controller: Select is MENU, X the studio, a stick click the Miyoo's
+  SELECT (`input::pad`, `PcApp::pad_button`); new installs use Xbox labels.
+- The shortcut bar and the mouse's buttons: `crates/slot-mini/src/
+  app_bar.rs`, `Glyphs::Mouse`, `slot_mini_ui::button_face`; tests and
+  goldens in `crates/slot-mini/tests/pc_bar.rs` (`pc_bar_*`, `pc_*_mouse`).
+- A game takes slot-mini's place on screen (`retroarch::Screen`).
+- Black bars instead of the blurred wallpaper (`present.rs`).
+- The frame is drawn at up to four times 640x480 (`Renderer::render_scaled`,
+  `PcApp::set_scale`), golden `pc_grid_2x`.
+- Not verified here (no Windows): that `PlaySoundW` is heard, and that
+  RetroArch honours `-f` and the window position. `docs/pc/TESTING.md`
+  has the steps.
 
 ## Not done, and why
 

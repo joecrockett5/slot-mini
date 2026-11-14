@@ -151,6 +151,135 @@ pub struct Renderer {
     /// Bumped by every change to any texture, so a caller can tell that the
     /// same draw list would now look different.
     generation: u64,
+    /// Textures resampled for a scaled render, by (texture, width,
+    /// height), and the generation they were made in.
+    #[cfg(feature = "pc")]
+    scaled: (u64, HashMap<(usize, u32, u32), Sprite>),
+}
+
+/// The most resampled textures kept for scaled renders.
+#[cfg(feature = "pc")]
+const SCALED_KEPT: usize = 192;
+
+#[cfg(feature = "pc")]
+impl Renderer {
+    /// Draw a list laid out for the stage into a canvas `k` times its
+    /// size. Every rectangle is snapped to whole stage pixels first and
+    /// then multiplied, so the layout is exactly the stage's, enlarged;
+    /// pixel art drawn 1:1 on the stage comes out as `k` x `k` blocks. A
+    /// texture the stage would shrink (cart art in the grid, a wallpaper)
+    /// is instead resampled from its full size for the enlarged
+    /// rectangle, and so keeps `k` times the detail.
+    pub fn render_scaled(&mut self, draws: &[Draw], canvas: &mut Canvas, k: u32) {
+        if k <= 1 {
+            return self.render(draws, canvas);
+        }
+        if self.scaled.0 != self.generation || self.scaled.1.len() > SCALED_KEPT {
+            self.scaled = (self.generation, HashMap::new());
+        }
+        let kf = k as f32;
+        let big = |x: f32, y: f32, w: f32, h: f32| {
+            let r = Rect::snap(x, y, w, h);
+            let k = k as i32;
+            Rect::new(r.x * k, r.y * k, r.w * k, r.h * k)
+        };
+        for d in draws {
+            match *d {
+                Draw::Rect { x, y, w, h, colour } => canvas.fill_f(big(x, y, w, h), colour),
+                Draw::Tex {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                } => self.tex_scaled(canvas, tex, None, big(x, y, w, h), alpha, k),
+                Draw::Part {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                    uv,
+                } => self.tex_scaled(canvas, tex, Some(uv), big(x, y, w, h), alpha, k),
+                Draw::Turned {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                    turn,
+                } => {
+                    let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u32;
+                    match turn == 0.0 {
+                        true => self.tex_scaled(canvas, tex, None, big(x, y, w, h), alpha, k),
+                        false => {
+                            if let Some(sprite) = self.get(tex) {
+                                canvas.blit_turned(sprite, x * kf, y * kf, w * kf, h * kf, turn, a)
+                            }
+                        }
+                    }
+                }
+                Draw::Quad {
+                    corners,
+                    tex,
+                    uv,
+                    alpha,
+                } => {
+                    let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u32;
+                    if let Some(sprite) = self.get(tex) {
+                        canvas.blit_quad(sprite, corners.map(|c| [c[0] * kf, c[1] * kf]), uv, a);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn tex_scaled(
+        &mut self,
+        canvas: &mut Canvas,
+        tex: TexId,
+        uv: Option<[f32; 4]>,
+        dst: Rect,
+        alpha: f32,
+        k: u32,
+    ) {
+        let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u32;
+        if a == 0 || dst.is_empty() || dst.intersect(&canvas.bounds()).is_empty() {
+            return;
+        }
+        let Some(sprite) = self.textures.get(tex.0).and_then(|t| t.as_ref()) else {
+            return;
+        };
+        let whole = uv.is_none_or(|uv| uv == [0.0, 0.0, 1.0, 1.0]);
+        let (w, h) = (dst.w as u32, dst.h as u32);
+        if whole && w == sprite.w && h == sprite.h {
+            return canvas.blit(sprite, dst.x, dst.y, a);
+        }
+        // Shrunk on the stage: resample the whole texture for this size,
+        // once, rather than enlarge the stage's shrunken copy.
+        if whole && (sprite.w > w / k || sprite.h > h / k) {
+            let copy = self
+                .scaled
+                .1
+                .entry((tex.0, w, h))
+                .or_insert_with(|| sprite.resized(w, h));
+            return canvas.blit(copy, dst.x, dst.y, a);
+        }
+        let src = match uv {
+            Some([u, v, uw, vh]) => [
+                u * sprite.w as f32,
+                v * sprite.h as f32,
+                uw * sprite.w as f32,
+                vh * sprite.h as f32,
+            ],
+            None => [0.0, 0.0, sprite.w as f32, sprite.h as f32],
+        };
+        canvas.blit_scaled(sprite, src, dst, a)
+    }
 }
 
 impl Renderer {

@@ -100,12 +100,6 @@ impl App {
         }
     }
 
-    /// The wallpaper behind the shelf on screen, for the window's borders.
-    pub fn wallpaper(&self) -> Option<(&Sprite, u64)> {
-        let (tex, _) = self.ground()?;
-        Some((self.gfx.get(tex)?, tex.raw() as u64))
-    }
-
     /// Show `icon` left of the clock (the sync status), or nothing.
     pub fn set_status_icon(&mut self, icon: Option<Sprite>) {
         if let Some((old, _, _)) = self.status_icon.take() {
@@ -241,6 +235,9 @@ impl App {
         let sep = std::path::MAIN_SEPARATOR;
         let import = match &self.host.import_note {
             Some(note) => note.clone(),
+            None if self.glyphs == Glyphs::Mouse => {
+                "or click IMPORT to copy them from your Miyoo's SD card.".into()
+            }
             None => format!(
                 "or press {} to import them from your Miyoo's SD card.",
                 self.glyphs.cap("A")
@@ -307,13 +304,23 @@ impl App {
         self.phase == Phase::Shelf && self.core.is_none()
     }
 
-    fn tap(&mut self, b: Button) {
+    pub(super) fn tap(&mut self, b: Button) {
         self.press(b);
         self.release(b);
     }
 
     /// The mouse did something, in the frame's own pixels.
     pub fn pointer(&mut self, p: Pointer) {
+        if p == Pointer::Release {
+            return self.bar_release();
+        }
+        // slot's own legends (MENU, the studio, the core picker) are
+        // buttons to the mouse.
+        if let Pointer::Click(x, y) = p {
+            if self.legend_click(x, y) {
+                return;
+            }
+        }
         if self.phase == Phase::About && matches!(p, Pointer::Move(..) | Pointer::Click(..)) {
             return self.about_pointer(p);
         }
@@ -335,6 +342,11 @@ impl App {
             }
             return;
         }
+        if let Pointer::Click(x, y) = p {
+            if let Some((item, right)) = self.bar_at(x, y) {
+                return self.bar_click(item, right);
+            }
+        }
         if self.shelves.is_empty() {
             // The first-run screen: a click takes its offer, as A does.
             if matches!(p, Pointer::Click(..)) {
@@ -342,10 +354,16 @@ impl App {
             }
             return;
         }
+        if let Pointer::Double(x, y) = p {
+            // The second click on the bar is not a cart being opened.
+            if self.bar_at(x, y).is_some() {
+                return;
+            }
+        }
         let stage = self.stage;
         let grid = self.grid_on();
         match p {
-            Pointer::Back => {}
+            Pointer::Back | Pointer::Release => {}
             Pointer::Move(x, y) => {
                 // Only the grid follows the pointer: on the shelf every
                 // cart that came under it would pull the next one along.
@@ -466,6 +484,8 @@ pub enum Pointer {
     Wheel(f32, f32, i32),
     /// The right button: back, like B.
     Back,
+    /// The left button came up (after a `Click`).
+    Release,
 }
 
 /// The footer's margin, and the space between the things in it.

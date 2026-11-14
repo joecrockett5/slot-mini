@@ -10,7 +10,7 @@ license.workspace = true
 desktop = ["slot-mini-gfx/desktop"]
 # The seams the PC app (crates/slot-mini-pc) drives. The device binary is
 # built without it, so none of that code is in it.
-pc = []
+pc = ["slot-mini-gfx/pc", "slot-mini-ui/pc"]
 
 [dependencies]
 slot-mini-gfx = { path = "../slot-mini-gfx" }

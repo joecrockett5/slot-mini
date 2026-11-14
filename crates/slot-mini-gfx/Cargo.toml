@@ -8,6 +8,8 @@ license.workspace = true
 
 [features]
 desktop = ["dep:minifb"]
+# slot-mini PC only: rendering a draw list at a multiple of the stage.
+pc = []
 
 [dependencies]
 fontdue = { workspace = true }

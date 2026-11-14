@@ -51,6 +51,9 @@ pub const GRID_LIFT_MS: Millis = 180;
 mod pc;
 #[cfg(feature = "pc")]
 pub use pc::Pointer;
+#[cfg(feature = "pc")]
+#[path = "app_bar.rs"]
+pub mod bar;
 
 const NOT_STARTED: Millis = Millis::MAX;
 /// How long a frame waits for the faces it is about to show.
@@ -238,6 +241,9 @@ pub struct App {
     host: crate::about::Host,
     #[cfg(feature = "pc")]
     host_action: Option<crate::about::HostRow>,
+    /// The PC's shortcut bar over the shelf.
+    #[cfg(feature = "pc")]
+    bar: bar::Bar,
     /// The buttons the legends name.
     glyphs: crate::legend::Glyphs,
     pub exit: Option<Exit>,
@@ -334,6 +340,8 @@ impl App {
             host: crate::about::Host::default(),
             #[cfg(feature = "pc")]
             host_action: None,
+            #[cfg(feature = "pc")]
+            bar: bar::Bar::default(),
             glyphs: crate::legend::Glyphs::default(),
             exit: None,
         };
@@ -541,6 +549,8 @@ impl App {
                     _ => self.grid.draw(shelf, stage, light, None, 1.0, out),
                 }
                 slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+                #[cfg(feature = "pc")]
+                self.draw_bar(out);
                 draw_slot_title(stage, self.title.printed, self.title_alpha(), out);
                 self.draw_footer(out);
             }
@@ -1436,6 +1446,8 @@ impl App {
     pub fn render(&mut self, canvas: &mut Canvas) -> bool {
         self.sync_faces();
         self.sync_text();
+        #[cfg(feature = "pc")]
+        self.sync_bar();
         let mut out = std::mem::take(&mut self.spare);
         out.clear();
         let ground = self.ground();
@@ -1459,6 +1471,12 @@ impl App {
         let same = out == self.draws && self.drawn == Some((target, self.gfx.generation()));
         if !same {
             canvas.clear(0);
+            // The PC hands in a canvas a whole multiple of the stage when
+            // its window is that large; the device's is always the stage.
+            #[cfg(feature = "pc")]
+            self.gfx
+                .render_scaled(&out, canvas, canvas.w / (self.stage.w as u32).max(1));
+            #[cfg(not(feature = "pc"))]
             self.gfx.render(&out, canvas);
             self.drawn = Some((target, self.gfx.generation()));
         }
@@ -1497,6 +1515,7 @@ impl App {
             if self.paths.is_pc() {
                 self.draw_welcome(out);
                 slot_mini_ui::draw_empty_slot(stage, self.slot_faces(), out);
+                self.draw_bar(out);
                 self.draw_footer(out);
                 return;
             }
@@ -1533,6 +1552,8 @@ impl App {
                     return;
                 }
                 shelf.draw(stage, 0.0, self.slot_faces(), out);
+                #[cfg(feature = "pc")]
+                self.draw_bar(out);
                 draw_slot_title(stage, self.title.printed, self.title_alpha(), out);
             }
             // slot draws no footer while a cart goes in or comes out.

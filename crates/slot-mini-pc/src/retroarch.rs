@@ -163,10 +163,21 @@ fn cfg_path(p: &Path) -> String {
     p.display().to_string().replace('\\', "/")
 }
 
+/// Where a game appears: it takes the place of slot-mini's own window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Screen {
+    /// slot-mini is fullscreen, so the game is.
+    Fullscreen,
+    /// A window where slot-mini's is: its outer position and size. `None`
+    /// (the window could not be asked) leaves the place to RetroArch.
+    Window(Option<[i32; 4]>),
+}
+
 /// The settings for one run, appended to the player's own config: saves
 /// and states go to the library in Onion's layout, the game resumes from
-/// its auto state unless `fresh`, and nothing here is written back.
-pub fn append_config(library: &Path, fresh: bool, fullscreen: bool) -> String {
+/// its auto state unless `fresh`, the game is shown where slot-mini was,
+/// and nothing here is written back.
+pub fn append_config(library: &Path, fresh: bool, screen: Screen) -> String {
     let profile = library.join("Saves/CurrentProfile");
     let flag = |b: bool| if b { "true" } else { "false" };
     let mut s = String::new();
@@ -182,9 +193,20 @@ pub fn append_config(library: &Path, fresh: bool, fullscreen: bool) -> String {
         ("savestate_auto_save", "true".into()),
         ("savestate_auto_load", flag(!fresh).into()),
         ("config_save_on_exit", "false".into()),
-        ("video_fullscreen", flag(fullscreen).into()),
+        (
+            "video_fullscreen",
+            flag(screen == Screen::Fullscreen).into(),
+        ),
     ] {
         s.push_str(&format!("{key} = \"{value}\"\n"));
+    }
+    if let Screen::Window(Some([x, y, w, h])) = screen {
+        // RetroArch opens its window at a remembered place when it is
+        // told to remember one: hand it slot-mini's.
+        s.push_str("video_window_save_positions = \"true\"\n");
+        for (key, value) in [("x", x), ("y", y), ("width", w), ("height", h)] {
+            s.push_str(&format!("video_windowed_position_{key} = \"{value}\"\n"));
+        }
     }
     s
 }
@@ -214,13 +236,15 @@ pub fn plan(paths: &slot_mini::Paths, ra: &RetroArch, cart: &Cart, fresh: bool) 
 }
 
 /// Write the run's config to `cfg` and build the command:
-/// `retroarch -L <core> <rom> --appendconfig <cfg>`.
+/// `retroarch -L <core> <rom> --appendconfig <cfg>`, with `-f` when the
+/// game is to be fullscreen (the switch wins over whatever the player's
+/// own config says).
 pub fn command(
     ra: &RetroArch,
     run: &Run,
     library: &Path,
     cfg: &Path,
-    fullscreen: bool,
+    screen: Screen,
 ) -> std::io::Result<Command> {
     let profile = library.join("Saves/CurrentProfile");
     for kind in ["saves", "states"] {
@@ -229,13 +253,16 @@ pub fn command(
     if let Some(dir) = cfg.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    std::fs::write(cfg, append_config(library, run.fresh, fullscreen))?;
+    std::fs::write(cfg, append_config(library, run.fresh, screen))?;
     let mut cmd = Command::new(&ra.exe);
     cmd.arg("-L")
         .arg(&run.core_file)
         .arg(&run.cart.rom)
         .arg("--appendconfig")
         .arg(cfg);
+    if screen == Screen::Fullscreen {
+        cmd.arg("-f");
+    }
     if let Some(dir) = ra.exe.parent().filter(|d| d.is_dir()) {
         // A portable RetroArch finds its own files from its folder.
         cmd.current_dir(dir);
@@ -287,7 +314,11 @@ mod tests {
 
     #[test]
     fn the_appended_config_keeps_saves_in_the_library_and_writes_nothing_back() {
-        let cfg = append_config(Path::new("C:\\Users\\Joe\\slot-mini"), false, true);
+        let cfg = append_config(
+            Path::new("C:\\Users\\Joe\\slot-mini"),
+            false,
+            Screen::Fullscreen,
+        );
         let get = |k: &str| cfg_value(&cfg, k).unwrap();
         assert_eq!(
             get("savefile_directory"),
@@ -305,9 +336,24 @@ mod tests {
         assert_eq!(get("config_save_on_exit"), "false");
         assert_eq!(get("video_fullscreen"), "true");
         // Hold A: start the game from the beginning.
-        let fresh = append_config(Path::new("/lib"), true, false);
+        assert_eq!(cfg_value(&cfg, "video_window_save_positions"), None);
+        let fresh = append_config(Path::new("/lib"), true, Screen::Window(None));
         assert_eq!(cfg_value(&fresh, "savestate_auto_load").unwrap(), "false");
         assert_eq!(cfg_value(&fresh, "video_fullscreen").unwrap(), "false");
+        assert_eq!(cfg_value(&fresh, "video_windowed_position_x"), None);
+    }
+
+    #[test]
+    fn a_windowed_game_opens_where_slot_minis_window_is() {
+        let at = Screen::Window(Some([-1200, 40, 1296, 999]));
+        let cfg = append_config(Path::new("/lib"), false, at);
+        let get = |k: &str| cfg_value(&cfg, k).unwrap();
+        assert_eq!(get("video_fullscreen"), "false");
+        assert_eq!(get("video_window_save_positions"), "true");
+        assert_eq!(get("video_windowed_position_x"), "-1200");
+        assert_eq!(get("video_windowed_position_y"), "40");
+        assert_eq!(get("video_windowed_position_width"), "1296");
+        assert_eq!(get("video_windowed_position_height"), "999");
     }
 
     #[test]
