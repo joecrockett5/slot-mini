@@ -4,11 +4,13 @@
 mod support;
 
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use slot_mini::fixture;
 use slot_mini_store::{Favourites, Platform};
 use slot_mini_sync::{
-    hash_bytes, Client, DirectLink, GameId, Layout, Report, Scope, Side, SyncError, RESERVE,
+    hash_bytes, Client, DirectLink, Event, GameId, HubEvent, Layout, Report, Scope, Side,
+    SyncError, RESERVE,
 };
 use support::{
     age, emulators, kept_saves, library, named, pc_layout, read, save, tree, write, World,
@@ -249,12 +251,22 @@ fn a_game_played_on_both_sides_keeps_both_saves() {
     let copy = w.pc.join("RetroArch/saves").join(&conflicts[0].file);
     assert!(conflicts[0].file.starts_with("mGBA/Game.srm.conflict-"));
     assert_eq!(read(&copy), save(20));
+    // The record says whose the copy is and when each was played.
+    let now = slot_mini_sync::now_secs();
+    assert_eq!(conflicts[0].from, Side::Client);
+    let played = conflicts[0].played.expect("the copy's time");
+    assert!((now - 3700..now - 3500).contains(&played), "{played}");
+    assert!(conflicts[0].save_played.is_some_and(|t| t + 100 > now));
     assert!(w.sync(Scope::Auto).is_noop());
 
     // The player picks the other one on the PC: it becomes the save on
     // both, and nothing is lost by it.
     w.hub.swap_conflict(&conflicts[0].id).unwrap();
     assert_eq!(read(&theirs), save(20));
+    let swapped = w.hub.conflicts();
+    assert_eq!(swapped[0].from, Side::Hub);
+    assert_eq!(swapped[0].played, conflicts[0].save_played);
+    assert_eq!(swapped[0].save_played, conflicts[0].played);
     let report = w.sync(Scope::Auto);
     clean(&report);
     assert_eq!(report.to_client.updated, ["save:GBA/Game.srm"]);
@@ -429,6 +441,57 @@ fn a_game_running_on_the_pc_is_skipped_until_it_stops() {
     assert_eq!(report.to_hub.added, ["label:GBA/Running"]);
     assert_eq!(read(&pc_save), save(5));
     assert!(w.sync(Scope::Auto).is_noop());
+}
+
+#[test]
+fn the_hub_says_how_far_a_sync_is() {
+    let mut w = World::new();
+    shared(&mut w, "Game.gba", 1);
+    clean(&w.sync(Scope::Full));
+    let game = GameId::new(Platform::Gba, "Game");
+    write(
+        &w.device().save_file(Platform::Gba, "Game", "srm", None),
+        &save(5),
+    );
+    write(&w.pc.join("Labels/GBA/Game.png"), b"label");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let (events, hub) = (seen.clone(), w.hub.clone());
+    w.hub.set_events(move |event| {
+        if let HubEvent::Sync {
+            event:
+                Event::Transfer {
+                    index,
+                    count,
+                    key,
+                    to_client,
+                    size,
+                    ..
+                },
+            ..
+        } = event
+        {
+            // A file of the game is on its way: no time to start it.
+            assert!(hub.is_syncing_game(&GameId::new(Platform::Gba, "Game")));
+            assert!(!hub.is_syncing_game(&GameId::new(Platform::Gba, "Other")));
+            events
+                .lock()
+                .unwrap()
+                .push((index, count, key, to_client, size));
+        }
+    });
+    assert!(!w.hub.is_syncing_game(&game));
+    clean(&w.sync(Scope::Auto));
+    let mut seen = seen.lock().unwrap().clone();
+    seen.sort();
+    let save_size = save(5).len() as u64;
+    assert_eq!(
+        seen,
+        [
+            (0, 2, "label:GBA/Game".to_string(), true, 5),
+            (1, 2, "save:GBA/Game.srm".to_string(), false, save_size),
+        ]
+    );
+    assert!(!w.hub.is_syncing_game(&game));
 }
 
 #[test]

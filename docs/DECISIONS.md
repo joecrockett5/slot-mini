@@ -573,3 +573,21 @@ built.
     instead, cached per size. Layout cannot drift from the device's
     because it is still computed at 640x480. Feature `pc` only; the device
     path is `render` as it was.
+
+## Brief 3: sync in the PC app (`docs/briefs/03-pc-sync.md`)
+
+89. **What the hub tells the PC, beyond brief 1.** Three additions to
+    `Hub`, none of them on the wire, so the Miyoo's client is untouched:
+    - a `Transfer` event carries the plan's action count and the file's
+      size (they were 0), so the PC can show "item, n of m, bytes" while a
+      Miyoo syncs;
+    - `Hub::is_syncing_game`, so the app can refuse to start a game whose
+      files the sync in flight moves (SYNC.md already asked for this, with
+      no way to know);
+    - a conflict's record also says which side the copy came from and when
+      each copy was last played. The device's time is its manifest's hint
+      turned into an age and put on the PC's clock, as the planner does to
+      pick the winner. The brief's conflict list needs both, and the file
+      name's `<who>` is a slug two devices can share. Old rows read as
+      "from the device, time unknown".
+    `docs/SYNC.md` and the crate changed together, in a PR of their own.

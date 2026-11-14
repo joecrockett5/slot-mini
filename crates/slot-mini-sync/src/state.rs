@@ -10,6 +10,7 @@ use crate::auth::SecretKey;
 use crate::hash::{hex, unhex};
 use crate::key::GameId;
 use crate::plan::Base;
+use crate::report::Side;
 
 fn read_ini(path: &Path) -> HashMap<String, String> {
     ini::parse(&std::fs::read_to_string(path).unwrap_or_default())
@@ -81,6 +82,13 @@ pub struct Conflict {
     pub file: String,
     /// The copy's hash.
     pub hash: String,
+    /// The side the copy came from: `Side::Hub` when it is the PC's own
+    /// save, set aside for the device's.
+    pub from: Side,
+    /// When the copy was last played, on the PC's clock, where known.
+    pub played: Option<u64>,
+    /// The same for the save that won.
+    pub save_played: Option<u64>,
 }
 
 pub(crate) struct HubStore {
@@ -244,6 +252,13 @@ impl HubStore {
                     stamp: f.next()?,
                     file: f.next()?,
                     hash: f.next()?,
+                    // Rows from before these were kept have none.
+                    from: match f.next().as_deref() {
+                        Some("hub") => Side::Hub,
+                        _ => Side::Client,
+                    },
+                    played: f.next().and_then(|p| p.parse().ok()),
+                    save_played: f.next().and_then(|p| p.parse().ok()),
                 })
             })
             .collect()
@@ -254,14 +269,18 @@ impl HubStore {
         let text: String = list
             .iter()
             .map(|c| {
+                let time = |t: Option<u64>| t.map_or("-".to_string(), |t| t.to_string());
                 format!(
-                    "{}\t{}\t{}\t{}\t{}\t{}\n",
+                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                     c.id,
                     clean(&c.key),
                     clean(&c.device),
                     c.stamp,
                     clean(&c.file),
-                    c.hash
+                    c.hash,
+                    c.from.as_str(),
+                    time(c.played),
+                    time(c.save_played)
                 )
             })
             .collect();
@@ -420,11 +439,26 @@ mod tests {
             stamp: "20260101000000".into(),
             file: "mGBA/X.srm.conflict-miyoo-20260101000000".into(),
             hash: "00".into(),
+            from: Side::Hub,
+            played: Some(1_700_000_000),
+            save_played: None,
         };
         store
             .set_conflicts(std::slice::from_ref(&conflict))
             .unwrap();
-        assert_eq!(store.conflicts(), [conflict]);
+        assert_eq!(store.conflicts(), std::slice::from_ref(&conflict));
+        // A row written before the copy's side and times were kept.
+        std::fs::write(
+            d.path().join("conflicts.tsv"),
+            "1\tsave:GBA/X.srm\tMiyoo\t20260101000000\tmGBA/X.srm.conflict-miyoo-20260101000000\t00\n",
+        )
+        .unwrap();
+        let old = Conflict {
+            from: Side::Client,
+            played: None,
+            ..conflict
+        };
+        assert_eq!(store.conflicts(), [old]);
 
         store.delete_device("dev1").unwrap();
         store.delete_device("dev1").unwrap();
